@@ -1,0 +1,2 @@
+tidy3d==2.5.2
+pydantic==2.6.0
