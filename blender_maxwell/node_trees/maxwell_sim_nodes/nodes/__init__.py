@@ -1,9 +1,8 @@
-from . import definitions, categories
+from . import mediums
 
 BL_REGISTER = [
-	*definitions.BL_REGISTER,
+	*mediums.BL_REGISTER,
 ]
-
-BL_NODE_CATEGORIES = [
-	*categories.BL_NODE_CATEGORIES,
-]
+BL_NODES = {
+	**mediums.BL_NODES,
+}

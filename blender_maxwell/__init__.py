@@ -53,20 +53,10 @@ BL_NODE_CATEGORIES = [
 def register():
 	for cls in BL_REGISTER:
 		bpy.utils.register_class(cls)
-	
-	for bl_node_category in BL_NODE_CATEGORIES:
-		nodeitems_utils.register_node_categories(*bl_node_category)
     
 def unregister():
-	for bl_node_category in reversed(BL_NODE_CATEGORIES):
-		try:
-			nodeitems_utils.unregister_node_categories(bl_node_category[0])
-		except: pass
-	
 	for cls in reversed(BL_REGISTER):
-		try:
-			bpy.utils.unregister_class(cls)
-		except: pass
+		bpy.utils.unregister_class(cls)
 
 if __name__ == "__main__":
 	register()
