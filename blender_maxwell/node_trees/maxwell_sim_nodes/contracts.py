@@ -1,9 +1,71 @@
-import bpy
+import typing as typ
+import typing_extensions as pytypes_ext
 import enum
+
+import sympy as sp
+import sympy.physics.units as spu
+import pydantic as pyd
+import bpy
 
 from ...utils.blender_type_enum import (
 	BlenderTypeEnum, append_cls_name_to_values
 )
+
+####################
+# - String Types
+####################
+BlenderColorRGB = tuple[float, float, float, float]
+BlenderID = pytypes_ext.Annotated[str, pyd.StringConstraints(
+	pattern=r'^[A-Z_]+$',
+)]
+
+# Socket ID
+SocketName = pytypes_ext.Annotated[str, pyd.StringConstraints(
+	pattern=r'^[a-zA-Z0-9_]+$',
+)]
+BLSocketName = pytypes_ext.Annotated[str, pyd.StringConstraints(
+	pattern=r'^[a-zA-Z0-9_]+$',
+)]
+
+# Socket ID
+PresetID = pytypes_ext.Annotated[str, pyd.StringConstraints(
+	pattern=r'^[A-Z_]+$',
+)]
+
+####################
+# - Generic Types
+####################
+SocketReturnType = typ.TypeVar('SocketReturnType', covariant=True)
+## - Covariance: If B subtypes A, then Container[B] subtypes Container[A].
+## - This is absolutely what we want here.
+
+####################
+# - Sympy Expression Typing
+####################
+ALL_UNIT_SYMBOLS = {
+	unit
+	for unit in spu.__dict__.values()
+	if isinstance(unit, spu.Quantity)
+}
+def has_units(expr: sp.Expr):
+	return any(
+		symbol in ALL_UNIT_SYMBOLS
+		for symbol in expr.atoms(sp.Symbol)
+	)
+def is_exactly_expressed_as_unit(expr: sp.Expr, unit) -> bool:
+	#try:
+	converted_expr = expr / unit
+	
+	return (
+		converted_expr.is_number
+		and not converted_expr.has(spu.Quantity)
+	)
+
+####################
+# - Icon Types
+####################
+class Icon(BlenderTypeEnum):
+	MaxwellSimTree = "MOD_SIMPLEDEFORM"
 
 ####################
 # - Tree Types
@@ -17,6 +79,17 @@ class TreeType(BlenderTypeEnum):
 ####################
 @append_cls_name_to_values
 class SocketType(BlenderTypeEnum):
+	Any = enum.auto()
+	Text = enum.auto()
+	FilePath = enum.auto()
+	
+	RationalNumber = enum.auto()
+	RealNumber = enum.auto()
+	ComplexNumber = enum.auto()
+	
+	PhysicalLength = enum.auto()
+	PhysicalArea = enum.auto()
+	
 	MaxwellSource = enum.auto()
 	MaxwellMedium = enum.auto()
 	MaxwellStructure = enum.auto()
@@ -132,7 +205,7 @@ class NodeType(BlenderTypeEnum):
 	KSpaceNearFieldProjectionMonitor = enum.auto()
 	
 	# Simulations
-	FDTDSimulation = enum.auto()
+	FDTDSim = enum.auto()
 	
 	SimulationGridDiscretization = enum.auto()
 	
@@ -155,8 +228,6 @@ class NodeType(BlenderTypeEnum):
 ####################
 # - Node Category Types
 ####################
-#@append_cls_name_to_values
-#@append_cls_name_to_values
 class NodeCategory(BlenderTypeEnum):
 	MAXWELL_SIM = enum.auto()
 	
@@ -219,6 +290,7 @@ class NodeCategory(BlenderTypeEnum):
 	
 	@classmethod
 	def get_tree(cls):
+		## TODO: Refactor
 		syllable_categories = [
 			node_category.value.split("_")
 			for node_category in cls
@@ -296,3 +368,104 @@ NodeCategory_to_category_label = {
 	NodeCategory.MAXWELL_SIM_UTILITIES_MATH: "Math",
 	NodeCategory.MAXWELL_SIM_UTILITIES_FIELDMATH: "Field Math",
 }
+
+
+
+####################
+# - Protocols
+####################
+class SocketDefProtocol(typ.Protocol):
+	socket_type: SocketType
+	label: str
+	
+	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
+		...
+
+class PresetDef(pyd.BaseModel):
+	label: str
+	description: str
+	values: dict[SocketName, typ.Any]
+
+@typ.runtime_checkable
+#class BLSocketProtocol(typ.Protocol):
+#	socket_type: SocketType
+#	socket_color: BlenderColorRGB
+#	
+#	bl_label: str
+#	
+#	compatible_types: dict[typ.Type, set[typ.Callable[[typ.Any], bool]]]
+#	
+#	def draw(
+#		self,
+#		context: bpy.types.Context,
+#		layout: bpy.types.UILayout,
+#		node: bpy.types.Node,
+#		text: str,
+#	) -> None:
+#		...
+#	
+#	@property
+#	def default_value(self) -> typ.Any:
+#		...
+#	@default_value.setter
+#	def default_value(self, value: typ.Any) -> typ.Any:
+#		...
+#	
+
+@typ.runtime_checkable
+class NodeTypeProtocol(typ.Protocol):
+	node_type: NodeType
+	
+	bl_label: str
+	
+	input_sockets: dict[SocketName, SocketDefProtocol]
+	output_sockets: dict[SocketName, SocketDefProtocol]
+	presets: dict[PresetID, PresetDef] | None
+	
+	# Built-In Blender Methods
+	def init(self, context: bpy.types.Context) -> None:
+		...
+	
+	def draw_buttons(
+		self,
+		context: bpy.types.Context,
+		layout: bpy.types.UILayout,
+	) -> None:
+		...
+	
+	@classmethod
+	def poll(cls, ntree: bpy.types.NodeTree) -> None:
+		...
+	
+	# Socket Getters
+	def g_input_bl_socket(
+		self,
+		input_socket_name: SocketName,
+	) -> bpy.types.NodeSocket:
+		...
+	
+	def g_output_bl_socket(
+		self,
+		output_socket_name: SocketName,
+	) -> bpy.types.NodeSocket:
+		...
+	
+	# Socket Methods
+	def s_input_value(
+		self,
+		input_socket_name: SocketName,
+		value: typ.Any
+	) -> typ.Any:
+		...
+	
+	# Data-Flow Methods
+	def compute_input(
+		self,
+		input_socket_name: SocketName,
+	) -> typ.Any:
+		...
+	def compute_output(
+		self,
+		output_socket_name: SocketName,
+	) -> typ.Any:
+		...

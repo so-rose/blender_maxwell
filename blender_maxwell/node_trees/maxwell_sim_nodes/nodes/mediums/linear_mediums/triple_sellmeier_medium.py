@@ -1,54 +1,90 @@
-import bpy
-from .... import types, constants
-from ... import node_base
+import tidy3d as td
+import sympy as sp
+import sympy.physics.units as spu
 
-class TripleSellmeierMediumNode(node_base.MaxwellSimTreeNode):
-	bl_idname = types.NodeType.TripleSellmeierMedium.value
-	bl_label = "Triple Sellmeier Medium"
-	bl_icon = constants.ICON_SIM_MEDIUM
+from .... import contracts
+from .... import sockets
+from ... import base
 
+class TripleSellmeierMediumNode(base.MaxwellSimTreeNode):
+	node_type = contracts.NodeType.TripleSellmeierMedium
+	
+	bl_label = "Three-Parameter Sellmeier Medium"
+	#bl_icon = ...
+	
+	####################
+	# - Sockets
+	####################
 	input_sockets = {
-		"B1": ("NodeSocketFloat", "B1"),
-		"B2": ("NodeSocketFloat", "B2"),
-		"B3": ("NodeSocketFloat", "B3"),
-		"C1": ("NodeSocketFloat", "C1 (um^2)"),
-		"C2": ("NodeSocketFloat", "C2 (um^2)"),
-		"C3": ("NodeSocketFloat", "C3 (um^2)"),
+		f"B{i}": sockets.RealNumberSocketDef(
+			label=f"B{i}",
+		)
+		for i in [1, 2, 3]
+	} | {
+		f"C{i}": sockets.PhysicalAreaSocketDef(
+			label=f"C{i}",
+			default_unit="UM_SQ"
+		)
+		for i in [1, 2, 3]
 	}
 	output_sockets = {
-		"medium": (types.SocketType.MaxwellMedium, "Medium")
-	}
-	socket_presets = {
-		"_description": [
-			('BK7', "BK7 Glass", "Borosilicate crown glass (known as BK7)"),
-			('FUSED_SILICA', "Fused Silica", "Fused silica aka. SiO2"),
-		],
-		"_default": "BK7",
-		"_values": {
-			"BK7": {
-				"B1": 1.03961212,
-				"B2": 0.231792344,
-				"B3": 1.01046945,
-				"C1": 6.00069867e-3,
-				"C2": 2.00179144e-2,
-				"C3": 103.560653,
-			},
-			"FUSED_SILICA": {
-				"B1": 0.696166300,
-				"B2": 0.407942600,
-				"B3": 0.897479400,
-				"C1": 4.67914826e-3,
-				"C2": 1.35120631e-2,
-				"C3": 97.9340025,
-			},
-		}
+		"medium": sockets.MaxwellMediumSocketDef(
+			label="Medium"
+		),
 	}
 	
 	####################
-	# - Properties
+	# - Presets
 	####################
-	def draw_buttons(self, context, layout):
-		layout.prop(self, 'preset', text="")
+	presets = {
+		"BK7": contracts.PresetDef(
+			label="BK7 Glass",
+			description="Borosilicate crown glass (known as BK7)",
+			values={
+				"B1": 1.03961212,
+				"B2": 0.231792344,
+				"B3": 1.01046945,
+				"C1": 6.00069867e-3 * spu.um**2,
+				"C2": 2.00179144e-2 * spu.um**2,
+				"C3": 103.560653 * spu.um**2,
+			}
+		),
+		"FUSED_SILICA": contracts.PresetDef(
+			label="Fused Silica",
+			description="Fused silica aka. SiO2",
+			values={
+				"B1": 0.696166300,
+				"B2": 0.407942600,
+				"B3": 0.897479400,
+				"C1": 4.67914826e-3 * spu.um**2,
+				"C2": 1.35120631e-2 * spu.um**2,
+				"C3": 97.9340025 * spu.um**2,
+			}
+		),
+	}
+	
+	####################
+	# - Output Socket Computation
+	####################
+	@base.computes_output_socket("medium", td.Sellmeier)
+	def compute_medium(self: contracts.NodeTypeProtocol) -> td.Sellmeier:
+		## Retrieval
+		#B1 = self.compute_input("B1")
+		#C1_with_units = self.compute_input("C1")
+		#
+		## Processing
+		#C1 = spu.convert_to(C1_with_units, spu.um**2) / spu.um**2
+		
+		return td.Sellmeier(coeffs = [
+			(
+				self.compute_input(f"B{i}"),
+				spu.convert_to(
+					self.compute_input(f"C{i}"),
+					spu.um**2,
+				) / spu.um**2
+			)
+			for i in [1, 2, 3]
+		])
 
 
 
@@ -59,7 +95,7 @@ BL_REGISTER = [
 	TripleSellmeierMediumNode,
 ]
 BL_NODES = {
-	types.NodeType.TripleSellmeierMedium: (
-		types.NodeCategory.MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS
+	contracts.NodeType.TripleSellmeierMedium: (
+		contracts.NodeCategory.MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS
 	)
 }

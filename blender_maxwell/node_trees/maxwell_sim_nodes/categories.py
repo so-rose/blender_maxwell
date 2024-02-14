@@ -1,17 +1,9 @@
+## TODO: Refactor this whole horrible module.
+
 import bpy
 import nodeitems_utils
-from . import types
+from . import contracts
 from .nodes import BL_NODES
-
-####################
-# - Assembly of Node Categories
-####################
-class MaxwellSimNodeCategory(nodeitems_utils.NodeCategory):
-	@classmethod
-	def poll(cls, context):
-		"""Constrain node category availability to within a MaxwellSimTree."""
-		
-		return context.space_data.tree_type == types.TreeType.MaxwellSim.value
 
 DYNAMIC_SUBMENU_REGISTRATIONS = []
 def mk_node_categories(
@@ -23,7 +15,7 @@ def mk_node_categories(
 	items = []
 	
 	# Add Node Items
-	base_category = types.NodeCategory["_".join(syllable_prefix)]
+	base_category = contracts.NodeCategory["_".join(syllable_prefix)]
 	for node_type, node_category in BL_NODES.items():
 		if node_category == base_category:
 			items.append(nodeitems_utils.NodeItem(node_type.value))
@@ -31,7 +23,7 @@ def mk_node_categories(
 	# Add Node Sub-Menus
 	for syllable, sub_tree in tree.items():
 		current_syllable_path = syllable_prefix + [syllable]
-		current_category = types.NodeCategory[
+		current_category = contracts.NodeCategory[
 			"_".join(current_syllable_path)
 		]
 		
@@ -51,10 +43,12 @@ def mk_node_categories(
 						nodeitems_utils.NodeItem,
 					):
 						nodeitem = nodeitem_or_submenu
-						self.layout.operator(
+						op_add_node_cfg = self.layout.operator(
 							"node.add_node",
 							text=nodeitem.label,
-						).type = nodeitem.nodetype
+						)
+						op_add_node_cfg.type = nodeitem.nodetype
+						op_add_node_cfg.use_transform = True
 					elif isinstance(nodeitem_or_submenu, str):
 						submenu_id = nodeitem_or_submenu
 						self.layout.menu(submenu_id)
@@ -62,7 +56,7 @@ def mk_node_categories(
 		
 		menu_class = type(current_category.value, (bpy.types.Menu,), {
 			'bl_idname': current_category.value,
-			'bl_label': types.NodeCategory_to_category_label[current_category],
+			'bl_label': contracts.NodeCategory_to_category_label[current_category],
 			'draw': draw_factory(tuple(subitems)),
 		})
 		
@@ -78,7 +72,7 @@ def mk_node_categories(
 # - Blender Registration
 ####################
 BL_NODE_CATEGORIES = mk_node_categories(
-	types.NodeCategory.get_tree()["MAXWELL"]["SIM"],
+	contracts.NodeCategory.get_tree()["MAXWELL"]["SIM"],
 	syllable_prefix = ["MAXWELL", "SIM"],
 )
 ## TODO: refractor, this has a big code smell
@@ -88,7 +82,7 @@ BL_REGISTER = [
 
 ## TEST - TODO this is a big code smell
 def menu_draw(self, context):
-	if context.space_data.tree_type == types.TreeType.MaxwellSim.value:
+	if context.space_data.tree_type == contracts.TreeType.MaxwellSim.value:
 		for nodeitem_or_submenu in BL_NODE_CATEGORIES:
 			if isinstance(nodeitem_or_submenu, str):
 				submenu_id = nodeitem_or_submenu
