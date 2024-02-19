@@ -32,6 +32,7 @@ BL_REGISTER = [
 	*source_socket.BL_REGISTER,
 	*temporal_shape_socket.BL_REGISTER,
 	*structure_socket.BL_REGISTER,
+	*monitor_socket.BL_REGISTER,
 	*fdtd_sim_socket.BL_REGISTER,
 	*sim_grid_socket.BL_REGISTER,
 	*sim_grid_axis_socket.BL_REGISTER,

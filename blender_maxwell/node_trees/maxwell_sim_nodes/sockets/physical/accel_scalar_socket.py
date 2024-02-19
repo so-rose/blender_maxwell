@@ -9,8 +9,8 @@ from ... import contracts
 ####################
 # - Blender Socket
 ####################
-class PhysicalAccelBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalAccel
+class PhysicalAccelScalarBLSocket(base.BLSocket):
+	socket_type = contracts.SocketType.PhysicalAccelScalar
 	bl_label = "PhysicalAccel"
 	use_units = True
 	
@@ -23,17 +23,6 @@ class PhysicalAccelBLSocket(base.BLSocket):
 		default=0.0,
 		precision=6,
 	)
-	
-	####################
-	# - Socket UI
-	####################
-	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		label_col_row.label(text=text)
-		label_col_row.prop(self, "raw_unit", text="")
-	
-	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col_row = col.row(align=True)
-		col_row.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
@@ -49,16 +38,19 @@ class PhysicalAccelBLSocket(base.BLSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalAccelSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalAccel
+class PhysicalAccelScalarSocketDef(pyd.BaseModel):
+	socket_type: contracts.SocketType = contracts.SocketType.PhysicalAccelScalar
 	label: str
 	
-	def init(self, bl_socket: PhysicalAccelBLSocket) -> None:
-		pass
+	default_unit: typ.Any | None = None
+	
+	def init(self, bl_socket: PhysicalAccelScalarBLSocket) -> None:
+		if self.default_unit:
+			bl_socket.unit = self.default_unit
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	PhysicalAccelBLSocket,
+	PhysicalAccelScalarBLSocket,
 ]

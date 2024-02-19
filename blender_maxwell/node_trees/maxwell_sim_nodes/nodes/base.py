@@ -371,12 +371,23 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			Blender's own node socket object.
 		"""
 		
-		# (Guard) Socket Exists
-		if input_socket_name not in self.input_sockets:
-			msg = f"Input socket with name {input_socket_name} does not exist"
-			raise ValueError(msg)
+		if input_socket_name in self.input_sockets:
+			# Check Nicely that it Exists
+			if input_socket_name not in self.input_sockets:
+				msg = f"Input socket with name {input_socket_name} does not exist"
+				raise ValueError(msg)
+			
+			return self.inputs[self.input_sockets[input_socket_name].label]
 		
-		return self.inputs[self.input_sockets[input_socket_name].label]
+		elif hasattr(self, "input_socket_sets"):
+			# You're on your own, chump
+			
+			return self.inputs[next(
+				socket_def.label
+				for socket_set, socket_dict in self.input_socket_sets.items()
+				for socket_name, socket_def in socket_dict.items()
+				if socket_name == input_socket_name
+			)]
 	
 	def g_output_bl_socket(
 		self,
@@ -392,17 +403,35 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			Blender's own node socket object.
 		"""
 		
-		# (Guard) Socket Exists
-		if output_socket_name not in self.output_sockets:
-			msg = f"Input socket with name {output_socket_name} does not exist"
-			raise ValueError(msg)
 		
-		return self.outputs[self.output_sockets[output_socket_name].label]
+		if output_socket_name in self.output_sockets:
+			# (Guard) Socket Exists
+			if output_socket_name not in self.output_sockets:
+				msg = f"Input socket with name {output_socket_name} does not exist"
+				raise ValueError(msg)
+			
+			return self.outputs[self.output_sockets[output_socket_name].label]
+		
+		elif hasattr(self, "input_socket_sets"):
+			return self.outputs[next(
+				socket_def.label
+				for socket_set, socket_dict in self.input_socket_sets.items()
+				for socket_name, socket_def in socket_dict.items()
+				if socket_name == output_socket_name
+			)]
 	
 	def g_output_socket_name(
 		self,
 		output_bl_socket_name: contracts.BLSocketName,
 	) -> contracts.SocketName:
+		if hasattr(self, "output_socket_sets"):
+			return next(
+				socket_name
+				for socket_set, socket_dict in self.output_socket_sets.items()
+				for socket_name, socket_def in socket_dict.items()
+				if socket_def.label == output_bl_socket_name
+			)
+		else:
 			return next(
 				output_socket_name
 				for output_socket_name in self.output_sockets.keys()

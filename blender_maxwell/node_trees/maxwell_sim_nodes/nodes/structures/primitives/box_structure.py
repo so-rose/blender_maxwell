@@ -18,29 +18,11 @@ class BoxStructureNode(base.MaxwellSimTreeNode):
 		"medium": sockets.MaxwellMediumSocketDef(
 			label="Medium",
 		),
-		"center_x": sockets.RealNumberSocketDef(
-			label="Center X",
-			default_value=0.0,
+		"center": sockets.PhysicalPoint3DSocketDef(
+			label="Center",
 		),
-		"center_y": sockets.RealNumberSocketDef(
-			label="Center Y",
-			default_value=0.0,
-		),
-		"center_z": sockets.RealNumberSocketDef(
-			label="Center Z",
-			default_value=0.0,
-		),
-		"size_x": sockets.RealNumberSocketDef(
-			label="Size X",
-			default_value=1.0,
-		),
-		"size_y": sockets.RealNumberSocketDef(
-			label="Size Y",
-			default_value=1.0,
-		),
-		"size_z": sockets.RealNumberSocketDef(
-			label="Size Z",
-			default_value=1.0,
+		"size": sockets.PhysicalSize3DSocketDef(
+			label="Size",
 		),
 	}
 	output_sockets = {
@@ -55,16 +37,11 @@ class BoxStructureNode(base.MaxwellSimTreeNode):
 	@base.computes_output_socket("structure")
 	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.Box:
 		medium = self.compute_input("medium")
-		center = (
-			self.compute_input("center_x"),
-			self.compute_input("center_y"),
-			self.compute_input("center_z"),
-		)
-		size = (
-			self.compute_input("size_x"),
-			self.compute_input("size_y"),
-			self.compute_input("size_z"),
-		)
+		_center = self.compute_input("center")
+		_size = self.compute_input("size")
+		
+		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
+		size = tuple(spu.convert_to(_size, spu.um) / spu.um)
 		
 		return td.Structure(
 			geometry=td.Box(

@@ -16,21 +16,11 @@ class FDTDSimNode(base.MaxwellSimTreeNode):
 	# - Sockets
 	####################
 	input_sockets = {
-		"run_time": sockets.RealNumberSocketDef(
+		"run_time": sockets.PhysicalTimeSocketDef(
 			label="Run Time",
-			default_value=1.0,
 		),
-		"size_x": sockets.RealNumberSocketDef(
-			label="Size X",
-			default_value=1.0,
-		),
-		"size_y": sockets.RealNumberSocketDef(
-			label="Size Y",
-			default_value=1.0,
-		),
-		"size_z": sockets.RealNumberSocketDef(
-			label="Size Z",
-			default_value=1.0,
+		"size": sockets.PhysicalSize3DSocketDef(
+			label="Size",
 		),
 		"ambient_medium": sockets.MaxwellMediumSocketDef(
 			label="Ambient Medium",
@@ -56,17 +46,15 @@ class FDTDSimNode(base.MaxwellSimTreeNode):
 	####################
 	@base.computes_output_socket("fdtd_sim")
 	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.Simulation:
-		run_time = self.compute_input("run_time")
+		_run_time = self.compute_input("run_time")
+		_size = self.compute_input("size")
 		ambient_medium = self.compute_input("ambient_medium")
 		structures = [self.compute_input("structure")]
 		sources = [self.compute_input("source")]
 		bound = self.compute_input("bound")
 		
-		size = (
-			self.compute_input("size_x"),
-			self.compute_input("size_y"),
-			self.compute_input("size_z"),
-		)
+		run_time = spu.convert_to(_run_time, spu.second) / spu.second
+		size = tuple(spu.convert_to(_size, spu.um) / spu.um)
 		
 		return td.Simulation(
 			size=size,

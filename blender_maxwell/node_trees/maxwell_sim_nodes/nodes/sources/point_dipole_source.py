@@ -16,17 +16,14 @@ class PointDipoleSourceNode(base.MaxwellSimTreeNode):
 	# - Sockets
 	####################
 	input_sockets = {
-		"center_x": sockets.RealNumberSocketDef(
-			label="Center X",
-			default_value=0.0,
+		#"polarization": sockets.PhysicalPolSocketDef(
+		#	label="Polarization",
+		#),  ## TODO: Exactly how to go about this...
+		"temporal_shape": sockets.MaxwellTemporalShapeSocketDef(
+			label="Temporal Shape",
 		),
-		"center_y": sockets.RealNumberSocketDef(
-			label="Center Y",
-			default_value=0.0,
-		),
-		"center_z": sockets.RealNumberSocketDef(
-			label="Center Z",
-			default_value=0.0,
+		"center": sockets.PhysicalPoint3DSocketDef(
+			label="Center",
 		),
 	}
 	output_sockets = {
@@ -40,19 +37,19 @@ class PointDipoleSourceNode(base.MaxwellSimTreeNode):
 	####################
 	@base.computes_output_socket("source")
 	def compute_source(self: contracts.NodeTypeProtocol) -> td.PointDipole:
-		center = (
-			self.compute_input("center_x"),
-			self.compute_input("center_y"),
-			self.compute_input("center_z"),
-		)
+		temporal_shape = self.compute_input("temporal_shape")
 		
-		cheating_pulse = td.GaussianPulse(freq0=200e12, fwidth=20e12)
+		_center = self.compute_input("center")
+		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
+		
+		cheating_pol = "Ex"
+		## TODO: Fix
 		
 		return td.PointDipole(
 			center=center,
-			source_time=cheating_pulse,
+			source_time=temporal_shape,
 			interpolate=True,
-			polarization="Ex",
+			polarization=cheating_pol,
 		)
 
 

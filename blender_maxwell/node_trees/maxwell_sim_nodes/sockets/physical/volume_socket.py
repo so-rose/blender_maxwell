@@ -5,9 +5,6 @@ import sympy as sp
 import sympy.physics.units as spu
 import pydantic as pyd
 
-sp.printing.str.StrPrinter._default_settings['abbrev'] = True
-## When we str() a unit expression, use abbrevied units.
-
 from .. import base
 from ... import contracts
 

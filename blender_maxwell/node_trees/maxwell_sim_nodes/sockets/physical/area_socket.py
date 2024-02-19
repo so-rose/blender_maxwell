@@ -38,9 +38,6 @@ class PhysicalAreaBLSocket(base.BLSocket):
 	# - Socket UI
 	####################
 	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		"""Draw the value of the area, including a toggle for
-		specifying the active unit.
-		"""
 		label_col_row.label(text=text)
 		label_col_row.prop(self, "raw_unit", text="")
 	

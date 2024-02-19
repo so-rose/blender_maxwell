@@ -127,10 +127,16 @@ class BLSocket(bpy.types.NodeSocket):
 		the value with the new unit.
 		"""
 		if hasattr(self, "raw_value") and hasattr(self, "unit"):
-			self.raw_value = spu.convert_to(
-				self.raw_value * self._unit_previous,
-				self.unit,
-			) / self.unit
+			if hasattr(self.raw_value, "__getitem__"):
+				self.raw_value = tuple(spu.convert_to(
+					sp.Matrix(tuple(self.raw_value)) * self._unit_previous,
+					self.unit,
+				) / self.unit)
+			else:
+				self.raw_value = spu.convert_to(
+					self.raw_value * self._unit_previous,
+					self.unit,
+				) / self.unit
 		
 		self._unit_previous = self.unit
 	
@@ -187,6 +193,9 @@ class BLSocket(bpy.types.NodeSocket):
 		label_col_row = col.row(align=True)
 		if hasattr(self, "draw_label_row"):
 			self.draw_label_row(label_col_row, text)
+		elif hasattr(self, "raw_unit"):
+			label_col_row.label(text=text)
+			label_col_row.prop(self, "raw_unit", text="")
 		else:
 			label_col_row.label(text=text)
 		
@@ -208,6 +217,9 @@ class BLSocket(bpy.types.NodeSocket):
 		# Row(s): Value
 		if hasattr(self, "draw_value"):
 			self.draw_value(col)
+		elif hasattr(self, "raw_value"):
+			#col_row = col.row(align=True)
+			col.prop(self, "raw_value", text="")
 	
 	def draw_output(
 		self,

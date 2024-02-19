@@ -1,5 +1,6 @@
 from . import basic
 AnySocketDef = basic.AnySocketDef
+BoolSocketDef = basic.BoolSocketDef
 TextSocketDef = basic.TextSocketDef
 FilePathSocketDef = basic.FilePathSocketDef
 
@@ -21,10 +22,12 @@ PhysicalAngleSocketDef = physical.PhysicalAngleSocketDef
 PhysicalLengthSocketDef = physical.PhysicalLengthSocketDef
 PhysicalAreaSocketDef = physical.PhysicalAreaSocketDef
 PhysicalVolumeSocketDef = physical.PhysicalVolumeSocketDef
+PhysicalPoint3DSocketDef = physical.PhysicalPoint3DSocketDef
+PhysicalSize3DSocketDef = physical.PhysicalSize3DSocketDef
 PhysicalMassSocketDef = physical.PhysicalMassSocketDef
 PhysicalSpeedSocketDef = physical.PhysicalSpeedSocketDef
-PhysicalAccelSocketDef = physical.PhysicalAccelSocketDef
-PhysicalForceSocketDef = physical.PhysicalForceSocketDef
+PhysicalAccelScalarSocketDef = physical.PhysicalAccelScalarSocketDef
+PhysicalForceScalarSocketDef = physical.PhysicalForceScalarSocketDef
 PhysicalPolSocketDef = physical.PhysicalPolSocketDef
 PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
 PhysicalSpecRelPermDistSocketDef = physical.PhysicalSpecRelPermDistSocketDef

@@ -79,6 +79,7 @@ class TreeType(BlenderTypeEnum):
 class SocketType(BlenderTypeEnum):
 	# Base
 	Any = enum.auto()
+	Bool = enum.auto()
 	Text = enum.auto()
 	FilePath = enum.auto()
 	
@@ -104,11 +105,19 @@ class SocketType(BlenderTypeEnum):
 	PhysicalArea = enum.auto()
 	PhysicalVolume = enum.auto()
 	
+	PhysicalPoint2D = enum.auto()
+	PhysicalPoint3D = enum.auto()
+	
+	PhysicalSize2D = enum.auto()
+	PhysicalSize3D = enum.auto()
+	
 	PhysicalMass = enum.auto()
 	
 	PhysicalSpeed = enum.auto()
-	PhysicalAccel = enum.auto()
-	PhysicalForce = enum.auto()
+	PhysicalAccelScalar = enum.auto()
+	PhysicalForceScalar = enum.auto()
+	PhysicalAccel3DVector = enum.auto()
+	PhysicalForce3DVector = enum.auto()
 	
 	PhysicalPol = enum.auto()
 	
@@ -220,6 +229,72 @@ SocketType_to_units = {
 		},
 	},
 	
+	SocketType.PhysicalPoint2D: {
+		"default": "UM",
+		"values": {
+			"PM": spu.picometer,
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
+			"INCH": spu.inch,
+			"FOOT": spu.foot,
+			"YARD": spu.yard,
+			"MILE": spu.mile,
+		},
+	},
+	SocketType.PhysicalPoint3D: {
+		"default": "UM",
+		"values": {
+			"PM": spu.picometer,
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
+			"INCH": spu.inch,
+			"FOOT": spu.foot,
+			"YARD": spu.yard,
+			"MILE": spu.mile,
+		},
+	},
+	
+	SocketType.PhysicalSize2D: {
+		"default": "UM",
+		"values": {
+			"PM": spu.picometer,
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
+			"INCH": spu.inch,
+			"FOOT": spu.foot,
+			"YARD": spu.yard,
+			"MILE": spu.mile,
+		},
+	},
+	SocketType.PhysicalSize3D: {
+		"default": "UM",
+		"values": {
+			"PM": spu.picometer,
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
+			"INCH": spu.inch,
+			"FOOT": spu.foot,
+			"YARD": spu.yard,
+			"MILE": spu.mile,
+		},
+	},
+	
 	SocketType.PhysicalMass: {
 		"default": "UG",
 		"values": {
@@ -247,7 +322,7 @@ SocketType_to_units = {
 			"MI_H": spu.mile / spu.hour,
 		},
 	},
-	SocketType.PhysicalAccel: {
+	SocketType.PhysicalAccelScalar: {
 		"default": "UM_S_SQ",
 		"values": {
 			"PM_S_SQ": spu.picometer / spu.second**2,
@@ -259,7 +334,29 @@ SocketType_to_units = {
 			"FT_S_SQ": spu.feet / spu.second**2,
 		},
 	},
-	SocketType.PhysicalForce: {
+	SocketType.PhysicalForceScalar: {
+		"default": "UNEWT",
+		"values": {
+			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,
+			"NNEWT": spuex.nanonewton,
+			"UNEWT": spuex.micronewton,
+			"MNEWT": spuex.millinewton,
+			"NEWT": spu.newton,
+		},
+	},
+	SocketType.PhysicalAccel3DVector: {
+		"default": "UM_S_SQ",
+		"values": {
+			"PM_S_SQ": spu.picometer / spu.second**2,
+			"NM_S_SQ": spu.nanometer / spu.second**2,
+			"UM_S_SQ": spu.micrometer / spu.second**2,
+			"MM_S_SQ": spu.millimeter / spu.second**2,
+			"M_S_SQ": spu.meter / spu.second**2,
+			"KM_S_SQ": spu.kilometer / spu.second**2,
+			"FT_S_SQ": spu.feet / spu.second**2,
+		},
+	},
+	SocketType.PhysicalForce3DVector: {
 		"default": "UNEWT",
 		"values": {
 			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,
@@ -294,6 +391,7 @@ SocketType_to_units = {
 SocketType_to_color = {
 	# Basic
 	SocketType.Any: (0.8, 0.8, 0.8, 1.0),  # Light Grey
+	SocketType.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	SocketType.Text: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	SocketType.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
 
@@ -315,10 +413,16 @@ SocketType_to_color = {
 	SocketType.PhysicalLength: (0.8, 0.4, 0.4, 1.0),  # Medium Red
 	SocketType.PhysicalArea: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
 	SocketType.PhysicalVolume: (0.6, 0.3, 0.3, 1.0),  # Dark Red
+	SocketType.PhysicalPoint2D: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
+	SocketType.PhysicalPoint3D: (0.6, 0.3, 0.3, 1.0),  # Dark Red
+	SocketType.PhysicalSize2D: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
+	SocketType.PhysicalSize3D: (0.6, 0.3, 0.3, 1.0),  # Dark Red
 	SocketType.PhysicalMass: (0.9, 0.6, 0.4, 1.0),  # Light Orange
 	SocketType.PhysicalSpeed: (0.8, 0.55, 0.35, 1.0),  # Medium Light Orange
-	SocketType.PhysicalAccel: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
-	SocketType.PhysicalForce: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
+	SocketType.PhysicalAccelScalar: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
+	SocketType.PhysicalForceScalar: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
+	SocketType.PhysicalAccel3DVector: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
+	SocketType.PhysicalForce3DVector: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
 	SocketType.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
 	SocketType.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
 	SocketType.PhysicalSpecPowerDist: (0.9, 0.65, 0.45, 1.0),  # Medium Light Peach

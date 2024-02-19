@@ -33,14 +33,6 @@ class RealNumberBLSocket(base.BLSocket):
 	)
 	
 	####################
-	# - Socket UI
-	####################
-	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		"""Draw the value of the real number.
-		"""
-		label_col_row.prop(self, "raw_value", text=text)
-	
-	####################
 	# - Computation of Default Value
 	####################
 	@property

@@ -11,15 +11,21 @@ PhysicalLengthSocketDef = length_socket.PhysicalLengthSocketDef
 PhysicalAreaSocketDef = area_socket.PhysicalAreaSocketDef
 PhysicalVolumeSocketDef = volume_socket.PhysicalVolumeSocketDef
 
+from . import point_3d_socket
+PhysicalPoint3DSocketDef = point_3d_socket.PhysicalPoint3DSocketDef
+
+from . import size_3d_socket
+PhysicalSize3DSocketDef = size_3d_socket.PhysicalSize3DSocketDef
+
 from . import mass_socket
 PhysicalMassSocketDef = mass_socket.PhysicalMassSocketDef
 
 from . import speed_socket
-from . import accel_socket
-from . import force_socket
+from . import accel_scalar_socket
+from . import force_scalar_socket
 PhysicalSpeedSocketDef = speed_socket.PhysicalSpeedSocketDef
-PhysicalAccelSocketDef = accel_socket.PhysicalAccelSocketDef
-PhysicalForceSocketDef = force_socket.PhysicalForceSocketDef
+PhysicalAccelScalarSocketDef = accel_scalar_socket.PhysicalAccelScalarSocketDef
+PhysicalForceScalarSocketDef = force_scalar_socket.PhysicalForceScalarSocketDef
 
 from . import pol_socket
 PhysicalPolSocketDef = pol_socket.PhysicalPolSocketDef
@@ -42,11 +48,15 @@ BL_REGISTER = [
 	*area_socket.BL_REGISTER,
 	*volume_socket.BL_REGISTER,
 	
+	*point_3d_socket.BL_REGISTER,
+	
+	*size_3d_socket.BL_REGISTER,
+	
 	*mass_socket.BL_REGISTER,
 	
 	*speed_socket.BL_REGISTER,
-	*accel_socket.BL_REGISTER,
-	*force_socket.BL_REGISTER,
+	*accel_scalar_socket.BL_REGISTER,
+	*force_scalar_socket.BL_REGISTER,
 	
 	*pol_socket.BL_REGISTER,
 	

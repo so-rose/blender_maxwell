@@ -22,7 +22,7 @@ class MaxwellMediumBLSocket(base.BLSocket):
 		name="Permittivity",
 		description="Represents a simple, real permittivity.",
 		default=0.0,
-		precision=6,
+		precision=4,
 	)
 	
 	####################
@@ -33,7 +33,7 @@ class MaxwellMediumBLSocket(base.BLSocket):
 		specifying the active unit.
 		"""
 		col_row = col.row(align=True)
-		col_row.prop(self, "rel_permittivity", text="Re(eps_r)")
+		col_row.prop(self, "rel_permittivity", text="ϵr")
 	
 	####################
 	# - Computation of Default Value

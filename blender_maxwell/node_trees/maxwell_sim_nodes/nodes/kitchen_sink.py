@@ -19,6 +19,7 @@ class KitchenSinkNode(base.MaxwellSimTreeNode):
 	input_socket_sets = {
 		"basic": {
 			"basic_any": sockets.AnySocketDef(label="Any"),
+			"basic_bool": sockets.BoolSocketDef(label="Bool"),
 			"basic_filepath": sockets.FilePathSocketDef(label="FilePath"),
 			"basic_text": sockets.TextSocketDef(label="Text"),
 		},
@@ -36,14 +37,20 @@ class KitchenSinkNode(base.MaxwellSimTreeNode):
 		},
 		"physical": {
 			"physical_time": sockets.PhysicalTimeSocketDef(label="PhysicalTime"),
+			#"physical_point_2d": sockets.PhysicalPoint2DSocketDef(label="PhysicalPoint2D"),
 			"physical_angle": sockets.PhysicalAngleSocketDef(label="PhysicalAngle"),
 			"physical_length": sockets.PhysicalLengthSocketDef(label="PhysicalLength"),
 			"physical_area": sockets.PhysicalAreaSocketDef(label="PhysicalArea"),
 			"physical_volume": sockets.PhysicalVolumeSocketDef(label="PhysicalVolume"),
+			"physical_point_3d": sockets.PhysicalPoint3DSocketDef(label="PhysicalPoint3D"),
+			#"physical_size_2d": sockets.PhysicalSize2DSocketDef(label="PhysicalSize2D"),
+			"physical_size_3d": sockets.PhysicalSize3DSocketDef(label="PhysicalSize3D"),
 			"physical_mass": sockets.PhysicalMassSocketDef(label="PhysicalMass"),
 			"physical_speed": sockets.PhysicalSpeedSocketDef(label="PhysicalSpeed"),
-			"physical_accel": sockets.PhysicalAccelSocketDef(label="PhysicalAccel"),
-			"physical_force": sockets.PhysicalForceSocketDef(label="PhysicalForce"),
+			"physical_accel_scalar": sockets.PhysicalAccelScalarSocketDef(label="PhysicalAccelScalar"),
+			"physical_force_scalar": sockets.PhysicalForceScalarSocketDef(label="PhysicalForceScalar"),
+			#"physical_accel_3dvector": sockets.PhysicalAccel3DVectorSocketDef(label="PhysicalAccel3DVector"),
+			#"physical_force_3dvector": sockets.PhysicalForce3DVectorSocketDef(label="PhysicalForce3DVector"),
 			"physical_pol": sockets.PhysicalPolSocketDef(label="PhysicalPol"),
 			"physical_freq": sockets.PhysicalFreqSocketDef(label="PhysicalFreq"),
 			"physical_spec_power_dist": sockets.PhysicalSpecPowerDistSocketDef(label="PhysicalSpecPowerDist"),
@@ -62,18 +69,21 @@ class KitchenSinkNode(base.MaxwellSimTreeNode):
 			"maxwell_temporal_shape": sockets.MaxwellTemporalShapeSocketDef(label="MaxwellTemporalShape"),
 			"maxwell_medium": sockets.MaxwellMediumSocketDef(label="MaxwellMedium"),
 			#"maxwell_medium_nonlinearity": sockets.MaxwellMediumNonLinearitySocketDef(label="MaxwellMediumNonLinearity"),
-			"maxwell_structure": sockets.MaxwellMediumSocketDef(label="MaxwellMedium"),
+			"maxwell_structure": sockets.MaxwellStructureSocketDef(label="MaxwellMedium"),
 			"maxwell_bound_box": sockets.MaxwellBoundBoxSocketDef(label="MaxwellBoundBox"),
 			"maxwell_bound_face": sockets.MaxwellBoundFaceSocketDef(label="MaxwellBoundFace"),
 			"maxwell_monitor": sockets.MaxwellMonitorSocketDef(label="MaxwellMonitor"),
-			"maxwell_monitor": sockets.MaxwellFDTDSimSocketDef(label="MaxwellFDTDSim"),
-			"maxwell_monitor": sockets.MaxwellSimGridSocketDef(label="MaxwellSimGrid"),
-			"maxwell_monitor": sockets.MaxwellSimGridAxisSocketDef(label="MaxwellSimGridAxis"),
+			"maxwell_fdtd_sim": sockets.MaxwellFDTDSimSocketDef(label="MaxwellFDTDSim"),
+			"maxwell_sim_grid": sockets.MaxwellSimGridSocketDef(label="MaxwellSimGrid"),
+			"maxwell_sim_grid_axis": sockets.MaxwellSimGridAxisSocketDef(label="MaxwellSimGridAxis"),
 		},
 	}
 	
 	output_sockets = {}
-	output_socket_sets = input_socket_sets
+	output_socket_sets = {
+		k + " Output": v
+		for k, v in input_socket_sets.items()
+	}
 
 
 

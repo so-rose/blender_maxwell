@@ -11,16 +11,21 @@ class NumberConstantNode(base.MaxwellSimTreeNode):
 	bl_label = "Numerical Constant"
 	#bl_icon = constants.ICON_SIM_INPUT
 	
-	input_sockets = {
-		"value": sockets.ComplexNumberSocketDef(
-			label="Complex",
-		),  ## TODO: Dynamic number socket!
+	input_sockets = {}
+	input_socket_sets = {
+		"real": {
+			"value": sockets.RealNumberSocketDef(
+				label="Real",
+			),
+		},
+		"complex": {
+			"value": sockets.ComplexNumberSocketDef(
+				label="Complex",
+			),
+		},
 	}
-	output_sockets = {
-		"value": sockets.ComplexNumberSocketDef(
-			label="Complex",
-		),  ## TODO: Dynamic number socket!
-	}
+	output_sockets = {}
+	output_socket_sets = input_socket_sets
 	
 	####################
 	# - Callbacks

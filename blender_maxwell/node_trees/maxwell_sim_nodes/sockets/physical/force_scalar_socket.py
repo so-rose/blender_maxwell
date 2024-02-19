@@ -9,17 +9,17 @@ from ... import contracts
 ####################
 # - Blender Socket
 ####################
-class PhysicalFreqBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalFreq
-	bl_label = "PhysicalFreq"
+class PhysicalForceScalarBLSocket(base.BLSocket):
+	socket_type = contracts.SocketType.PhysicalForceScalar
+	bl_label = "PhysicalForceScalar"
 	use_units = True
 	
 	####################
 	# - Properties
 	####################
 	raw_value: bpy.props.FloatProperty(
-		name="Unitless Frequency",
-		description="Represents the unitless part of the frequency",
+		name="Unitless Force",
+		description="Represents the unitless part of the force",
 		default=0.0,
 		precision=6,
 	)
@@ -38,16 +38,19 @@ class PhysicalFreqBLSocket(base.BLSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalFreqSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalFreq
+class PhysicalForceScalarSocketDef(pyd.BaseModel):
+	socket_type: contracts.SocketType = contracts.SocketType.PhysicalForceScalar
 	label: str
 	
-	def init(self, bl_socket: PhysicalFreqBLSocket) -> None:
-		pass
+	default_unit: typ.Any | None = None
+	
+	def init(self, bl_socket: PhysicalForceScalarBLSocket) -> None:
+		if self.default_unit:
+			bl_socket.unit = self.default_unit
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	PhysicalFreqBLSocket,
+	PhysicalForceScalarBLSocket,
 ]
