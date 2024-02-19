@@ -14,6 +14,7 @@ import bpy
 from ...utils.blender_type_enum import (
 	BlenderTypeEnum, append_cls_name_to_values, wrap_values_in_MT
 )
+from ...utils import extra_sympy_units as spuex
 
 ####################
 # - String Types
@@ -145,170 +146,204 @@ class SocketType(BlenderTypeEnum):
 
 SocketType_to_units = {
 	SocketType.PhysicalTime: {
-		"default": "UM",
+		"default": "PS",
 		"values": {
-			"UM": spu.um,
+			"PS": spu.picosecond,
+			"NS": spu.nanosecond,
+			"MS": spu.microsecond,
+			"MLSEC": spu.millisecond,
+			"SEC": spu.second,
+			"MIN": spu.minute,
+			"HOUR": spu.hour,
+			"DAY": spu.day,
 		},
 	},
 	
 	SocketType.PhysicalAngle: {
-		"default": "UM",
+		"default": "RADIAN",
 		"values": {
-			"UM": spu.um,
+			"RADIAN": spu.radian,
+			"DEGREE": spu.degree,
+			"STERAD": spu.steradian,
+			"ANGMIL": spu.angular_mil,
 		},
 	},
 	
 	SocketType.PhysicalLength: {
 		"default": "UM",
 		"values": {
-			"UM": spu.um,
+			"PM": spu.picometer,
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
+			"INCH": spu.inch,
+			"FOOT": spu.foot,
+			"YARD": spu.yard,
+			"MILE": spu.mile,
 		},
 	},
 	SocketType.PhysicalArea: {
 		"default": "UM_SQ",
 		"values": {
-			"PM_SQ": spu.pm**2,
+			"PM_SQ": spu.picometer**2,
 			"A_SQ": spu.angstrom**2,
-			"NM_SQ": spu.nm**2,
-			"UM_SQ": spu.um**2,
-			"MM_SQ": spu.mm**2,
-			"CM_SQ": spu.cm**2,
-			"M_SQ": spu.m**2,
+			"NM_SQ": spu.nanometer**2,
+			"UM_SQ": spu.micrometer**2,
+			"MM_SQ": spu.millimeter**2,
+			"CM_SQ": spu.centimeter**2,
+			"M_SQ": spu.meter**2,
+			"INCH_SQ": spu.inch**2,
+			"FOOT_SQ": spu.foot**2,
+			"YARD_SQ": spu.yard**2,
+			"MILE_SQ": spu.mile**2,
 		},
 	},
 	SocketType.PhysicalVolume: {
 		"default": "UM_CB",
 		"values": {
-			"PM_CB": spu.pm**3,
+			"PM_CB": spu.picometer**3,
 			"A_CB": spu.angstrom**3,
-			"NM_CB": spu.nm**3,
-			"UM_CB": spu.um**3,
-			"MM_CB": spu.mm**3,
-			"CM_CB": spu.cm**3,
-			"M_CB": spu.m**3,
+			"NM_CB": spu.nanometer**3,
+			"UM_CB": spu.micrometer**3,
+			"MM_CB": spu.millimeter**3,
+			"CM_CB": spu.centimeter**3,
+			"M_CB": spu.meter**3,
 			"ML": spu.milliliter,
 			"L": spu.liter,
+			"INCH_CB": spu.inch**3,
+			"FOOT_CB": spu.foot**3,
+			"YARD_CB": spu.yard**3,
+			"MILE_CB": spu.mile**3,
 		},
 	},
 	
 	SocketType.PhysicalMass: {
 		"default": "UM",
 		"values": {
-			"UM": spu.um,
+			"E_REST": spu.electron_rest_mass,
+			"DAL": spu.dalton,
+			"UG": spu.microgram,
+			"MG": spu.milligram,
+			"G": spu.gram,
+			"KG": spu.kilogram,
+			"TON": spu.metric_ton,
 		},
 	},
 	
 	SocketType.PhysicalSpeed: {
 		"default": "UM",
 		"values": {
-			"UM": spu.um,
+			"PM_S": spu.picometer / spu.second,
+			"NM_S": spu.nanometer / spu.second,
+			"UM_S": spu.micrometer / spu.second,
+			"MM_S": spu.millimeter / spu.second,
+			"M_S": spu.meter / spu.second,
+			"KM_S": spu.kilometer / spu.second,
+			"KM_H": spu.kilometer / spu.hour,
+			"FT_S": spu.feet / spu.second,
+			"MI_H": spu.mile / spu.hour,
 		},
 	},
 	SocketType.PhysicalAccel: {
 		"default": "UM",
 		"values": {
-			"UM": spu.um,
+			"PM_S_SQ": spu.picometer / spu.second**2,
+			"NM_S_SQ": spu.nanometer / spu.second**2,
+			"UM_S_SQ": spu.micrometer / spu.second**2,
+			"MM_S_SQ": spu.millimeter / spu.second**2,
+			"M_S_SQ": spu.meter / spu.second**2,
+			"KM_S_SQ": spu.kilometer / spu.second**2,
+			"FT_S_SQ": spu.feet / spu.second**2,
 		},
 	},
 	SocketType.PhysicalForce: {
-		"default": "UM",
+		"default": "UNEWT",
 		"values": {
-			"UM": spu.um,
-		},
-	},
-	
-	SocketType.PhysicalPol: {
-		"default": "UM",
-		"values": {
-			"UM": spu.um,
+			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,
+			"NNEWT": spuex.nanonewton,
+			"UNEWT": spuex.micronewton,
+			"MNEWT": spuex.millinewton,
+			"NEWT": spu.newton,
 		},
 	},
 	
 	SocketType.PhysicalFreq: {
-		"default": "UM",
+		"default": "THZ",
 		"values": {
-			"UM": spu.um,
-		},
-	},
-	SocketType.PhysicalSpecPowerDist: {
-		"default": "UM",
-		"values": {
-			"UM": spu.um,
-		},
-	},
-	SocketType.PhysicalSpecRelPermDist: {
-		"default": "UM",
-		"values": {
-			"UM": spu.um,
+			"HZ": spu.hertz,
+			"KHZ": spuex.kilohertz,
+			"MHZ": spuex.megahertz,
+			"GHZ": spuex.gigahertz,
+			"THZ": spuex.terahertz,
+			"PHZ": spuex.petahertz,
+			#"EHZ": spu.exahertz,
+			"VAC_PM": spu.picometer,  ## c(vac) = wl*freq
+			"VAC_A": spu.angstrom,
+			"VAC_NM": spu.nanometer,
+			"VAC_UM": spu.micrometer,
+			"VAC_MM": spu.millimeter,
+			"VAC_CM": spu.centimeter,
+			"VAC_M": spu.meter,
 		},
 	},
 }
 
 SocketType_to_color = {
-	SocketType.Any: (0.5, 0.5, 0.5, 1.0),
-	SocketType.Text: (0.5, 0.5, 0.5, 1.0),
-	SocketType.FilePath: (0.5, 0.5, 0.5, 1.0),
-	
-	# Mathematical
-	SocketType.IntegerNumber: (0.5, 0.5, 0.5, 1.0),
-	SocketType.RationalNumber: (0.5, 0.5, 0.5, 1.0),
-	SocketType.RealNumber: (0.5, 0.5, 0.5, 1.0),
-	SocketType.ComplexNumber: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.Real2DVector: (0.5, 0.5, 0.5, 1.0),
-	SocketType.Complex2DVector: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.Real3DVector: (0.5, 0.5, 0.5, 1.0),
-	SocketType.Complex3DVector: (0.5, 0.5, 0.5, 1.0),
-	
-	# Physical
-	SocketType.PhysicalTime: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalAngle: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalLength: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalArea: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalVolume: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalMass: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalSpeed: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalAccel: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalForce: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalPol: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.PhysicalFreq: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalSpecPowerDist: (0.5, 0.5, 0.5, 1.0),
-	SocketType.PhysicalSpecRelPermDist: (0.5, 0.5, 0.5, 1.0),
-	
-	# Blender
-	SocketType.BlenderObject: (0.5, 0.5, 0.5, 1.0),
-	SocketType.BlenderCollection: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.BlenderImage: (0.5, 0.5, 0.5, 1.0),
-	SocketType.BlenderVolume: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.BlenderGeoNodes: (0.5, 0.5, 0.5, 1.0),
-	SocketType.BlenderText: (0.5, 0.5, 0.5, 1.0),
-	
-	# Maxwell
-	SocketType.MaxwellSource: (0.5, 0.5, 0.5, 1.0),
-	SocketType.MaxwellTemporalShape: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.MaxwellMedium: (0.5, 0.5, 0.5, 1.0),
-	SocketType.MaxwellMediumNonLinearity: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.MaxwellStructure: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.MaxwellBoundBox: (0.5, 0.5, 0.5, 1.0),
-	SocketType.MaxwellBoundFace: (0.5, 0.5, 0.5, 1.0),
-	
-	SocketType.MaxwellMonitor: (0.5, 0.5, 0.5, 1.0),
+	# Basic
+	SocketType.Any: (0.8, 0.8, 0.8, 1.0),  # Light Grey
+	SocketType.Text: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
+	SocketType.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
 
-	SocketType.MaxwellFDTDSim: (0.5, 0.5, 0.5, 1.0),
-	SocketType.MaxwellSimGrid: (0.5, 0.5, 0.5, 1.0),
-	SocketType.MaxwellSimGridAxis: (0.5, 0.5, 0.5, 1.0),
+	# Number
+	SocketType.IntegerNumber: (0.5, 0.5, 1.0, 1.0),  # Light Blue
+	SocketType.RationalNumber: (0.4, 0.4, 0.9, 1.0),  # Medium Light Blue
+	SocketType.RealNumber: (0.3, 0.3, 0.8, 1.0),  # Medium Blue
+	SocketType.ComplexNumber: (0.2, 0.2, 0.7, 1.0),  # Dark Blue
+
+	# Vector
+	SocketType.Real2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
+	SocketType.Complex2DVector: (0.4, 0.9, 0.4, 1.0),  # Medium Light Green
+	SocketType.Real3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
+	SocketType.Complex3DVector: (0.2, 0.7, 0.2, 1.0),  # Dark Green
+
+	# Physical
+	SocketType.PhysicalTime: (1.0, 0.5, 0.5, 1.0),  # Light Red
+	SocketType.PhysicalAngle: (0.9, 0.45, 0.45, 1.0),  # Medium Light Red
+	SocketType.PhysicalLength: (0.8, 0.4, 0.4, 1.0),  # Medium Red
+	SocketType.PhysicalArea: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
+	SocketType.PhysicalVolume: (0.6, 0.3, 0.3, 1.0),  # Dark Red
+	SocketType.PhysicalMass: (0.9, 0.6, 0.4, 1.0),  # Light Orange
+	SocketType.PhysicalSpeed: (0.8, 0.55, 0.35, 1.0),  # Medium Light Orange
+	SocketType.PhysicalAccel: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
+	SocketType.PhysicalForce: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
+	SocketType.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
+	SocketType.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
+	SocketType.PhysicalSpecPowerDist: (0.9, 0.65, 0.45, 1.0),  # Medium Light Peach
+	SocketType.PhysicalSpecRelPermDist: (0.8, 0.6, 0.4, 1.0),  # Medium Peach
+
+	# Blender
+	SocketType.BlenderObject: (0.7, 0.5, 1.0, 1.0),  # Light Purple
+	SocketType.BlenderCollection: (0.6, 0.45, 0.9, 1.0),  # Medium Light Purple
+	SocketType.BlenderImage: (0.5, 0.4, 0.8, 1.0),  # Medium Purple
+	SocketType.BlenderVolume: (0.4, 0.35, 0.7, 1.0),  # Medium Dark Purple
+	SocketType.BlenderGeoNodes: (0.3, 0.3, 0.6, 1.0),  # Dark Purple
+	SocketType.BlenderText: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
+
+	# Maxwell
+	SocketType.MaxwellSource: (1.0, 1.0, 0.5, 1.0),  # Light Yellow
+	SocketType.MaxwellTemporalShape: (0.9, 0.9, 0.45, 1.0),  # Medium Light Yellow
+	SocketType.MaxwellMedium: (0.8, 0.8, 0.4, 1.0),  # Medium Yellow
+	SocketType.MaxwellMediumNonLinearity: (0.7, 0.7, 0.35, 1.0),  # Medium Dark Yellow
+	SocketType.MaxwellStructure: (0.6, 0.6, 0.3, 1.0),  # Dark Yellow
+	SocketType.MaxwellBoundBox: (0.9, 0.8, 0.5, 1.0),  # Light Gold
+	SocketType.MaxwellBoundFace: (0.8, 0.7, 0.45, 1.0),  # Medium Light Gold
+	SocketType.MaxwellMonitor: (0.7, 0.6, 0.4, 1.0),  # Medium Gold
+	SocketType.MaxwellFDTDSim: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
+	SocketType.MaxwellSimGrid: (0.5, 0.4, 0.3, 1.0),  # Dark Gold
+	SocketType.MaxwellSimGridAxis: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
 }
 
 ####################
