@@ -221,7 +221,7 @@ SocketType_to_units = {
 	},
 	
 	SocketType.PhysicalMass: {
-		"default": "UM",
+		"default": "UG",
 		"values": {
 			"E_REST": spu.electron_rest_mass,
 			"DAL": spu.dalton,
@@ -234,7 +234,7 @@ SocketType_to_units = {
 	},
 	
 	SocketType.PhysicalSpeed: {
-		"default": "UM",
+		"default": "UM_S",
 		"values": {
 			"PM_S": spu.picometer / spu.second,
 			"NM_S": spu.nanometer / spu.second,
@@ -248,7 +248,7 @@ SocketType_to_units = {
 		},
 	},
 	SocketType.PhysicalAccel: {
-		"default": "UM",
+		"default": "UM_S_SQ",
 		"values": {
 			"PM_S_SQ": spu.picometer / spu.second**2,
 			"NM_S_SQ": spu.nanometer / spu.second**2,
