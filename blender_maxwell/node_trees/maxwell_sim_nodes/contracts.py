@@ -3,12 +3,16 @@ import typing_extensions as pytypes_ext
 import enum
 
 import sympy as sp
+
+sp.printing.str.StrPrinter._default_settings['abbrev'] = True
+## When we str() a unit expression, use abbrevied units.
+
 import sympy.physics.units as spu
 import pydantic as pyd
 import bpy
 
 from ...utils.blender_type_enum import (
-	BlenderTypeEnum, append_cls_name_to_values
+	BlenderTypeEnum, append_cls_name_to_values, wrap_values_in_MT
 )
 
 ####################
@@ -31,13 +35,6 @@ BLSocketName = pytypes_ext.Annotated[str, pyd.StringConstraints(
 PresetID = pytypes_ext.Annotated[str, pyd.StringConstraints(
 	pattern=r'^[A-Z_]+$',
 )]
-
-####################
-# - Generic Types
-####################
-SocketReturnType = typ.TypeVar('SocketReturnType', covariant=True)
-## - Covariance: If B subtypes A, then Container[B] subtypes Container[A].
-## - This is absolutely what we want here.
 
 ####################
 # - Sympy Expression Typing
@@ -79,71 +76,287 @@ class TreeType(BlenderTypeEnum):
 ####################
 @append_cls_name_to_values
 class SocketType(BlenderTypeEnum):
+	# Base
 	Any = enum.auto()
 	Text = enum.auto()
 	FilePath = enum.auto()
 	
+	# Number
+	IntegerNumber = enum.auto()
 	RationalNumber = enum.auto()
 	RealNumber = enum.auto()
 	ComplexNumber = enum.auto()
 	
+	# Vector
+	Real2DVector = enum.auto()
+	Complex2DVector = enum.auto()
+	
+	Real3DVector = enum.auto()
+	Complex3DVector = enum.auto()
+	
+	# Physical
+	PhysicalTime = enum.auto()
+	
+	PhysicalAngle = enum.auto()
+	
 	PhysicalLength = enum.auto()
 	PhysicalArea = enum.auto()
+	PhysicalVolume = enum.auto()
 	
+	PhysicalMass = enum.auto()
+	
+	PhysicalSpeed = enum.auto()
+	PhysicalAccel = enum.auto()
+	PhysicalForce = enum.auto()
+	
+	PhysicalPol = enum.auto()
+	
+	PhysicalFreq = enum.auto()
+	PhysicalSpecPowerDist = enum.auto()
+	PhysicalSpecRelPermDist = enum.auto()
+	
+	# Blender
+	BlenderObject = enum.auto()
+	BlenderCollection = enum.auto()
+	
+	BlenderImage = enum.auto()
+	BlenderVolume = enum.auto()
+	
+	BlenderGeoNodes = enum.auto()
+	BlenderText = enum.auto()
+	
+	# Maxwell
 	MaxwellSource = enum.auto()
+	MaxwellTemporalShape = enum.auto()
+	
 	MaxwellMedium = enum.auto()
+	MaxwellMediumNonLinearity = enum.auto()
+	
 	MaxwellStructure = enum.auto()
-	MaxwellBound = enum.auto()
+	
+	MaxwellBoundBox = enum.auto()
+	MaxwellBoundFace = enum.auto()
+	
+	MaxwellMonitor = enum.auto()
+
 	MaxwellFDTDSim = enum.auto()
+	MaxwellSimGrid = enum.auto()
+	MaxwellSimGridAxis = enum.auto()
+
+SocketType_to_units = {
+	SocketType.PhysicalTime: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	
+	SocketType.PhysicalAngle: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	
+	SocketType.PhysicalLength: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	SocketType.PhysicalArea: {
+		"default": "UM_SQ",
+		"values": {
+			"PM_SQ": spu.pm**2,
+			"A_SQ": spu.angstrom**2,
+			"NM_SQ": spu.nm**2,
+			"UM_SQ": spu.um**2,
+			"MM_SQ": spu.mm**2,
+			"CM_SQ": spu.cm**2,
+			"M_SQ": spu.m**2,
+		},
+	},
+	SocketType.PhysicalVolume: {
+		"default": "UM_CB",
+		"values": {
+			"PM_CB": spu.pm**3,
+			"A_CB": spu.angstrom**3,
+			"NM_CB": spu.nm**3,
+			"UM_CB": spu.um**3,
+			"MM_CB": spu.mm**3,
+			"CM_CB": spu.cm**3,
+			"M_CB": spu.m**3,
+			"ML": spu.milliliter,
+			"L": spu.liter,
+		},
+	},
+	
+	SocketType.PhysicalMass: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	
+	SocketType.PhysicalSpeed: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	SocketType.PhysicalAccel: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	SocketType.PhysicalForce: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	
+	SocketType.PhysicalPol: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	
+	SocketType.PhysicalFreq: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	SocketType.PhysicalSpecPowerDist: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+	SocketType.PhysicalSpecRelPermDist: {
+		"default": "UM",
+		"values": {
+			"UM": spu.um,
+		},
+	},
+}
+
+SocketType_to_color = {
+	SocketType.Any: (0.5, 0.5, 0.5, 1.0),
+	SocketType.Text: (0.5, 0.5, 0.5, 1.0),
+	SocketType.FilePath: (0.5, 0.5, 0.5, 1.0),
+	
+	# Mathematical
+	SocketType.IntegerNumber: (0.5, 0.5, 0.5, 1.0),
+	SocketType.RationalNumber: (0.5, 0.5, 0.5, 1.0),
+	SocketType.RealNumber: (0.5, 0.5, 0.5, 1.0),
+	SocketType.ComplexNumber: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.Real2DVector: (0.5, 0.5, 0.5, 1.0),
+	SocketType.Complex2DVector: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.Real3DVector: (0.5, 0.5, 0.5, 1.0),
+	SocketType.Complex3DVector: (0.5, 0.5, 0.5, 1.0),
+	
+	# Physical
+	SocketType.PhysicalTime: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalAngle: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalLength: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalArea: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalVolume: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalMass: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalSpeed: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalAccel: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalForce: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalPol: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.PhysicalFreq: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalSpecPowerDist: (0.5, 0.5, 0.5, 1.0),
+	SocketType.PhysicalSpecRelPermDist: (0.5, 0.5, 0.5, 1.0),
+	
+	# Blender
+	SocketType.BlenderObject: (0.5, 0.5, 0.5, 1.0),
+	SocketType.BlenderCollection: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.BlenderImage: (0.5, 0.5, 0.5, 1.0),
+	SocketType.BlenderVolume: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.BlenderGeoNodes: (0.5, 0.5, 0.5, 1.0),
+	SocketType.BlenderText: (0.5, 0.5, 0.5, 1.0),
+	
+	# Maxwell
+	SocketType.MaxwellSource: (0.5, 0.5, 0.5, 1.0),
+	SocketType.MaxwellTemporalShape: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.MaxwellMedium: (0.5, 0.5, 0.5, 1.0),
+	SocketType.MaxwellMediumNonLinearity: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.MaxwellStructure: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.MaxwellBoundBox: (0.5, 0.5, 0.5, 1.0),
+	SocketType.MaxwellBoundFace: (0.5, 0.5, 0.5, 1.0),
+	
+	SocketType.MaxwellMonitor: (0.5, 0.5, 0.5, 1.0),
+
+	SocketType.MaxwellFDTDSim: (0.5, 0.5, 0.5, 1.0),
+	SocketType.MaxwellSimGrid: (0.5, 0.5, 0.5, 1.0),
+	SocketType.MaxwellSimGridAxis: (0.5, 0.5, 0.5, 1.0),
+}
 
 ####################
 # - Node Types
 ####################
 @append_cls_name_to_values
 class NodeType(BlenderTypeEnum):
+	KitchenSink = enum.auto()
+	
 	# Inputs
+	## Inputs / Scene
 	Time = enum.auto()
-	ObjectInfo = enum.auto()
+	UnitSystem = enum.auto()
 	
-	FloatParameter = enum.auto()
-	ComplexParameter = enum.auto()
-	Vec3Parameter = enum.auto()
+	## Inputs / Parameters
+	NumberParameter = enum.auto()
+	PhysicalParameter = enum.auto()
 	
+	## Inputs / Constants
 	ScientificConstant = enum.auto()
-	FloatConstant = enum.auto()
-	ComplexConstant = enum.auto()
-	Vec3Constant = enum.auto()
+	NumberConstant = enum.auto()
+	PhysicalConstant = enum.auto()
+	BlenderConstant = enum.auto()
 	
-	FloatArrayElement = enum.auto()
-	ComplexArrayElement = enum.auto()
-	Vec3ArrayElement = enum.auto()
+	## Inputs / Lists
+	RealList = enum.auto()
+	ComplexList = enum.auto()
 	
-	FloatDictElement = enum.auto()
-	ComplexDictElement = enum.auto()
-	Vec3DictElement = enum.auto()
+	## Inputs / 
+	InputFile = enum.auto()
 	
-	FloatField = enum.auto()
-	ComplexField = enum.auto()
-	Vec3Field = enum.auto()
 	
 	# Outputs
+	## Outputs / Viewers
 	ValueViewer = enum.auto()
 	ConsoleViewer = enum.auto()
 	
+	## Outputs / Exporters
 	JSONFileExporter = enum.auto()
 	
-	# Viz
-	TemporalShapeViz = enum.auto()
-	SourceViz = enum.auto()
-	StructureViz = enum.auto()
-	BoundViz = enum.auto()
-	FDTDViz = enum.auto()
 	
 	# Sources
+	## Sources / Temporal Shapes
 	GaussianPulseTemporalShape = enum.auto()
 	ContinuousWaveTemporalShape = enum.auto()
-	DataDrivenTemporalShape = enum.auto()
+	ListTemporalShape = enum.auto()
 	
+	## Sources /
 	PointDipoleSource = enum.auto()
 	UniformCurrentSource = enum.auto()
 	PlaneWaveSource = enum.auto()
@@ -169,30 +382,35 @@ class NodeType(BlenderTypeEnum):
 	DrudeLorentzMedium = enum.auto()
 	DebyeMedium = enum.auto()
 	
+	## Mediums / Non-Linearities
 	AddNonLinearity = enum.auto()
 	ChiThreeSusceptibilityNonLinearity = enum.auto()
 	TwoPhotonAbsorptionNonLinearity = enum.auto()
 	KerrNonLinearity = enum.auto()
 	
 	# Structures
-	TriMeshStructure = enum.auto()
+	ObjectStructure = enum.auto()
+	GeoNodesStructure = enum.auto()
+	ScriptedStructure = enum.auto()
 	
+	## Structures / Primitives
 	BoxStructure = enum.auto()
 	SphereStructure = enum.auto()
 	CylinderStructure = enum.auto()
 	
-	GeoNodesStructure = enum.auto()
-	ScriptedStructure = enum.auto()
 	
 	# Bounds
 	BoundBox = enum.auto()
 	
+	## Bounds / Bound Faces
 	PMLBoundFace = enum.auto()
 	PECBoundFace = enum.auto()
+	PMCBoundFace = enum.auto()
 	
 	BlochBoundFace = enum.auto()
 	PeriodicBoundFace = enum.auto()
 	AbsorbingBoundFace = enum.auto()
+	
 	
 	# Monitors
 	EHFieldMonitor = enum.auto()
@@ -200,93 +418,78 @@ class NodeType(BlenderTypeEnum):
 	EpsilonTensorMonitor = enum.auto()
 	DiffractionMonitor = enum.auto()
 	
+	## Monitors / Near-Field Projections
 	CartesianNearFieldProjectionMonitor = enum.auto()
 	ObservationAngleNearFieldProjectionMonitor = enum.auto()
 	KSpaceNearFieldProjectionMonitor = enum.auto()
 	
-	# Simulations
+	
+	# Sims
+	SimGrid = enum.auto()
+	
+	## Sims / Sim Grid Axis
+	AutomaticSimGridAxis = enum.auto()
+	ManualSimGridAxis = enum.auto()
+	UniformSimGridAxis = enum.auto()
+	ArraySimGridAxis = enum.auto()
+	
+	## Sim /
 	FDTDSim = enum.auto()
 	
-	SimulationGridDiscretization = enum.auto()
-	
-	Automatic1DGridDiscretization = enum.auto()
-	Manual1DGridDiscretization = enum.auto()
-	Uniform1DGridDiscretization = enum.auto()
-	DataDriven1DGridDiscretization = enum.auto()
 	
 	# Utilities
-	FloatMath = enum.auto()
-	ComplexMath = enum.auto()
-	Vec3Math = enum.auto()
+	Math = enum.auto()
 	
-	FloatFieldMath = enum.auto()
-	ComplexFieldMath = enum.auto()
-	Vec3FieldMath = enum.auto()
-	
-	SpectralMath = enum.auto()
+	## Utilities / Operations
+	ArrayOperation = enum.auto()
 
 ####################
 # - Node Category Types
 ####################
+@wrap_values_in_MT
 class NodeCategory(BlenderTypeEnum):
-	MAXWELL_SIM = enum.auto()
+	MAXWELLSIM = enum.auto()
 	
 	# Inputs/
-	MAXWELL_SIM_INPUTS = enum.auto()
-	MAXWELL_SIM_INPUTS_SCENE = enum.auto()
-	MAXWELL_SIM_INPUTS_PARAMETERS = enum.auto()
-	MAXWELL_SIM_INPUTS_CONSTANTS = enum.auto()
-	MAXWELL_SIM_INPUTS_ARRAY = enum.auto()
-	MAXWELL_SIM_INPUTS_ARRAY_ELEMENTS = enum.auto()
-	MAXWELL_SIM_INPUTS_ARRAY_UNIONS = enum.auto()
-	MAXWELL_SIM_INPUTS_DICTIONARY = enum.auto()
-	MAXWELL_SIM_INPUTS_DICTIONARY_ELEMENTS = enum.auto()
-	MAXWELL_SIM_INPUTS_DICTIONARY_UNIONS = enum.auto()
-	MAXWELL_SIM_INPUTS_FIELDS = enum.auto()
+	MAXWELLSIM_INPUTS = enum.auto()
+	MAXWELLSIM_INPUTS_SCENE = enum.auto()
+	MAXWELLSIM_INPUTS_PARAMETERS = enum.auto()
+	MAXWELLSIM_INPUTS_CONSTANTS = enum.auto()
+	MAXWELLSIM_INPUTS_LISTS = enum.auto()
 	
 	# Outputs/
-	MAXWELL_SIM_OUTPUTS = enum.auto()
-	MAXWELL_SIM_OUTPUTS_VIEWERS = enum.auto()
-	MAXWELL_SIM_OUTPUTS_EXPORTERS = enum.auto()
-	
-	# Viz/
-	MAXWELL_SIM_VIZ = enum.auto()
+	MAXWELLSIM_OUTPUTS = enum.auto()
+	MAXWELLSIM_OUTPUTS_VIEWERS = enum.auto()
+	MAXWELLSIM_OUTPUTS_EXPORTERS = enum.auto()
+	MAXWELLSIM_OUTPUTS_PLOTTERS = enum.auto()
 	
 	# Sources/
-	MAXWELL_SIM_SOURCES = enum.auto()
-	MAXWELL_SIM_SOURCES_TEMPORALSHAPES = enum.auto()
-	MAXWELL_SIM_SOURCES_MODELLED = enum.auto()
-	MAXWELL_SIM_SOURCES_DATADRIVEN = enum.auto()
+	MAXWELLSIM_SOURCES = enum.auto()
+	MAXWELLSIM_SOURCES_TEMPORALSHAPES = enum.auto()
 	
 	# Mediums/
-	MAXWELL_SIM_MEDIUMS = enum.auto()
-	MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS = enum.auto()
-	MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS_DIRECT = enum.auto()
-	MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS_MODELLED = enum.auto()
-	MAXWELL_SIM_MEDIUMS_NONLINEARITIES = enum.auto()
+	MAXWELLSIM_MEDIUMS = enum.auto()
+	MAXWELLSIM_MEDIUMS_NONLINEARITIES = enum.auto()
 	
 	# Structures/
-	MAXWELL_SIM_STRUCTURES = enum.auto()
-	MAXWELL_SIM_STRUCTURES_PRIMITIES = enum.auto()
-	MAXWELL_SIM_STRUCTURES_GENERATED = enum.auto()
+	MAXWELLSIM_STRUCTURES = enum.auto()
+	MAXWELLSIM_STRUCTURES_PRIMITIVES = enum.auto()
 	
 	# Bounds/
-	MAXWELL_SIM_BOUNDS = enum.auto()
-	MAXWELL_SIM_BOUNDS_BOUNDFACES = enum.auto()
+	MAXWELLSIM_BOUNDS = enum.auto()
+	MAXWELLSIM_BOUNDS_BOUNDFACES = enum.auto()
 	
 	# Monitors/
-	MAXWELL_SIM_MONITORS = enum.auto()
-	MAXWELL_SIM_MONITORS_NEARFIELDPROJECTIONS = enum.auto()
+	MAXWELLSIM_MONITORS = enum.auto()
+	MAXWELLSIM_MONITORS_NEARFIELDPROJECTIONS = enum.auto()
 	
 	# Simulations/
-	MAXWELL_SIM_SIMULATIONS = enum.auto()
-	MAXWELL_SIM_SIMULATIONS_DISCRETIZATIONS = enum.auto()
-	MAXWELL_SIM_SIMULATIONS_DISCRETIZATIONS_1DGRID = enum.auto()
+	MAXWELLSIM_SIMS = enum.auto()
+	MAXWELLSIM_SIMGRIDAXES = enum.auto()
 	
 	# Utilities/
-	MAXWELL_SIM_UTILITIES = enum.auto()
-	MAXWELL_SIM_UTILITIES_MATH = enum.auto()
-	MAXWELL_SIM_UTILITIES_FIELDMATH = enum.auto()
+	MAXWELLSIM_UTILITIES = enum.auto()
+	MAXWELLSIM_UTILITIES_OPERATIONS = enum.auto()
 	
 	@classmethod
 	def get_tree(cls):
@@ -294,7 +497,7 @@ class NodeCategory(BlenderTypeEnum):
 		syllable_categories = [
 			node_category.value.split("_")
 			for node_category in cls
-			if node_category.value != "MAXWELL_SIM"
+			if node_category.value != "MAXWELLSIM"
 		]
 		
 		category_tree = {}
@@ -312,61 +515,45 @@ class NodeCategory(BlenderTypeEnum):
 
 NodeCategory_to_category_label = {
 	# Inputs/
-	NodeCategory.MAXWELL_SIM_INPUTS: "Inputs",
-	NodeCategory.MAXWELL_SIM_INPUTS_SCENE: "Scene",
-	NodeCategory.MAXWELL_SIM_INPUTS_PARAMETERS: "Parameters",
-	NodeCategory.MAXWELL_SIM_INPUTS_CONSTANTS: "Constants",
-	NodeCategory.MAXWELL_SIM_INPUTS_ARRAY: "Array",
-	NodeCategory.MAXWELL_SIM_INPUTS_ARRAY_ELEMENTS: "Elements",
-	NodeCategory.MAXWELL_SIM_INPUTS_ARRAY_UNIONS: "Unions",
-	NodeCategory.MAXWELL_SIM_INPUTS_DICTIONARY: "Dictionary",
-	NodeCategory.MAXWELL_SIM_INPUTS_DICTIONARY_ELEMENTS: "Elements",
-	NodeCategory.MAXWELL_SIM_INPUTS_DICTIONARY_UNIONS: "Unions",
-	NodeCategory.MAXWELL_SIM_INPUTS_FIELDS: "Fields",
+	NodeCategory.MAXWELLSIM_INPUTS: "Inputs",
+	NodeCategory.MAXWELLSIM_INPUTS_SCENE: "Scene",
+	NodeCategory.MAXWELLSIM_INPUTS_PARAMETERS: "Parameters",
+	NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS: "Constants",
+	NodeCategory.MAXWELLSIM_INPUTS_LISTS: "Lists",
 	
 	# Outputs/
-	NodeCategory.MAXWELL_SIM_OUTPUTS: "Outputs",
-	NodeCategory.MAXWELL_SIM_OUTPUTS_VIEWERS: "Viewers",
-	NodeCategory.MAXWELL_SIM_OUTPUTS_EXPORTERS: "Exporters",
-	
-	# Viz/
-	NodeCategory.MAXWELL_SIM_VIZ: "Viz",
+	NodeCategory.MAXWELLSIM_OUTPUTS: "Outputs",
+	NodeCategory.MAXWELLSIM_OUTPUTS_VIEWERS: "Viewers",
+	NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS: "Exporters",
+	NodeCategory.MAXWELLSIM_OUTPUTS_PLOTTERS: "Plotters",
 	
 	# Sources/
-	NodeCategory.MAXWELL_SIM_SOURCES: "Sources",
-	NodeCategory.MAXWELL_SIM_SOURCES_TEMPORALSHAPES: "Temporal Shapes",
-	NodeCategory.MAXWELL_SIM_SOURCES_MODELLED: "Modelled",
-	NodeCategory.MAXWELL_SIM_SOURCES_DATADRIVEN: "Data-Driven",
+	NodeCategory.MAXWELLSIM_SOURCES: "Sources",
+	NodeCategory.MAXWELLSIM_SOURCES_TEMPORALSHAPES: "Temporal Shapes",
 	
 	# Mediums/
-	NodeCategory.MAXWELL_SIM_MEDIUMS: "Mediums",
-	NodeCategory.MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS: "Linear Mediums",
-	NodeCategory.MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS_DIRECT: "Direct",
-	NodeCategory.MAXWELL_SIM_MEDIUMS_LINEARMEDIUMS_MODELLED: "Modelled",
-	NodeCategory.MAXWELL_SIM_MEDIUMS_NONLINEARITIES: "Non-Linearities",
+	NodeCategory.MAXWELLSIM_MEDIUMS: "Mediums",
+	NodeCategory.MAXWELLSIM_MEDIUMS_NONLINEARITIES: "Non-Linearities",
 	
 	# Structures/
-	NodeCategory.MAXWELL_SIM_STRUCTURES: "Structures",
-	NodeCategory.MAXWELL_SIM_STRUCTURES_PRIMITIES: "Primitives",
-	NodeCategory.MAXWELL_SIM_STRUCTURES_GENERATED: "Generated",
+	NodeCategory.MAXWELLSIM_STRUCTURES: "Structures",
+	NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES: "Primitives",
 	
 	# Bounds/
-	NodeCategory.MAXWELL_SIM_BOUNDS: "Bounds",
-	NodeCategory.MAXWELL_SIM_BOUNDS_BOUNDFACES: "Bound Faces",
+	NodeCategory.MAXWELLSIM_BOUNDS: "Bounds",
+	NodeCategory.MAXWELLSIM_BOUNDS_BOUNDFACES: "Bound Faces",
 	
 	# Monitors/
-	NodeCategory.MAXWELL_SIM_MONITORS: "Monitors",
-	NodeCategory.MAXWELL_SIM_MONITORS_NEARFIELDPROJECTIONS: "Near-Field Projections",
+	NodeCategory.MAXWELLSIM_MONITORS: "Monitors",
+	NodeCategory.MAXWELLSIM_MONITORS_NEARFIELDPROJECTIONS: "Near-Field Projections",
 	
 	# Simulations/
-	NodeCategory.MAXWELL_SIM_SIMULATIONS: "Simulations",
-	NodeCategory.MAXWELL_SIM_SIMULATIONS_DISCRETIZATIONS: "Discretizations",
-	NodeCategory.MAXWELL_SIM_SIMULATIONS_DISCRETIZATIONS_1DGRID: "1D Grid Discretizations",
+	NodeCategory.MAXWELLSIM_SIMS: "Simulations",
+	NodeCategory.MAXWELLSIM_SIMGRIDAXES: "Sim Grid Axes",
 	
 	# Utilities/
-	NodeCategory.MAXWELL_SIM_UTILITIES: "Utilities",
-	NodeCategory.MAXWELL_SIM_UTILITIES_MATH: "Math",
-	NodeCategory.MAXWELL_SIM_UTILITIES_FIELDMATH: "Field Math",
+	NodeCategory.MAXWELLSIM_UTILITIES: "Utilities",
+	NodeCategory.MAXWELLSIM_UTILITIES_OPERATIONS: "Operations",
 }
 
 
@@ -386,7 +573,11 @@ class PresetDef(pyd.BaseModel):
 	description: str
 	values: dict[SocketName, typ.Any]
 
-@typ.runtime_checkable
+SocketReturnType = typ.TypeVar('SocketReturnType', covariant=True)
+## - Covariance: If B subtypes A, then Container[B] subtypes Container[A].
+## - This is absolutely what we want here.
+
+#@typ.runtime_checkable
 #class BLSocketProtocol(typ.Protocol):
 #	socket_type: SocketType
 #	socket_color: BlenderColorRGB

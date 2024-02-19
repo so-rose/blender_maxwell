@@ -106,6 +106,6 @@ BL_REGISTER = [
 ]
 BL_NODES = {
 	contracts.NodeType.JSONFileExporter: (
-		contracts.NodeCategory.MAXWELL_SIM_OUTPUTS_EXPORTERS
+		contracts.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS
 	)
 }

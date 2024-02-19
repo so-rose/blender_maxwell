@@ -8,7 +8,6 @@ from ... import base
 
 class BoxStructureNode(base.MaxwellSimTreeNode):
 	node_type = contracts.NodeType.BoxStructure
-	
 	bl_label = "Box Structure"
 	#bl_icon = ...
 	
@@ -53,7 +52,7 @@ class BoxStructureNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("structure", td.Box)
+	@base.computes_output_socket("structure")
 	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.Box:
 		medium = self.compute_input("medium")
 		center = (
@@ -85,6 +84,6 @@ BL_REGISTER = [
 ]
 BL_NODES = {
 	contracts.NodeType.BoxStructure: (
-		contracts.NodeCategory.MAXWELL_SIM_STRUCTURES_PRIMITIES
+		contracts.NodeCategory.MAXWELLSIM_STRUCTURES
 	)
 }

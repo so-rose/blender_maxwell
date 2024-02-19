@@ -1,6 +1,8 @@
 import typing as typ
 import bpy
 
+import sympy as sp
+import sympy.physics.units as spu
 from .. import contracts
 
 class BLSocket(bpy.types.NodeSocket):
@@ -14,6 +16,35 @@ class BLSocket(bpy.types.NodeSocket):
 		
 		# Set bl_idname
 		cls.bl_idname = cls.socket_type.value 
+		cls.socket_color = contracts.SocketType_to_color[
+			cls.socket_type.value
+		]
+		
+		# Configure Use of Units
+		if (
+			hasattr(cls, "use_units")
+			and cls.socket_type in contracts.SocketType_to_units
+		):
+			# Set Unit Properties
+			cls.__annotations__["raw_unit"] = bpy.props.EnumProperty(
+				name="Unit",
+				description="Choose a unit",
+				items=[
+					(unit_name, str(unit_value), str(unit_value))
+					for unit_name, unit_value in contracts.SocketType_to_units[
+						cls.socket_type
+					]["values"].items()
+				],
+				default=contracts.SocketType_to_units[
+					cls.socket_type
+				]["default"],
+				update=lambda self, context: self._update_unit(),
+			)
+			cls.__annotations__["raw_unit_previous"] = bpy.props.StringProperty(
+				default=contracts.SocketType_to_units[
+					cls.socket_type
+				]["default"]
+			)
 		
 		# Declare Node Property: 'preset' EnumProperty
 		if hasattr(cls, "draw_preview"):
@@ -24,15 +55,98 @@ class BLSocket(bpy.types.NodeSocket):
 			)
 	
 	####################
+	# - Internal Methods
+	####################
+	@property
+	def units(self) -> dict[str, sp.Expr]:
+		return contracts.SocketType_to_units[
+			self.socket_type
+		]["values"]
+	
+	@property
+	def unit(self) -> sp.Expr:
+		return contracts.SocketType_to_units[
+			self.socket_type
+		]["values"][self.raw_unit]
+	
+	@unit.setter
+	def unit(self, value) -> sp.Expr:
+		raw_unit_name = [
+			raw_unit_name
+			for raw_unit_name, unit_value in contracts.SocketType_to_units[
+				self.socket_type
+			]["values"].items()
+			if value == unit_value
+		][0]
+		
+		self.raw_unit = raw_unit_name
+	
+	@property
+	def _unit_previous(self) -> sp.Expr:
+		return contracts.SocketType_to_units[
+			self.socket_type
+		]["values"][self.raw_unit_previous]
+	
+	@_unit_previous.setter
+	def _unit_previous(self, value) -> sp.Expr:
+		raw_unit_name = [
+			raw_unit_name
+			for raw_unit_name, unit_value in contracts.SocketType_to_units[
+				self.socket_type
+			]["values"].items()
+			if value == unit_value
+		][0]
+		
+		self.raw_unit_previous = raw_unit_name
+	
+	def value_as_unit(self, value) -> typ.Any:
+		"""Return the given value expresse as the current internal unit,
+		without the unit.
+		"""
+		
+		if hasattr(self, "raw_value") and hasattr(self, "unit"):
+			# (Guard) Value Compatibility
+			if not self.is_compatible(value):
+				msg = f"Tried setting socket ({self}) to incompatible value ({value}) of type {type(value)}"
+				raise ValueError(msg)
+			
+			# Return Converted Unit
+			return spu.convert_to(
+				value, self.unit
+			) / self.unit
+		else:
+			raise ValueError("Tried to get 'raw_value_as_unit', but class has no 'raw_value'")
+	
+	def _update_unit(self) -> None:
+		"""Convert (if needed) the `raw_value` property, to use the unit
+		set in the `unit` property.
+		
+		If the `raw_value` property isn't set, this only sets "unit_previous".
+		
+		Run right after setting the `unit` property, in order to synchronize
+		the value with the new unit.
+		"""
+		if hasattr(self, "raw_value") and hasattr(self, "unit"):
+			self.raw_value = spu.convert_to(
+				self.raw_value * self._unit_previous,
+				self.unit,
+			) / self.unit
+		
+		self._unit_previous = self.unit
+	
+	####################
 	# - Methods
 	####################
 	def is_compatible(self, value: typ.Any) -> bool:
+		if not hasattr(self, "compatible_types"):
+			return True
+		
 		for compatible_type, checks in self.compatible_types.items():
 			if (
 				compatible_type is typ.Any or
 				isinstance(value, compatible_type)
 			):
-				return all(check(value) for check in checks)
+				return all(check(self, value) for check in checks)
 		
 		return False
 	

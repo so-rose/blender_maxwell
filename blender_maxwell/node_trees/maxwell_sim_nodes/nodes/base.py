@@ -79,7 +79,6 @@ class FuncOutputSocket(
 # Define Factory Function & Decorator 
 def computes_output_socket(
 	output_socket_name: contracts.SocketName,
-	return_type: typ.Generic[contracts.SocketReturnType],
 ) -> typ.Callable[
 	[ComputeOutputSocketFunc[contracts.SocketReturnType]],
 	FuncOutputSocket[contracts.SocketReturnType],
@@ -114,7 +113,7 @@ def computes_output_socket(
 ####################
 # - Node Callbacks
 ####################
-def sync_selected_preset(node: contracts.NodeTypeProtocol) -> None:
+def sync_selected_preset(node) -> None:
 	"""Whenever a preset is set in a NodeTypeProtocol, this function
 	should be called to overwrite the `default_value`s of the input sockets
 	with the actual preset values.
@@ -123,13 +122,14 @@ def sync_selected_preset(node: contracts.NodeTypeProtocol) -> None:
 		node: The node for which input socket `default_value`s should be
 			set to the values defined within the currently selected preset.
 	"""
-	if node.preset is None:
-		msg = f"Node {node} has no preset EnumProperty"
-		raise ValueError(msg)
+	if hasattr(node, "preset") and hasattr(node, "presets"):
+		if node.preset is None:
+			msg = f"Node {node} has no preset EnumProperty"
+			raise ValueError(msg)
 	
-	if node.presets is None:
-		msg = f"Node {node} has preset EnumProperty, but no defined presets."
-		raise ValueError(msg)
+		if node.presets is None:
+			msg = f"Node {node} has preset EnumProperty, but no defined presets."
+			raise ValueError(msg)
 	
 	# Set Input Sockets to Preset Values
 	preset_def = node.presets[node.preset]
@@ -152,6 +152,41 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		
 		# Set bl_idname
 		cls.bl_idname = cls.node_type.value 
+		
+		# Declare Node Property: 'preset' EnumProperty
+		if hasattr(cls, "input_socket_sets") or hasattr(cls, "output_socket_sets"):
+			if not hasattr(cls, "input_socket_sets"):
+				cls.input_socket_sets = {}
+			if not hasattr(cls, "output_socket_sets"):
+				cls.output_socket_sets = {}
+			
+			socket_set_keys = [
+				input_socket_set_key
+				for input_socket_set_key in cls.input_socket_sets.keys()
+			]
+			socket_set_keys += [
+				output_socket_set_key
+				for output_socket_set_key in cls.output_socket_sets.keys()
+				if output_socket_set_key not in socket_set_keys
+			]
+			
+			cls.__annotations__["socket_set"] = bpy.props.EnumProperty(
+				name="",
+				description="Select a node socket configuration",
+				items=[
+					(
+						socket_set_key,
+						socket_set_key.capitalize(),
+						socket_set_key.capitalize(),
+					)
+					for socket_set_key in socket_set_keys
+				],
+				default=socket_set_keys[0],
+				update=(lambda self, context: self._update_socket()),
+			)
+			cls.__annotations__["socket_set_previous"] = bpy.props.StringProperty(
+				default=socket_set_keys[0]
+			)
 		
 		# Declare Node Property: 'preset' EnumProperty
 		if hasattr(cls, "presets"):
@@ -213,6 +248,28 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			]
 			socket_def.init(bl_socket)
 		
+		# Initialize Dynamic Sockets
+		if hasattr(self, "socket_set"):
+			if self.socket_set in self.input_socket_sets:
+				for socket_name, socket_def in self.input_socket_sets[self.socket_set].items():
+					self.inputs.new(
+						socket_def.socket_type.value,
+						socket_def.label,
+					)
+					
+					bl_socket = self.inputs[socket_def.label]
+					socket_def.init(bl_socket)
+			
+			if self.socket_set in self.output_socket_sets:
+				for socket_name, socket_def in self.output_socket_sets[self.socket_set].items():
+					self.outputs.new(
+						socket_def.socket_type.value,
+						socket_def.label,
+					)
+					
+					bl_socket = self.outputs[socket_def.label]
+					socket_def.init(bl_socket)
+		
 		# Sync Default Preset to Input Socket Values
 		if self.preset is not None:
 			sync_selected_preset(self)
@@ -235,6 +292,47 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		
 		return ntree.bl_idname == contracts.TreeType.MaxwellSim.value
 	
+	def _update_socket(self):
+		if not hasattr(self, "socket_set"):
+			raise ValueError("no socket")
+		
+		if self.socket_set == self.socket_set_previous: return
+		
+		# Delete Old Sockets
+		if self.socket_set_previous in self.input_socket_sets:
+			for socket_name, socket_def in self.input_socket_sets[self.socket_set_previous].items():
+				bl_socket = self.inputs[socket_def.label]
+				self.inputs.remove(bl_socket)
+		
+		if self.socket_set_previous in self.output_socket_sets:
+			for socket_name, socket_def in self.output_socket_sets[self.socket_set_previous].items():
+				bl_socket = self.outputs[socket_def.label]
+				self.outputs.remove(bl_socket)
+		
+		# Add New Sockets
+		if self.socket_set in self.input_socket_sets:
+			for socket_name, socket_def in self.input_socket_sets[self.socket_set].items():
+				self.inputs.new(
+					socket_def.socket_type.value,
+					socket_def.label,
+				)
+				
+				bl_socket = self.inputs[socket_def.label]
+				socket_def.init(bl_socket)
+		
+		if self.socket_set in self.output_socket_sets:
+			for socket_name, socket_def in self.output_socket_sets[self.socket_set].items():
+				self.outputs.new(
+					socket_def.socket_type.value,
+					socket_def.label,
+				)
+				
+				bl_socket = self.outputs[socket_def.label]
+				socket_def.init(bl_socket)
+		
+		# Update "Previous"
+		self.socket_set_previous = self.socket_set
+	
 	####################
 	# - UI Methods
 	####################
@@ -249,6 +347,9 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		"""
 		if self.preset is not None:
 			layout.prop(self, "preset", text="")
+		
+		if hasattr(self, "socket_set"):
+			layout.prop(self, "socket_set", text="")
 		
 		if hasattr(self, "draw_operators"):
 			self.draw_operators(context, layout)

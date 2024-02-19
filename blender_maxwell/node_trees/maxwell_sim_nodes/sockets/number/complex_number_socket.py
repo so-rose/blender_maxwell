@@ -12,15 +12,13 @@ from ... import contracts
 ####################
 class ComplexNumberBLSocket(base.BLSocket):
 	socket_type = contracts.SocketType.ComplexNumber
-	socket_color = (0.6, 0.6, 0.6, 1.0)
-	
 	bl_label = "Complex Number"
 	
 	compatible_types = {
 		complex: {},
 		sp.Expr: {
-			lambda v: v.is_complex,
-			lambda v: len(v.free_symbols) == 0,
+			lambda self, v: v.is_complex,
+			lambda self, v: len(v.free_symbols) == 0,
 		},
 	}
 	

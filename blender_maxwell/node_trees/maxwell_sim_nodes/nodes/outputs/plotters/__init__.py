@@ -1,0 +1,2 @@
+BL_REGISTER = []
+BL_NODES = {}

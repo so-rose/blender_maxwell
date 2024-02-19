@@ -13,8 +13,6 @@ from ... import contracts
 ####################
 class FilePathBLSocket(base.BLSocket):
 	socket_type = contracts.SocketType.FilePath
-	socket_color = (0.2, 0.2, 0.2, 1.0)
-	
 	bl_label = "File Path"
 	
 	compatible_types = {
@@ -71,7 +69,7 @@ class FilePathSocketDef(pyd.BaseModel):
 	socket_type: contracts.SocketType = contracts.SocketType.FilePath
 	label: str
 	
-	default_path: Path
+	default_path: Path = Path("")
 	
 	def init(self, bl_socket: FilePathBLSocket) -> None:
 		bl_socket.default_value = self.default_path

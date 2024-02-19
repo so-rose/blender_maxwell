@@ -72,10 +72,10 @@ def mk_node_categories(
 # - Blender Registration
 ####################
 BL_NODE_CATEGORIES = mk_node_categories(
-	contracts.NodeCategory.get_tree()["MAXWELL"]["SIM"],
-	syllable_prefix = ["MAXWELL", "SIM"],
+	contracts.NodeCategory.get_tree()["MAXWELLSIM"],
+	syllable_prefix = ["MAXWELLSIM"],
 )
-## TODO: refractor, this has a big code smell
+## TODO: refactor, this has a big code smell
 BL_REGISTER = [
 	*DYNAMIC_SUBMENU_REGISTRATIONS
 ]  ## Must be run after, right now.

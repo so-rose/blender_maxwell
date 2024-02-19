@@ -12,15 +12,13 @@ from ... import contracts
 ####################
 class RealNumberBLSocket(base.BLSocket):
 	socket_type = contracts.SocketType.RealNumber
-	socket_color = (0.6, 0.6, 0.6, 1.0)
-	
 	bl_label = "Real Number"
 	
 	compatible_types = {
 		float: {},
 		sp.Expr: {
-			lambda v: v.is_real,
-			lambda v: len(v.free_symbols) == 0,
+			lambda self, v: v.is_real,
+			lambda self, v: len(v.free_symbols) == 0,
 		},
 	}
 	

@@ -1,8 +1,15 @@
-from . import fdtd_simulation
+from . import sim_grid
+from . import sim_grid_axes
+
+from . import fdtd_sim
 
 BL_REGISTER = [
-	*fdtd_simulation.BL_REGISTER,
+	*sim_grid.BL_REGISTER,
+	*sim_grid_axes.BL_REGISTER,
+	*fdtd_sim.BL_REGISTER,
 ]
 BL_NODES = {
-	**fdtd_simulation.BL_NODES,
+	**sim_grid.BL_NODES,
+	**sim_grid_axes.BL_NODES,
+	**fdtd_sim.BL_NODES,
 }

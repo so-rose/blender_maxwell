@@ -1,4 +1,6 @@
+from . import viewers
 from . import exporters
+from . import plotters
 
 BL_REGISTER = [
 	*exporters.BL_REGISTER,

@@ -9,28 +9,25 @@ Now that we can do all the cool things ex. presets and such, it's time to think 
 - Inputs
 	- Scene
 		- Time
-		- Object Info
+		- Unit System
 	
-	- Parameter: Sympy variables.
+	- Parameters: Sympy variables.
 		- *type* Parameter
-	- Constant: Typed numbers.
+	- Constants: Typed numbers.
 		- Scientific Constant
+		
 		- *type* Constant
-	- Array
-		- From File: Concatenate two arrays.
-			- *type* Array Union
-		- Element: Create a 1-element array, with a typed value.
-			- *type* Array Element
+	- Lists
+		- *type* List Element
 	
 	- File Data: Data from a file.
-		- *type* File Data
 - Outputs
-	- Viewer
+	- Viewers
 		- Value Viewer: Live-monitoring.
 		- Console Viewer: w/Button to Print Types
-	- Exporter
-		- JSON File Export: Compatible with any socket implementing `.as_json()`.
-	- Plot
+	- Exporters
+		- JSON File Exporter: Compatible with any socket implementing `.as_json()`.
+	- Plotters
 		- *various kinds of plotting? To Blender datablocks primarily, maybe*.
 
 - Sources
@@ -62,17 +59,16 @@ Now that we can do all the cool things ex. presets and such, it's time to think 
 	- Library Medium
 		- **NOTE**: Should provide an EnumProperty of materials with its own categorizations. It should provide another EnumProperty to choose the experiment. It should also be filterable by wavelength range, maybe also model info. Finally, a reference should be generated on use as text.
 	
-	- Linear Mediums
-		- PEC Medium
-		- Isotropic Medium
-		- Anisotropic Medium
-		
-		- 3-Sellmeier Medium
-		- Sellmeier Medium
-		- Pole-Residue Medium
-		- Drude Medium
-		- Drude-Lorentz Medium
-		- Debye Medium
+	- PEC Medium
+	- Isotropic Medium
+	- Anisotropic Medium
+	
+	- 3-Sellmeier Medium
+	- Sellmeier Medium
+	- Pole-Residue Medium
+	- Drude Medium
+	- Drude-Lorentz Medium
+	- Debye Medium
 	
 	- Non-Linearities
 		- Add Non-Linearity
@@ -124,15 +120,14 @@ Now that we can do all the cool things ex. presets and such, it's time to think 
 
 
 - Simulations
-	- FDTD Sim
+	- Sim Grid
+	- Sim Grid Axis
+		- Automatic Sim Grid Axis
+		- Manual Sim Grid Axis
+		- Uniform Sim Grid Axis
+		- Array Sim Grid Axis
 	
-	- Grid Discretizations
-		- Sim Grid
-		- Grid Axis
-			- Automatic Grid Axis
-			- Manual Grid Axis
-			- Uniform Grid Axis
-			- Data-Driven Grid Axis
+	- FDTD Sim
 
 
 
@@ -140,21 +135,23 @@ Now that we can do all the cool things ex. presets and such, it's time to think 
 	- Math: Contains a dropdown for operation.
 		- *type* Math: **Be careful about units :)**
 	- Operations
-		- Array Operation
+		- List Operation
 
 ## Sockets
 - basic
 	- Any
 	- FilePath
 	- Text
-- math
+- number
 	- IntegerNumber
 	- RationalNumber
+	
 	- RealNumber
 	- ComplexNumber
 	- RealNumberField
 	- ComplexNumberField
 	
+- vector
 	- Real2DVector
 	- Complex2DVector
 	- Real2DVectorField
@@ -185,7 +182,6 @@ Now that we can do all the cool things ex. presets and such, it's time to think 
 	- PhysicalPolarization
 	
 	- PhysicalFrequency
-	- PhysicalSpectralDomain
 	- PhysicalSpectralDistribution
 - blender
 	- BlenderObject
