@@ -155,11 +155,6 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		
 		# Declare Node Property: 'preset' EnumProperty
 		if hasattr(cls, "input_socket_sets") or hasattr(cls, "output_socket_sets"):
-			if not hasattr(cls, "input_socket_sets"):
-				cls.input_socket_sets = {}
-			if not hasattr(cls, "output_socket_sets"):
-				cls.output_socket_sets = {}
-			
 			socket_set_keys = [
 				input_socket_set_key
 				for input_socket_set_key in cls.input_socket_sets.keys()
@@ -187,6 +182,11 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			cls.__annotations__["socket_set_previous"] = bpy.props.StringProperty(
 				default=socket_set_keys[0]
 			)
+		
+		if not hasattr(cls, "input_socket_sets"):
+			cls.input_socket_sets = {}
+		if not hasattr(cls, "output_socket_sets"):
+			cls.output_socket_sets = {}
 		
 		# Declare Node Property: 'preset' EnumProperty
 		if hasattr(cls, "presets"):
@@ -292,6 +292,18 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		
 		return ntree.bl_idname == contracts.TreeType.MaxwellSim.value
 	
+	def update(self) -> None:
+		"""Called when some node properties (ex. links) change,
+		and/or by custom code."""
+		if hasattr(self, "update_cb"):
+			self.update_cb()
+	
+		for bl_socket in self.outputs:
+			if bl_socket.is_linked:
+				for node_link in bl_socket.links:
+					linked_node = node_link.to_node
+					linked_node.update()
+		
 	def _update_socket(self):
 		if not hasattr(self, "socket_set"):
 			raise ValueError("no socket")
@@ -379,7 +391,7 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			
 			return self.inputs[self.input_sockets[input_socket_name].label]
 		
-		elif hasattr(self, "input_socket_sets"):
+		elif hasattr(self, "socket_set"):
 			# You're on your own, chump
 			
 			return self.inputs[next(
@@ -412,7 +424,7 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			
 			return self.outputs[self.output_sockets[output_socket_name].label]
 		
-		elif hasattr(self, "input_socket_sets"):
+		elif hasattr(self, "socket_set"):
 			return self.outputs[next(
 				socket_def.label
 				for socket_set, socket_dict in self.input_socket_sets.items()
@@ -424,7 +436,7 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		self,
 		output_bl_socket_name: contracts.BLSocketName,
 	) -> contracts.SocketName:
-		if hasattr(self, "output_socket_sets"):
+		if hasattr(self, "socket_set"):
 			return next(
 				socket_name
 				for socket_set, socket_dict in self.output_socket_sets.items()

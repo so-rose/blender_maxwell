@@ -33,6 +33,7 @@ class PhysicalSize3DBLSocket(base.BLSocket):
 		size=3,
 		default=(1.0, 1.0, 1.0),
 		precision=4,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

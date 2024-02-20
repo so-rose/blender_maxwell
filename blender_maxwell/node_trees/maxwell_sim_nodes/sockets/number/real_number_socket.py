@@ -30,6 +30,7 @@ class RealNumberBLSocket(base.BLSocket):
 		description="Represents a real number",
 		default=0.0,
 		precision=6,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

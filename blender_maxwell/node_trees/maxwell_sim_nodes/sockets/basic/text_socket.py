@@ -27,6 +27,7 @@ class TextBLSocket(base.BLSocket):
 		name="Text",
 		description="Represents some text",
 		default="",
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

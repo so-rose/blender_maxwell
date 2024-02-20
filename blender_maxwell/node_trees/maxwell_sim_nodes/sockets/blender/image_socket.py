@@ -1,5 +1,6 @@
 import typing as typ
 
+import bpy
 import pydantic as pyd
 
 from .. import base

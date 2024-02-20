@@ -22,6 +22,7 @@ class PhysicalForceScalarBLSocket(base.BLSocket):
 		description="Represents the unitless part of the force",
 		default=0.0,
 		precision=6,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

@@ -450,6 +450,41 @@ SocketType_to_color = {
 	SocketType.MaxwellSimGridAxis: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
 }
 
+BLNodeSocket_to_SocketType = {
+	"NodeSocketBool": SocketType.Bool,
+	"NodeSocketCollection": SocketType.BlenderCollection,
+	"NodeSocketColor": SocketType.Real3DVector,
+	"NodeSocketFloat": SocketType.RealNumber,
+	"NodeSocketFloatAngle": SocketType.RealNumber,
+	"NodeSocketFloatDistance": SocketType.RealNumber,
+	"NodeSocketFloatFactor": SocketType.RealNumber,
+	"NodeSocketFloatPercentage": SocketType.RealNumber,
+	"NodeSocketFloatTime": SocketType.RealNumber,
+	"NodeSocketFloatTimeAbsolute": SocketType.RealNumber,
+	"NodeSocketFloatUnsigned": SocketType.RealNumber,
+	"NodeSocketGeometry": SocketType.Any,
+	"NodeSocketImage": SocketType.BlenderImage,
+	"NodeSocketInt": SocketType.IntegerNumber,
+	"NodeSocketIntFactor": SocketType.IntegerNumber,
+	"NodeSocketIntPercentage": SocketType.IntegerNumber,
+	"NodeSocketIntUnsigned": SocketType.IntegerNumber,
+	"NodeSocketMaterial": SocketType.Any,
+	"NodeSocketObject": SocketType.BlenderObject,
+	"NodeSocketRotation": SocketType.Real3DVector,
+	"NodeSocketShader": SocketType.Any,
+	"NodeSocketStandard": SocketType.Any,
+	"NodeSocketString": SocketType.Text,
+	"NodeSocketTexture": SocketType.Any,
+	"NodeSocketVector": SocketType.Real3DVector,
+	"NodeSocketVectorAcceleration": SocketType.Real3DVector,
+	"NodeSocketVectorDirection": SocketType.Real3DVector,
+	"NodeSocketVectorEuler": SocketType.Real3DVector,
+	"NodeSocketVectorTranslation": SocketType.Real3DVector,
+	"NodeSocketVectorVelocity": SocketType.Real3DVector,
+	"NodeSocketVectorXYZ": SocketType.Real3DVector,
+	"NodeSocketVirtual": SocketType.Any,
+}
+
 ####################
 # - Node Types
 ####################

@@ -1,5 +1,6 @@
 import typing as typ
 
+import bpy
 import pydantic as pyd
 
 from .. import base
@@ -13,15 +14,25 @@ class BlenderObjectBLSocket(base.BLSocket):
 	bl_label = "BlenderObject"
 	
 	####################
+	# - Properties
+	####################
+	raw_value: bpy.props.PointerProperty(
+		name="Blender Object",
+		description="Represents a Blender object",
+		type=bpy.types.Object,
+		update=(lambda self, context: self.trigger_updates()),
+	)
+	
+	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> None:
-		pass
+	def default_value(self) -> bpy.types.Object | None:
+		return self.raw_value
 	
 	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
+	def default_value(self, value: bpy.types.Object) -> None:
+		self.raw_value = value
 
 ####################
 # - Socket Configuration

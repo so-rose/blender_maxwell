@@ -27,6 +27,7 @@ class FilePathBLSocket(base.BLSocket):
 		description="Represents the path to a file",
 		#default="",
 		subtype="FILE_PATH",
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

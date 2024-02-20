@@ -23,6 +23,7 @@ class MaxwellMediumBLSocket(base.BLSocket):
 		description="Represents a simple, real permittivity.",
 		default=0.0,
 		precision=4,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

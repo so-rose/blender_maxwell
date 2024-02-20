@@ -25,6 +25,7 @@ class BoolBLSocket(base.BLSocket):
 		name="Boolean",
 		description="Represents a boolean",
 		default=False,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

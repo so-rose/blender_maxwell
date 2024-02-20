@@ -22,6 +22,7 @@ class PhysicalFreqBLSocket(base.BLSocket):
 		description="Represents the unitless part of the frequency",
 		default=0.0,
 		precision=6,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

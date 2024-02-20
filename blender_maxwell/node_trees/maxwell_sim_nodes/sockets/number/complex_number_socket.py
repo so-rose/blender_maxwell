@@ -30,7 +30,8 @@ class ComplexNumberBLSocket(base.BLSocket):
 		description="Represents a complex number (real, imaginary)",
 		size=2,
 		default=(0.0, 0.0),
-		subtype='NONE'
+		subtype='NONE',
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	coord_sys: bpy.props.EnumProperty(
 		name="Coordinate System",
@@ -135,6 +136,8 @@ class ComplexNumberBLSocket(base.BLSocket):
 				sp.Abs(cart_value),
 				sp.arg(cart_value) if y != 0 else 0,
 			)
+		
+		self.trigger_updates()
 
 ####################
 # - Socket Configuration

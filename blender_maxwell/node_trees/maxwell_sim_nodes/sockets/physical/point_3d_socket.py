@@ -33,6 +33,7 @@ class PhysicalPoint3DBLSocket(base.BLSocket):
 		size=3,
 		default=(0.0, 0.0, 0.0),
 		precision=4,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

@@ -22,6 +22,7 @@ class PhysicalAngleBLSocket(base.BLSocket):
 		description="Represents the unitless part of the acceleration",
 		default=0.0,
 		precision=4,
+		update=(lambda self, context: self.trigger_updates()),
 	)
 	
 	####################

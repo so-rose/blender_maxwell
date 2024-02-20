@@ -141,6 +141,13 @@ class BLSocket(bpy.types.NodeSocket):
 		self._unit_previous = self.unit
 	
 	####################
+	# - Callback Dispatcher
+	####################
+	def trigger_updates(self) -> None:
+		if not self.is_output:
+			self.node.update()
+	
+	####################
 	# - Methods
 	####################
 	def is_compatible(self, value: typ.Any) -> bool:
