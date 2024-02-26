@@ -61,6 +61,6 @@ BL_REGISTER = [
 ]
 BL_NODES = {
 	contracts.NodeType.BoxStructure: (
-		contracts.NodeCategory.MAXWELLSIM_STRUCTURES
+		contracts.NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES
 	)
 }

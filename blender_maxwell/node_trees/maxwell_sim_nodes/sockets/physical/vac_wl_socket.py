@@ -9,17 +9,19 @@ from ... import contracts
 ####################
 # - Blender Socket
 ####################
-class IntegerNumberBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.IntegerNumber
-	bl_label = "IntegerNumber"
+class PhysicalVacWLBLSocket(base.BLSocket):
+	socket_type = contracts.SocketType.PhysicalVacWL
+	bl_label = "PhysicalVacWL"
+	use_units = True
 	
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.IntProperty(
-		name="Integer",
-		description="Represents an integer",
-		default=0,
+	raw_value: bpy.props.FloatProperty(
+		name="Unitless Vacuum Wavelength",
+		description="Represents the unitless part of the vacuum wavelength",
+		default=0.0,
+		precision=6,
 		update=(lambda self, context: self.trigger_updates()),
 	)
 	
@@ -28,27 +30,25 @@ class IntegerNumberBLSocket(base.BLSocket):
 	####################
 	@property
 	def default_value(self) -> None:
-		return self.raw_value
+		return self.raw_value * self.unit
 	
 	@default_value.setter
 	def default_value(self, value: typ.Any) -> None:
-		self.raw_value = int(value)
+		self.raw_value = self.value_as_unit(value)
 
 ####################
 # - Socket Configuration
 ####################
-class IntegerNumberSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.IntegerNumber
+class PhysicalVacWLSocketDef(pyd.BaseModel):
+	socket_type: contracts.SocketType = contracts.SocketType.PhysicalVacWL
 	label: str
 	
-	default_value: int = 0
-	
-	def init(self, bl_socket: IntegerNumberBLSocket) -> None:
-		bl_socket.raw_value = self.default_value
+	def init(self, bl_socket: PhysicalVacWLBLSocket) -> None:
+		pass
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	IntegerNumberBLSocket
+	PhysicalVacWLBLSocket,
 ]

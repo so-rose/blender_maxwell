@@ -30,6 +30,7 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimTreeNode):
 		),
 		"time_delay_rel_ang_freq": sockets.RealNumberSocketDef(
 			label="Time Delay rel. Ang. Freq",
+			default_value=5.0,
 		),
 		"remove_dc_component": sockets.BoolSocketDef(
 			label="Remove DC",

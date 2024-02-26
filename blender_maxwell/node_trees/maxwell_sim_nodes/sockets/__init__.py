@@ -17,6 +17,7 @@ Real3DVectorSocketDef = vector.Real3DVectorSocketDef
 Complex3DVectorSocketDef = vector.Complex3DVectorSocketDef
 
 from . import physical
+PhysicalUnitSystemSocketDef = physical.PhysicalUnitSystemSocketDef
 PhysicalTimeSocketDef = physical.PhysicalTimeSocketDef
 PhysicalAngleSocketDef = physical.PhysicalAngleSocketDef
 PhysicalLengthSocketDef = physical.PhysicalLengthSocketDef
@@ -30,6 +31,7 @@ PhysicalAccelScalarSocketDef = physical.PhysicalAccelScalarSocketDef
 PhysicalForceScalarSocketDef = physical.PhysicalForceScalarSocketDef
 PhysicalPolSocketDef = physical.PhysicalPolSocketDef
 PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
+PhysicalVacWLSocketDef = physical.PhysicalVacWLSocketDef
 PhysicalSpecRelPermDistSocketDef = physical.PhysicalSpecRelPermDistSocketDef
 PhysicalSpecPowerDistSocketDef = physical.PhysicalSpecPowerDistSocketDef
 
@@ -40,6 +42,7 @@ BlenderImageSocketDef = blender.BlenderImageSocketDef
 BlenderVolumeSocketDef = blender.BlenderVolumeSocketDef
 BlenderGeoNodesSocketDef = blender.BlenderGeoNodesSocketDef
 BlenderTextSocketDef = blender.BlenderTextSocketDef
+BlenderPreviewTargetSocketDef = blender.BlenderPreviewTargetSocketDef
 
 from . import maxwell
 MaxwellBoundBoxSocketDef = maxwell.MaxwellBoundBoxSocketDef

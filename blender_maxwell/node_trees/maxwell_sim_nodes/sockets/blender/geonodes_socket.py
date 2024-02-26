@@ -7,6 +7,19 @@ from .. import base
 from ... import contracts
 
 ####################
+# - Operators
+####################
+class BlenderMaxwellResetGeoNodesSocket(bpy.types.Operator):
+	bl_idname = "blender_maxwell.reset_geo_nodes_socket"
+	bl_label = "Reset GeoNodes Socket"
+	
+	def execute(self, context):
+		context.socket.update_geonodes_node()
+		
+		return {'FINISHED'}
+
+
+####################
 # - Blender Socket
 ####################
 class BlenderGeoNodesBLSocket(base.BLSocket):
@@ -34,6 +47,18 @@ class BlenderGeoNodesBLSocket(base.BLSocket):
 	)
 	
 	####################
+	# - UI
+	####################
+	def draw_label_row(self, label_col_row, text):
+		label_col_row.label(text=text)
+		if self.raw_value:
+			label_col_row.operator(
+				"blender_maxwell.reset_geo_nodes_socket",
+				text="",
+				icon="FILE_REFRESH",
+			)
+	
+	####################
 	# - Default Value
 	####################
 	@property
@@ -58,5 +83,6 @@ class BlenderGeoNodesSocketDef(pyd.BaseModel):
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	BlenderGeoNodesBLSocket
+	BlenderMaxwellResetGeoNodesSocket,
+	BlenderGeoNodesBLSocket,
 ]

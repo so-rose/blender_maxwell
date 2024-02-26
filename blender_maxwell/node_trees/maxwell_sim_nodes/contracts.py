@@ -97,6 +97,7 @@ class SocketType(BlenderTypeEnum):
 	Complex3DVector = enum.auto()
 	
 	# Physical
+	PhysicalUnitSystem = enum.auto()
 	PhysicalTime = enum.auto()
 	
 	PhysicalAngle = enum.auto()
@@ -122,6 +123,7 @@ class SocketType(BlenderTypeEnum):
 	PhysicalPol = enum.auto()
 	
 	PhysicalFreq = enum.auto()
+	PhysicalVacWL = enum.auto()
 	PhysicalSpecPowerDist = enum.auto()
 	PhysicalSpecRelPermDist = enum.auto()
 	
@@ -134,6 +136,8 @@ class SocketType(BlenderTypeEnum):
 	
 	BlenderGeoNodes = enum.auto()
 	BlenderText = enum.auto()
+	
+	BlenderPreviewTarget = enum.auto()
 	
 	# Maxwell
 	MaxwellSource = enum.auto()
@@ -376,14 +380,19 @@ SocketType_to_units = {
 			"GHZ": spuex.gigahertz,
 			"THZ": spuex.terahertz,
 			"PHZ": spuex.petahertz,
-			#"EHZ": spu.exahertz,
-			"VAC_PM": spu.picometer,  ## c(vac) = wl*freq
-			"VAC_A": spu.angstrom,
-			"VAC_NM": spu.nanometer,
-			"VAC_UM": spu.micrometer,
-			"VAC_MM": spu.millimeter,
-			"VAC_CM": spu.centimeter,
-			"VAC_M": spu.meter,
+			"EHZ": spuex.exahertz,
+		},
+	},
+	SocketType.PhysicalVacWL: {
+		"default": "NM",
+		"values": {
+			"PM": spu.picometer,  ## c(vac) = wl*freq
+			"A": spu.angstrom,
+			"NM": spu.nanometer,
+			"UM": spu.micrometer,
+			"MM": spu.millimeter,
+			"CM": spu.centimeter,
+			"M": spu.meter,
 		},
 	},
 }
@@ -406,8 +415,9 @@ SocketType_to_color = {
 	SocketType.Complex2DVector: (0.4, 0.9, 0.4, 1.0),  # Medium Light Green
 	SocketType.Real3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
 	SocketType.Complex3DVector: (0.2, 0.7, 0.2, 1.0),  # Dark Green
-
+	
 	# Physical
+	SocketType.PhysicalUnitSystem: (1.0, 0.5, 0.5, 1.0),  # Light Red
 	SocketType.PhysicalTime: (1.0, 0.5, 0.5, 1.0),  # Light Red
 	SocketType.PhysicalAngle: (0.9, 0.45, 0.45, 1.0),  # Medium Light Red
 	SocketType.PhysicalLength: (0.8, 0.4, 0.4, 1.0),  # Medium Red
@@ -425,6 +435,7 @@ SocketType_to_color = {
 	SocketType.PhysicalForce3DVector: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
 	SocketType.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
 	SocketType.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
+	SocketType.PhysicalVacWL: (1.0, 0.7, 0.5, 1.0),  # Light Peach
 	SocketType.PhysicalSpecPowerDist: (0.9, 0.65, 0.45, 1.0),  # Medium Light Peach
 	SocketType.PhysicalSpecRelPermDist: (0.8, 0.6, 0.4, 1.0),  # Medium Peach
 
@@ -435,6 +446,7 @@ SocketType_to_color = {
 	SocketType.BlenderVolume: (0.4, 0.35, 0.7, 1.0),  # Medium Dark Purple
 	SocketType.BlenderGeoNodes: (0.3, 0.3, 0.6, 1.0),  # Dark Purple
 	SocketType.BlenderText: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
+	SocketType.BlenderPreviewTarget: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
 
 	# Maxwell
 	SocketType.MaxwellSource: (1.0, 1.0, 0.5, 1.0),  # Light Yellow
@@ -451,39 +463,103 @@ SocketType_to_color = {
 }
 
 BLNodeSocket_to_SocketType = {
-	"NodeSocketBool": SocketType.Bool,
-	"NodeSocketCollection": SocketType.BlenderCollection,
-	"NodeSocketColor": SocketType.Real3DVector,
-	"NodeSocketFloat": SocketType.RealNumber,
-	"NodeSocketFloatAngle": SocketType.RealNumber,
-	"NodeSocketFloatDistance": SocketType.RealNumber,
-	"NodeSocketFloatFactor": SocketType.RealNumber,
-	"NodeSocketFloatPercentage": SocketType.RealNumber,
-	"NodeSocketFloatTime": SocketType.RealNumber,
-	"NodeSocketFloatTimeAbsolute": SocketType.RealNumber,
-	"NodeSocketFloatUnsigned": SocketType.RealNumber,
-	"NodeSocketGeometry": SocketType.Any,
-	"NodeSocketImage": SocketType.BlenderImage,
-	"NodeSocketInt": SocketType.IntegerNumber,
-	"NodeSocketIntFactor": SocketType.IntegerNumber,
-	"NodeSocketIntPercentage": SocketType.IntegerNumber,
-	"NodeSocketIntUnsigned": SocketType.IntegerNumber,
-	"NodeSocketMaterial": SocketType.Any,
-	"NodeSocketObject": SocketType.BlenderObject,
-	"NodeSocketRotation": SocketType.Real3DVector,
-	"NodeSocketShader": SocketType.Any,
-	"NodeSocketStandard": SocketType.Any,
-	"NodeSocketString": SocketType.Text,
-	"NodeSocketTexture": SocketType.Any,
-	"NodeSocketVector": SocketType.Real3DVector,
-	"NodeSocketVectorAcceleration": SocketType.Real3DVector,
-	"NodeSocketVectorDirection": SocketType.Real3DVector,
-	"NodeSocketVectorEuler": SocketType.Real3DVector,
-	"NodeSocketVectorTranslation": SocketType.Real3DVector,
-	"NodeSocketVectorVelocity": SocketType.Real3DVector,
-	"NodeSocketVectorXYZ": SocketType.Real3DVector,
-	"NodeSocketVirtual": SocketType.Any,
+	1: {
+		"NodeSocketStandard": SocketType.Any,
+		"NodeSocketVirtual": SocketType.Any,
+		"NodeSocketGeometry": SocketType.Any,
+		"NodeSocketTexture": SocketType.Any,
+		"NodeSocketShader": SocketType.Any,
+		"NodeSocketMaterial": SocketType.Any,
+		
+		"NodeSocketString": SocketType.Text,
+		"NodeSocketBool": SocketType.Bool,
+		"NodeSocketCollection": SocketType.BlenderCollection,
+		"NodeSocketImage": SocketType.BlenderImage,
+		"NodeSocketObject": SocketType.BlenderObject,
+		
+		"NodeSocketFloat": SocketType.RealNumber,
+		"NodeSocketFloatAngle": SocketType.PhysicalAngle,
+		"NodeSocketFloatDistance": SocketType.PhysicalLength,
+		"NodeSocketFloatFactor": SocketType.RealNumber,
+		"NodeSocketFloatPercentage": SocketType.RealNumber,
+		"NodeSocketFloatTime": SocketType.PhysicalTime,
+		"NodeSocketFloatTimeAbsolute": SocketType.RealNumber,
+		"NodeSocketFloatUnsigned": SocketType.RealNumber,
+		
+		"NodeSocketInt": SocketType.IntegerNumber,
+		"NodeSocketIntFactor": SocketType.IntegerNumber,
+		"NodeSocketIntPercentage": SocketType.IntegerNumber,
+		"NodeSocketIntUnsigned": SocketType.IntegerNumber,
+	},
+	2: {
+		"NodeSocketVector": SocketType.Real3DVector,
+		"NodeSocketVectorAcceleration": SocketType.Real3DVector,
+		"NodeSocketVectorDirection": SocketType.Real3DVector,
+		"NodeSocketVectorEuler": SocketType.Real3DVector,
+		"NodeSocketVectorTranslation": SocketType.Real3DVector,
+		"NodeSocketVectorVelocity": SocketType.Real3DVector,
+		"NodeSocketVectorXYZ": SocketType.Real3DVector,
+		#"NodeSocketVector": SocketType.Real2DVector,
+		#"NodeSocketVectorAcceleration": SocketType.PhysicalAccel2D,
+		#"NodeSocketVectorDirection": SocketType.PhysicalDir2D,
+		#"NodeSocketVectorEuler": SocketType.PhysicalEuler2D,
+		#"NodeSocketVectorTranslation": SocketType.PhysicalDispl2D,
+		#"NodeSocketVectorVelocity": SocketType.PhysicalVel2D,
+		#"NodeSocketVectorXYZ": SocketType.Real2DPoint,
+	},
+	3: {
+		"NodeSocketRotation": SocketType.Real3DVector,
+		
+		"NodeSocketColor": SocketType.Any,
+		
+		"NodeSocketVector": SocketType.Real3DVector,
+		#"NodeSocketVectorAcceleration": SocketType.PhysicalAccel3D,
+		#"NodeSocketVectorDirection": SocketType.PhysicalDir3D,
+		#"NodeSocketVectorEuler": SocketType.PhysicalEuler3D,
+		#"NodeSocketVectorTranslation": SocketType.PhysicalDispl3D,
+		"NodeSocketVectorTranslation": SocketType.PhysicalPoint3D,
+		#"NodeSocketVectorVelocity": SocketType.PhysicalVel3D,
+		"NodeSocketVectorXYZ": SocketType.PhysicalPoint3D,
+	},
 }
+
+BLNodeSocket_to_SocketType_by_desc = {
+	1: {
+		"Angle": SocketType.PhysicalAngle,
+		
+		"Length": SocketType.PhysicalLength,
+		"Area": SocketType.PhysicalArea,
+		"Volume": SocketType.PhysicalVolume,
+		
+		"Mass": SocketType.PhysicalMass,
+		
+		"Speed": SocketType.PhysicalSpeed,
+		"Accel": SocketType.PhysicalAccelScalar,
+		"Force": SocketType.PhysicalForceScalar,
+		
+		"Freq": SocketType.PhysicalFreq,
+	},
+	2: {
+		#"2DCount": SocketType.Int2DVector,
+		
+		#"2DPoint": SocketType.PhysicalPoint2D,
+		#"2DSize": SocketType.PhysicalSize2D,
+		#"2DPol": SocketType.PhysicalPol,
+		"2DPoint": SocketType.PhysicalPoint3D,
+		"2DSize": SocketType.PhysicalSize3D,
+	},
+	3: {
+		#"Count": SocketType.Int3DVector,
+		
+		"Point": SocketType.PhysicalPoint3D,
+		"Size": SocketType.PhysicalSize3D,
+		
+		#"Force": SocketType.PhysicalForce3D,
+		
+		"Freq": SocketType.PhysicalSize3D,
+	},
+}
+
 
 ####################
 # - Node Types
@@ -493,15 +569,17 @@ class NodeType(BlenderTypeEnum):
 	KitchenSink = enum.auto()
 	
 	# Inputs
+	UnitSystem = enum.auto()
+	
 	## Inputs / Scene
 	Time = enum.auto()
-	UnitSystem = enum.auto()
 	
 	## Inputs / Parameters
 	NumberParameter = enum.auto()
 	PhysicalParameter = enum.auto()
 	
 	## Inputs / Constants
+	WaveConstant = enum.auto()
 	ScientificConstant = enum.auto()
 	NumberConstant = enum.auto()
 	PhysicalConstant = enum.auto()
@@ -517,6 +595,7 @@ class NodeType(BlenderTypeEnum):
 	
 	# Outputs
 	## Outputs / Viewers
+	Viewer3D = enum.auto()
 	ValueViewer = enum.auto()
 	ConsoleViewer = enum.auto()
 	
@@ -612,7 +691,12 @@ class NodeType(BlenderTypeEnum):
 	
 	
 	# Utilities
+	Combine = enum.auto()
+	Separate = enum.auto()
 	Math = enum.auto()
+	
+	## Utilities / Converters
+	WaveConverter = enum.auto()
 	
 	## Utilities / Operations
 	ArrayOperation = enum.auto()
@@ -663,6 +747,7 @@ class NodeCategory(BlenderTypeEnum):
 	
 	# Utilities/
 	MAXWELLSIM_UTILITIES = enum.auto()
+	MAXWELLSIM_UTILITIES_CONVERTERS = enum.auto()
 	MAXWELLSIM_UTILITIES_OPERATIONS = enum.auto()
 	
 	@classmethod
@@ -727,6 +812,7 @@ NodeCategory_to_category_label = {
 	
 	# Utilities/
 	NodeCategory.MAXWELLSIM_UTILITIES: "Utilities",
+	NodeCategory.MAXWELLSIM_UTILITIES_CONVERTERS: "Converters",
 	NodeCategory.MAXWELLSIM_UTILITIES_OPERATIONS: "Operations",
 }
 

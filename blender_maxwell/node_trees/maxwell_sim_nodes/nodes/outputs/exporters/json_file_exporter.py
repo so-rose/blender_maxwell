@@ -5,6 +5,7 @@ from pathlib import Path
 import bpy
 import sympy as sp
 import pydantic as pyd
+import tidy3d as td
 
 from .... import contracts
 from .... import sockets
@@ -24,6 +25,19 @@ class JSONFileExporterPrintJSON(bpy.types.Operator):
 	def execute(self, context):
 		node = context.node
 		print(node.linked_data_as_json())
+		return {'FINISHED'}
+
+class JSONFileExporterMeshData(bpy.types.Operator):
+	bl_idname = "blender_maxwell.json_file_exporter_mesh_data"
+	bl_label = "Print any mesh data linked into a JSONFileExporterNode."
+
+	@classmethod
+	def poll(cls, context):
+		return True
+
+	def execute(self, context):
+		node = context.node
+		print(node.linked_mesh_data())
 		return {'FINISHED'}
 
 class JSONFileExporterSaveJSON(bpy.types.Operator):
@@ -69,6 +83,7 @@ class JSONFileExporterNode(base.MaxwellSimTreeNode):
 	) -> None:
 		layout.operator(JSONFileExporterPrintJSON.bl_idname, text="Print")
 		layout.operator(JSONFileExporterSaveJSON.bl_idname, text="Save")
+		layout.operator(JSONFileExporterMeshData.bl_idname, text="Mesh Info")
 
 	####################
 	# - Methods
@@ -85,9 +100,15 @@ class JSONFileExporterNode(base.MaxwellSimTreeNode):
 			elif isinstance(data, pyd.BaseModel):
 				return data.model_dump_json()
 			
-			# Finally: Try json.dumps (might fail)
 			else:
 				json.dumps(data)
+	
+	def linked_mesh_data(self) -> str | None:
+		if self.g_input_bl_socket("data").is_linked:
+			data: typ.Any = self.compute_input("data")
+			
+			if isinstance(data, td.Structure):
+				return data.geometry
 	
 	def export_data_as_json(self) -> None:
 		if (data := self.linked_data_as_json()):
@@ -101,8 +122,9 @@ class JSONFileExporterNode(base.MaxwellSimTreeNode):
 ####################
 BL_REGISTER = [
 	JSONFileExporterPrintJSON,
-	JSONFileExporterNode,
+	JSONFileExporterMeshData,
 	JSONFileExporterSaveJSON,
+	JSONFileExporterNode,
 ]
 BL_NODES = {
 	contracts.NodeType.JSONFileExporter: (

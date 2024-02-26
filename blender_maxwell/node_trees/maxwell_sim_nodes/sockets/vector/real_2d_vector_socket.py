@@ -1,5 +1,7 @@
 import typing as typ
 
+import bpy
+import sympy as sp
 import pydantic as pyd
 
 from .. import base
@@ -13,15 +15,27 @@ class Real2DVectorBLSocket(base.BLSocket):
 	bl_label = "Real2DVector"
 	
 	####################
-	# - Default Value
+	# - Properties
+	####################
+	raw_value: bpy.props.FloatVectorProperty(
+		name="Unitless 2D Vector (global coordinate system)",
+		description="Represents a real 2D (coordinate) vector",
+		size=2,
+		default=(0.0, 0.0),
+		precision=4,
+		update=(lambda self, context: self.trigger_updates()),
+	)
+	
+	####################
+	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> None:
-		pass
+	def default_value(self) -> sp.Expr:
+		return tuple(self.raw_value)
 	
 	@default_value.setter
 	def default_value(self, value: typ.Any) -> None:
-		pass
+		self.raw_value = tuple(value)
 
 ####################
 # - Socket Configuration

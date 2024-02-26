@@ -235,4 +235,23 @@ class BLSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
-		layout.label(text=text)
+		col = layout.column()
+		row_col = col.row()
+		row_col.alignment = "RIGHT"
+		# Row: Label & Preview Toggle
+		if hasattr(self, "draw_preview"):
+			row_col.prop(
+				self,
+				"preview_active",
+				toggle=True,
+				text="",
+				icon="SEQ_PREVIEW",
+			)
+		
+		row_col.label(text=text)
+		
+		# Row: Preview (in box)
+		if hasattr(self, "draw_preview"):
+			if self.preview_active:
+				col_box = col.box()
+				self.draw_preview(col_box)

@@ -13,17 +13,6 @@ class PhysicalSize3DBLSocket(base.BLSocket):
 	bl_label = "Physical Volume"
 	use_units = True
 	
-	compatible_types = {
-		sp.Expr: {
-			lambda self, v: v.is_real,
-			lambda self, v: len(v.free_symbols) == 0,
-			lambda self, v: any(
-				contracts.is_exactly_expressed_as_unit(v, unit)
-				for unit in self.units.values()
-			)
-		},
-	}
-	
 	####################
 	# - Properties
 	####################

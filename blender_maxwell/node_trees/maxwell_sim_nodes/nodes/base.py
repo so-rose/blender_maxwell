@@ -165,14 +165,19 @@ class MaxwellSimTreeNode(bpy.types.Node):
 				if output_socket_set_key not in socket_set_keys
 			]
 			
+			def labeller(socket_set_key):
+				return " ".join(
+					word.capitalize()
+					for word in socket_set_key.split("_")
+				)
 			cls.__annotations__["socket_set"] = bpy.props.EnumProperty(
 				name="",
 				description="Select a node socket configuration",
 				items=[
 					(
 						socket_set_key,
-						socket_set_key.capitalize(),
-						socket_set_key.capitalize(),
+						labeller(socket_set_key),
+						labeller(socket_set_key),
 					)
 					for socket_set_key in socket_set_keys
 				],
@@ -217,32 +222,28 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		`NodeTypeProtocol` specification, and initializes each as described
 		by user-provided `SocketDefProtocol`s.
 		"""
-		# Initialize Input Sockets
+		# Create Input Sockets
 		for socket_name, socket_def in self.input_sockets.items():
 			self.inputs.new(
-				socket_def.socket_type.value,  ## strenum.value => a real str
+				socket_def.socket_type.value,
 				socket_def.label,
 			)
-			
-			# Retrieve the Blender Socket (bpy.types.NodeSocket)
-			## We could use self.g_input_bl_socket()...
-			## ...but that would rely on implicit semi-initialized state.
-			bl_socket = self.inputs[
-				self.input_sockets[socket_name].label
-			]
-			
-			# Initialize the Socket from the Socket Definition
-			## `bl_socket` knows whether it's an input or output socket...
-			## ...via its `.is_output` attribute.
-			socket_def.init(bl_socket)
 		
-		# Initialize Output Sockets
+		# Create Output Sockets
 		for socket_name, socket_def in self.output_sockets.items():
 			self.outputs.new(
 				socket_def.socket_type.value,
 				socket_def.label,
 			)
 			
+		# Initialize Sockets
+		for socket_name, socket_def in self.input_sockets.items():
+			bl_socket = self.inputs[
+				self.input_sockets[socket_name].label
+			]
+			socket_def.init(bl_socket)
+			
+		for socket_name, socket_def in self.output_sockets.items():
 			bl_socket = self.outputs[
 				self.output_sockets[socket_name].label
 			]
@@ -273,6 +274,9 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		# Sync Default Preset to Input Socket Values
 		if self.preset is not None:
 			sync_selected_preset(self)
+		
+		if hasattr(self, "init_cb"):
+			self.init_cb()
 	
 	@classmethod
 	def poll(cls, ntree: bpy.types.NodeTree) -> bool:
@@ -365,6 +369,12 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		
 		if hasattr(self, "draw_operators"):
 			self.draw_operators(context, layout)
+		
+		if hasattr(self, "draw_props"):
+			self.draw_props(context, layout)
+		
+		if hasattr(self, "draw_info"):
+			self.draw_info(context, layout)
 	
 	####################
 	# - Socket Getters
@@ -392,13 +402,12 @@ class MaxwellSimTreeNode(bpy.types.Node):
 			return self.inputs[self.input_sockets[input_socket_name].label]
 		
 		elif hasattr(self, "socket_set"):
-			# You're on your own, chump
-			
 			return self.inputs[next(
 				socket_def.label
 				for socket_set, socket_dict in self.input_socket_sets.items()
 				for socket_name, socket_def in socket_dict.items()
 				if socket_name == input_socket_name
+				if socket_set == self.socket_set
 			)]
 	
 	def g_output_bl_socket(
@@ -436,21 +445,21 @@ class MaxwellSimTreeNode(bpy.types.Node):
 		self,
 		output_bl_socket_name: contracts.BLSocketName,
 	) -> contracts.SocketName:
+		output_socket_names = [
+			output_socket_name
+			for output_socket_name in self.output_sockets.keys()
+			if self.output_sockets[
+				output_socket_name
+			].label == output_bl_socket_name
+		]
 		if hasattr(self, "socket_set"):
-			return next(
+			output_socket_names += [
 				socket_name
 				for socket_set, socket_dict in self.output_socket_sets.items()
 				for socket_name, socket_def in socket_dict.items()
 				if socket_def.label == output_bl_socket_name
-			)
-		else:
-			return next(
-				output_socket_name
-				for output_socket_name in self.output_sockets.keys()
-				if self.output_sockets[
-					output_socket_name
-				].label == output_bl_socket_name
-			)
+			]
+		return output_socket_names[0]
 	
 	####################
 	# - Socket Setters

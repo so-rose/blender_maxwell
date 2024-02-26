@@ -4,6 +4,25 @@ from . import contracts
 
 ICON_SIM_TREE = 'MOD_SIMPLEDEFORM'
 
+
+class BLENDER_MAXWELL_PT_MaxwellSimTreePanel(bpy.types.Panel):
+    bl_label = "Node Tree Custom Prop"
+    bl_idname = "NODE_PT_custom_prop"
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = 'Item'
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data.tree_type == contracts.TreeType.MaxwellSim.value
+
+    def draw(self, context):
+        layout = self.layout
+        node_tree = context.space_data.node_tree
+        
+        layout.prop(node_tree, "preview_collection")
+        layout.prop(node_tree, "non_preview_collection")
+
 ####################
 # - Node Tree Definition
 ####################
@@ -11,6 +30,22 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	bl_idname = contracts.TreeType.MaxwellSim
 	bl_label = "Maxwell Sim Editor"
 	bl_icon = contracts.Icon.MaxwellSimTree
+	
+	preview_collection: bpy.props.PointerProperty(
+		name="Preview Collection",
+		description="Collection of Blender objects that will be previewed",
+		type=bpy.types.Collection,
+		update=(lambda self, context: self.trigger_updates())
+	)
+	non_preview_collection: bpy.props.PointerProperty(
+		name="Non-Preview Collection",
+		description="Collection of Blender objects that will NOT be previewed",
+		type=bpy.types.Collection,
+		update=(lambda self, context: self.trigger_updates())
+	)
+	
+	def trigger_updates(self):
+		pass
 
 ####################
 # - Blender Registration

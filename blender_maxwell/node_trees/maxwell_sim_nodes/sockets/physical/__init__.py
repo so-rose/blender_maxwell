@@ -1,3 +1,6 @@
+from . import unit_system_socket
+PhysicalUnitSystemSocketDef = unit_system_socket.PhysicalUnitSystemSocketDef
+
 from . import time_socket
 PhysicalTimeSocketDef = time_socket.PhysicalTimeSocketDef
 
@@ -31,7 +34,9 @@ from . import pol_socket
 PhysicalPolSocketDef = pol_socket.PhysicalPolSocketDef
 
 from . import freq_socket
+from . import vac_wl_socket
 PhysicalFreqSocketDef = freq_socket.PhysicalFreqSocketDef
+PhysicalVacWLSocketDef = vac_wl_socket.PhysicalVacWLSocketDef
 
 from . import spec_rel_permit_dist_socket
 from . import spec_power_dist_socket
@@ -40,6 +45,8 @@ PhysicalSpecPowerDistSocketDef = spec_power_dist_socket.PhysicalSpecPowerDistSoc
 
 
 BL_REGISTER = [
+	*unit_system_socket.BL_REGISTER,
+	
 	*time_socket.BL_REGISTER,
 	
 	*angle_socket.BL_REGISTER,
@@ -61,6 +68,7 @@ BL_REGISTER = [
 	*pol_socket.BL_REGISTER,
 	
 	*freq_socket.BL_REGISTER,
+	*vac_wl_socket.BL_REGISTER,
 	*spec_rel_permit_dist_socket.BL_REGISTER,
 	*spec_power_dist_socket.BL_REGISTER,
 ]

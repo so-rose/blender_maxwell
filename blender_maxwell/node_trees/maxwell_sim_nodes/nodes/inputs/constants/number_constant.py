@@ -13,6 +13,11 @@ class NumberConstantNode(base.MaxwellSimTreeNode):
 	
 	input_sockets = {}
 	input_socket_sets = {
+		"integer": {
+			"value": sockets.IntegerNumberSocketDef(
+				label="Integer",
+			),
+		},
 		"real": {
 			"value": sockets.RealNumberSocketDef(
 				label="Real",

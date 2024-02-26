@@ -45,7 +45,10 @@ class ObjectStructureNode(base.MaxwellSimTreeNode):
 		
 		# Triangulate Object Mesh
 		bmesh_mesh = bmesh.new()
-		bmesh_mesh.from_mesh(bl_object.data)
+		bmesh_mesh.from_object(
+			bl_object,
+			bpy.context.evaluated_depsgraph_get(),
+		)
 		bmesh.ops.triangulate(bmesh_mesh, faces=bmesh_mesh.faces)
 		
 		mesh = bpy.data.meshes.new(name="TriangulatedMesh")
@@ -62,7 +65,6 @@ class ObjectStructureNode(base.MaxwellSimTreeNode):
 		# Remove Temporary Mesh
 		bpy.data.meshes.remove(mesh)
 		
-		print(vertices)
 		return td.Structure(
 			geometry=td.TriangleMesh.from_vertices_faces(vertices, faces),
 			medium=self.compute_input("medium")
