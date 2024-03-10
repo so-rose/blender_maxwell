@@ -5,24 +5,14 @@ import sympy as sp
 import sympy.physics.units as spu
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class PhysicalVolumeBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalVolume
-	bl_label = "Physical Volume"
+class PhysicalVolumeBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.PhysicalVolume
+	bl_label = "Volume"
 	use_units = True
-	
-	compatible_types = {
-		sp.Expr: {
-			lambda self, v: v.is_real,
-			lambda self, v: len(v.free_symbols) == 0,
-			lambda self, v: any(
-				contracts.is_exactly_expressed_as_unit(v, unit)
-				for unit in self.units.values()
-			)
-		},
-	}
 	
 	####################
 	# - Properties
@@ -32,56 +22,32 @@ class PhysicalVolumeBLSocket(base.BLSocket):
 		description="Represents the unitless part of the area",
 		default=0.0,
 		precision=6,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	
 	####################
 	# - Socket UI
 	####################
-	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		"""Draw the value of the area, including a toggle for
-		specifying the active unit.
-		"""
-		label_col_row.label(text=text)
-		#label_col_row.prop(self, "raw_value", text="")
-		label_col_row.prop(self, "raw_unit", text="")
-	
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col_row = col.row(align=True)
-		col_row.prop(self, "raw_value", text="")
-		#col_row.prop(self, "unit", text="")
-	
+		col.prop(self, "raw_value", text="")
 	####################
-	# - Computation of Default Value
+	# - Default Value
 	####################
 	@property
-	def default_value(self) -> sp.Expr:
-		"""Return the area as a sympy expression, which is a pure real
-		number perfectly expressed as the active unit.
-		
-		Returns:
-			The area as a sympy expression (with units).
-		"""
-		
+	def value(self) -> SympyExpr:
 		return self.raw_value * self.unit
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		"""Set the area from a sympy expression, including any required
-		unit conversions to normalize the input value to the selected
-		units.
-		"""
-		
-		self.raw_value = self.value_as_unit(value)
+	@value.setter
+	def value(self, value: SympyExpr) -> None:
+		self.raw_value = spu.convert_to(value, self.unit) / self.unit
 
 ####################
 # - Socket Configuration
 ####################
 class PhysicalVolumeSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalVolume
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.PhysicalVolume
 	
-	default_unit: typ.Any | None = None
+	default_unit: SympyExpr | None = None
 	
 	def init(self, bl_socket: PhysicalVolumeBLSocket) -> None:
 		if self.default_unit:

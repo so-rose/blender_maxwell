@@ -5,29 +5,17 @@ import pydantic as pyd
 import tidy3d as td
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class MaxwellTemporalShapeBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.MaxwellTemporalShape
+class MaxwellTemporalShapeBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellTemporalShape
 	bl_label = "Maxwell Temporal Shape"
-	
-	####################
-	# - Computation of Default Value
-	####################
-	@property
-	def default_value(self) -> td.Medium:
-		return None
-	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
 
 ####################
 # - Socket Configuration
 ####################
 class MaxwellTemporalShapeSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.MaxwellTemporalShape
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.MaxwellTemporalShape
 	
 	def init(self, bl_socket: MaxwellTemporalShapeBLSocket) -> None:
 		pass

@@ -28,3 +28,4 @@ class BlenderMaxwellUninstallDependenciesOperator(bpy.types.Operator):
 BL_REGISTER = [
 	BlenderMaxwellUninstallDependenciesOperator,
 ]
+BL_KMI_REGISTER = []

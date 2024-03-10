@@ -4,14 +4,14 @@ import bpy
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class BlenderCollectionBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.BlenderCollection
-	bl_label = "BlenderCollection"
+class BlenderCollectionBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.BlenderCollection
+	bl_label = "Blender Collection"
 	
 	####################
 	# - Properties
@@ -20,26 +20,31 @@ class BlenderCollectionBLSocket(base.BLSocket):
 		name="Blender Collection",
 		description="Represents a Blender collection",
 		type=bpy.types.Collection,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
+	
+	####################
+	# - UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> bpy.types.Collection | None:
+	def value(self) -> bpy.types.Collection | None:
 		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: bpy.types.Collection) -> None:
+	@value.setter
+	def value(self, value: bpy.types.Collection) -> None:
 		self.raw_value = value
 
 ####################
 # - Socket Configuration
 ####################
 class BlenderCollectionSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.BlenderCollection
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.BlenderCollection
 	
 	def init(self, bl_socket: BlenderCollectionBLSocket) -> None:
 		pass

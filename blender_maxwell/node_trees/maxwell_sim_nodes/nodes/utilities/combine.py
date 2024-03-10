@@ -6,7 +6,7 @@ from ... import contracts
 from ... import sockets
 from .. import base
 
-class CombineNode(base.MaxwellSimTreeNode):
+class CombineNode(base.MaxwellSimNode):
 	node_type = contracts.NodeType.Combine
 	bl_label = "Combine"
 	#bl_icon = ...

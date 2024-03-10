@@ -3,32 +3,20 @@ import typing as typ
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class Complex3DVectorBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.Complex3DVector
-	bl_label = "Complex3DVector"
-	
-	####################
-	# - Default Value
-	####################
-	@property
-	def default_value(self) -> None:
-		pass
-	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
+class Complex3DVectorBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.Complex3DVector
+	bl_label = "Complex 3D Vector"
 
 ####################
 # - Socket Configuration
 ####################
 class Complex3DVectorSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.Complex3DVector
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.Complex3DVector
 	
 	def init(self, bl_socket: Complex3DVectorBLSocket) -> None:
 		pass

@@ -1,175 +1,316 @@
 import typing as typ
+import typing_extensions as typx
+import functools
+
 import bpy
 
+import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
-from .. import contracts
+from .. import contracts as ct
 
-class BLSocket(bpy.types.NodeSocket):
-	"""A base type for nodes that greatly simplifies the implementation of
-	reliable, powerful nodes.
+class MaxwellSimSocket(bpy.types.NodeSocket):
+	# Fundamentals
+	socket_type: ct.SocketType
+	bl_label: str
 	
-	Should be used together with `contracts.BLSocketProtocol`.
-	"""
+	# Style
+	display_shape: typx.Literal[
+		"CIRCLE", "SQUARE", "DIAMOND", "CIRCLE_DOT", "SQUARE_DOT",
+		"DIAMOND_DOT",
+	]
+	socket_color: tuple
+	
+	# Options
+	#link_limit: int = 0
+	use_units: bool = False
+	
+	# Computed
+	bl_idname: str
+	
+	####################
+	# - Initialization
+	####################
 	def __init_subclass__(cls, **kwargs: typ.Any):
 		super().__init_subclass__(**kwargs)  ## Yucky superclass setup.
 		
-		# Set bl_idname
-		cls.bl_idname = cls.socket_type.value 
-		cls.socket_color = contracts.SocketType_to_color[
-			cls.socket_type.value
-		]
+		# Setup Blender ID for Node
+		if not hasattr(cls, "socket_type"):
+			msg = f"Socket class {cls} does not define 'socket_type'"
+			raise ValueError(msg)
+		cls.bl_idname = str(cls.socket_type.value)
+		
+		# Setup Locked Property for Node
+		cls.__annotations__["locked"] = bpy.props.BoolProperty(
+			name="Locked State",
+			description="The lock-state of a particular socket, which determines the socket's user editability",
+			default=False,
+		)
+		
+		# Setup Style
+		cls.socket_color = ct.SOCKET_COLORS[cls.socket_type]
+		cls.socket_shape = ct.SOCKET_SHAPES[cls.socket_type]
 		
 		# Configure Use of Units
-		if (
-			hasattr(cls, "use_units")
-			and cls.socket_type in contracts.SocketType_to_units
-		):
-			# Set Unit Properties
-			cls.__annotations__["raw_unit"] = bpy.props.EnumProperty(
+		if cls.use_units:
+			if not (socket_units := ct.SOCKET_UNITS.get(cls.socket_type)):
+				msg = "Tried to `use_units` on {cls.bl_idname} socket, but `SocketType` has no units defined in `contracts.SOCKET_UNITS`"
+				raise RuntimeError(msg)
+			
+			# Current Unit
+			cls.__annotations__["active_unit"] = bpy.props.EnumProperty(
 				name="Unit",
 				description="Choose a unit",
 				items=[
 					(unit_name, str(unit_value), str(unit_value))
-					for unit_name, unit_value in contracts.SocketType_to_units[
-						cls.socket_type
-					]["values"].items()
+					for unit_name, unit_value in socket_units["values"].items()
 				],
-				default=contracts.SocketType_to_units[
-					cls.socket_type
-				]["default"],
-				update=lambda self, context: self._update_unit(),
+				default=socket_units["default"],
+				update=lambda self, context: self.sync_unit_change(),
 			)
-			cls.__annotations__["raw_unit_previous"] = bpy.props.StringProperty(
-				default=contracts.SocketType_to_units[
-					cls.socket_type
-				]["default"]
-			)
-		
-		# Declare Node Property: 'preset' EnumProperty
-		if hasattr(cls, "draw_preview"):
-			cls.__annotations__["preview_active"] = bpy.props.BoolProperty(
-				name="Preview",
-				description="Preview the socket value",
-				default=False,
+			
+			# Previous Unit (for conversion)
+			cls.__annotations__["prev_active_unit"] = bpy.props.StringProperty(
+				default=socket_units["default"],
 			)
 	
 	####################
-	# - Internal Methods
+	# - Action Chain
+	####################
+	def trigger_action(
+		self,
+		action: typx.Literal["enable_lock", "disable_lock", "value_changed", "show_preview", "show_plot"],
+	) -> None:
+		"""Called whenever the socket's output value has changed.
+		
+		This also invalidates any of the socket's caches.
+		
+		When called on an input node, the containing node's
+		`trigger_action` method will be called with this socket.
+		
+		When called on a linked output node, the linked socket's
+		`trigger_action` method will be called.
+		"""
+		# Forwards Chains
+		if action in {"value_changed"}:
+			## Input Socket
+			if not self.is_output:
+				self.node.trigger_action(action, socket_name=self.name)
+			
+			## Linked Output Socket
+			elif self.is_output and self.is_linked:
+				for link in self.links:
+					link.to_socket.trigger_action(action)
+		
+		# Backwards Chains
+		elif action in {"enable_lock", "disable_lock", "show_preview", "show_plot"}:
+			if action == "enable_lock":
+				self.locked = True
+			
+			if action == "disable_lock":
+				self.locked = False
+			
+			## Output Socket
+			if self.is_output:
+				self.node.trigger_action(action, socket_name=self.name)
+			
+			## Linked Input Socket
+			elif not self.is_output and self.is_linked:
+				for link in self.links:
+					link.from_socket.trigger_action(action)
+	
+	####################
+	# - Action Chain: Event Handlers
+	####################
+	def sync_prop(self, prop_name: str, context: bpy.types.Context):
+		"""Called when a property has been updated.
+		"""
+		if not hasattr(self, prop_name):
+			msg = f"Property {prop_name} not defined on socket {self}"
+			raise RuntimeError(msg)
+		
+		self.trigger_action("value_changed")
+		
+	def sync_link_added(self, link) -> bool:
+		"""Called when a link has been added to this (input) socket.
+		
+		Returns a bool, whether or not the socket consents to the link change.
+		"""
+		if self.locked: return False
+		if self.is_output:
+			msg = f"Tried to sync 'link add' on output socket"
+			raise RuntimeError(msg)
+		
+		self.trigger_action("value_changed")
+		
+		return True
+	
+	def sync_link_removed(self, from_socket) -> bool:
+		"""Called when a link has been removed from this (input) socket.
+		
+		Returns a bool, whether or not the socket consents to the link change.
+		"""
+		if self.locked: return False
+		if self.is_output:
+			msg = f"Tried to sync 'link add' on output socket"
+			raise RuntimeError(msg)
+		
+		self.trigger_action("value_changed")
+		
+		return True
+	
+	####################
+	# - Data Chain
 	####################
 	@property
-	def units(self) -> dict[str, sp.Expr]:
-		return contracts.SocketType_to_units[
+	def value(self) -> typ.Any:
+		raise NotImplementedError
+	
+	@value.setter
+	def value(self, value: typ.Any) -> None:
+		raise NotImplementedError
+	
+	@property
+	def lazy_value(self) -> None:
+		raise NotImplementedError
+	
+	@lazy_value.setter
+	def lazy_value(self, lazy_value: typ.Any) -> None:
+		raise NotImplementedError
+	
+	@property
+	def capabilities(self) -> None:
+		raise NotImplementedError
+	
+	def _compute_data(
+		self,
+		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+	) -> typ.Any:
+		"""Computes the internal data of this socket, ONLY.
+		
+		**NOTE**: Low-level method. Use `compute_data` instead.
+		"""
+		if kind == ct.DataFlowKind.Value:
+			return self.value
+		if kind == ct.DataFlowKind.LazyValue:
+			return self.lazy_value
+		if kind == ct.DataFlowKind.Capabilities:
+			return self.capabilities
+		return None
+	
+	def compute_data(
+		self,
+		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+	):
+		"""Computes the value of this socket, including all relevant factors:
+			- If input socket, and unlinked, compute internal data.
+			- If input socket, and linked, compute linked socket data.
+			- If output socket, ask node for data.
+		"""
+		# Compute Output Socket
+		if self.is_output:
+			return self.node.compute_output(self.name, kind=kind)
+		
+		# Compute Input Socket
+		## Unlinked: Retrieve Socket Value
+		if not self.is_linked: return self._compute_data(kind)
+		
+		## Linked: Compute Output of Linked Sockets
+		linked_values = [
+			link.from_socket.compute_data(kind)
+			for link in self.links
+		]
+		
+		## Return Single Value / List of Values
+		if len(linked_values) == 1: return linked_values[0]
+		return linked_values
+	
+	####################
+	# - Unit Properties
+	####################
+	@functools.cached_property
+	def possible_units(self) -> dict[str, sp.Expr]:
+		if not self.use_units:
+			msg = "Tried to get possible units for socket {self}, but socket doesn't `use_units`"
+			raise ValueError(msg)
+		
+		return ct.SOCKET_UNITS[
 			self.socket_type
 		]["values"]
 	
 	@property
 	def unit(self) -> sp.Expr:
-		return contracts.SocketType_to_units[
-			self.socket_type
-		]["values"][self.raw_unit]
-	
-	@unit.setter
-	def unit(self, value) -> sp.Expr:
-		raw_unit_name = [
-			raw_unit_name
-			for raw_unit_name, unit_value in contracts.SocketType_to_units[
-				self.socket_type
-			]["values"].items()
-			if value == unit_value
-		][0]
-		
-		self.raw_unit = raw_unit_name
+		return self.possible_units[self.active_unit]
 	
 	@property
-	def _unit_previous(self) -> sp.Expr:
-		return contracts.SocketType_to_units[
-			self.socket_type
-		]["values"][self.raw_unit_previous]
+	def prev_unit(self) -> sp.Expr:
+		return self.possible_units[self.prev_active_unit]
 	
-	@_unit_previous.setter
-	def _unit_previous(self, value) -> sp.Expr:
-		raw_unit_name = [
-			raw_unit_name
-			for raw_unit_name, unit_value in contracts.SocketType_to_units[
-				self.socket_type
-			]["values"].items()
-			if value == unit_value
-		][0]
+	@unit.setter
+	def unit(self, value: str | sp.Expr) -> None:
+		# Retrieve Unit by String
+		if isinstance(value, str) and value in self.possible_units:
+			self.active_unit = self.possible_units[value]
+			return
 		
-		self.raw_unit_previous = raw_unit_name
+		# Retrieve =1 Matching Unit Name
+		matching_unit_names = [
+			unit_name
+			for unit_name, unit_sympy in self.possible_units.items()
+			if value == unit_sympy
+		]
+		if len(matching_unit_names) == 0:
+			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(possible.units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
+			raise ValueError(msg)
+		
+		if len(matching_unit_names) > 1:
+			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(possible.units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
+			raise RuntimeError(msg)
+		
+		self.active_unit = matching_unit_names[0]
 	
-	def value_as_unit(self, value) -> typ.Any:
-		"""Return the given value expresse as the current internal unit,
-		without the unit.
+	def sync_unit_change(self) -> None:
+		"""In unit-aware sockets, the internal `value()` property multiplies the Blender property value by the current active unit.
+		
+		When the unit is changed, `value()` will display the old scalar with the new unit.
+		To fix this, we need to update the scalar to use the new unit.
+		
+		Can be overridden if more specific logic is required.
 		"""
 		
-		if hasattr(self, "raw_value") and hasattr(self, "unit"):
-			# (Guard) Value Compatibility
-			if not self.is_compatible(value):
-				msg = f"Tried setting socket ({self}) to incompatible value ({value}) of type {type(value)}"
-				raise ValueError(msg)
-			
-			# Return Converted Unit
-			return spu.convert_to(
-				value, self.unit
-			) / self.unit
-		else:
-			raise ValueError("Tried to get 'raw_value_as_unit', but class has no 'raw_value'")
+		prev_value = self.value / self.unit * self.prev_unit
+		## After changing units, self.value is expressed in the wrong unit.
+		## - Therefore, we removing the new unit, and re-add the prev unit.
+		## - Using only self.value avoids implementation-specific details.
+		
+		self.value = spu.convert_to(
+			prev_value,
+			self.unit
+		)  ## Now, the unit conversion can be done correctly.
+		
+		self.prev_active_unit = self.active_unit
 	
-	def _update_unit(self) -> None:
-		"""Convert (if needed) the `raw_value` property, to use the unit
-		set in the `unit` property.
-		
-		If the `raw_value` property isn't set, this only sets "unit_previous".
-		
-		Run right after setting the `unit` property, in order to synchronize
-		the value with the new unit.
+	####################
+	# - Style
+	####################
+	def draw_color(
+		self,
+		context: bpy.types.Context,
+		node: bpy.types.Node,
+	) -> ct.BLColorRGBA:
+		"""Color of the socket icon, when embedded in a node.
 		"""
-		if hasattr(self, "raw_value") and hasattr(self, "unit"):
-			if hasattr(self.raw_value, "__getitem__"):
-				self.raw_value = tuple(spu.convert_to(
-					sp.Matrix(tuple(self.raw_value)) * self._unit_previous,
-					self.unit,
-				) / self.unit)
-			else:
-				self.raw_value = spu.convert_to(
-					self.raw_value * self._unit_previous,
-					self.unit,
-				) / self.unit
-		
-		self._unit_previous = self.unit
+		return self.socket_color
 	
-	####################
-	# - Callback Dispatcher
-	####################
-	def trigger_updates(self) -> None:
-		if not self.is_output:
-			self.node.update()
-	
-	####################
-	# - Methods
-	####################
-	def is_compatible(self, value: typ.Any) -> bool:
-		if not hasattr(self, "compatible_types"):
-			return True
-		
-		for compatible_type, checks in self.compatible_types.items():
-			if (
-				compatible_type is typ.Any or
-				isinstance(value, compatible_type)
-			):
-				return all(check(self, value) for check in checks)
-		
-		return False
-	
-	####################
-	# - UI
-	####################
 	@classmethod
-	def draw_color_simple(cls) -> contracts.BlenderColorRGB:
+	def draw_color_simple(cls) -> ct.BLColorRGBA:
+		"""Fallback color of the socket icon (ex.when not embedded in a node).
+		"""
 		return cls.socket_color
 	
+	####################
+	# - UI Methods
+	####################
 	def draw(
 		self,
 		context: bpy.types.Context,
@@ -177,6 +318,10 @@ class BLSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
+		"""Called by Blender to draw the socket UI.
+		"""
+		if self.locked: layout.enabled = False
+		
 		if self.is_output:
 			self.draw_output(context, layout, node, text)
 		else:
@@ -189,44 +334,31 @@ class BLSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
+		"""Draws the socket UI, when the socket is an input socket.
+		"""
+		# Draw Linked Input: Label Row
 		if self.is_linked:
 			layout.label(text=text)
 			return
 		
-		# Column
-		col = layout.column(align=True)
+		# Parent Column
+		col = layout.column(align=False)
 		
-		# Row: Label & Preview Toggle
-		label_col_row = col.row(align=True)
-		if hasattr(self, "draw_label_row"):
-			self.draw_label_row(label_col_row, text)
-		elif hasattr(self, "raw_unit"):
-			label_col_row.label(text=text)
-			label_col_row.prop(self, "raw_unit", text="")
+		# Draw Label Row
+		row = col.row(align=True)
+		if self.use_units:
+			split = row.split(factor=0.65, align=True)
+			
+			_row = split.row(align=True)
+			self.draw_label_row(_row, text)
+		
+			_col = split.column(align=True)
+			_col.prop(self, "active_unit", text="")
 		else:
-			label_col_row.label(text=text)
+			self.draw_label_row(row, text)
 		
-		if hasattr(self, "draw_preview"):
-			label_col_row.prop(
-				self,
-				"preview_active",
-				toggle=True,
-				text="",
-				icon="SEQ_PREVIEW",
-			)
-		
-		# Row: Preview (in Box)
-		if hasattr(self, "draw_preview"):
-			if self.preview_active:
-				col_box = col.box()
-				self.draw_preview(col_box)
-		
-		# Row(s): Value
-		if hasattr(self, "draw_value"):
-			self.draw_value(col)
-		elif hasattr(self, "raw_value"):
-			#col_row = col.row(align=True)
-			col.prop(self, "raw_value", text="")
+		# Draw Value Row(s)
+		self.draw_value(col)
 	
 	def draw_output(
 		self,
@@ -235,23 +367,28 @@ class BLSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
-		col = layout.column()
-		row_col = col.row()
-		row_col.alignment = "RIGHT"
-		# Row: Label & Preview Toggle
-		if hasattr(self, "draw_preview"):
-			row_col.prop(
-				self,
-				"preview_active",
-				toggle=True,
-				text="",
-				icon="SEQ_PREVIEW",
-			)
+		"""Draws the socket UI, when the socket is an output socket.
+		"""
+		layout.label(text=text)
+	
+	####################
+	# - UI Methods
+	####################
+	def draw_label_row(
+		self,
+		row: bpy.types.UILayout,
+		text: str,
+	) -> None:
+		"""Called to draw the label row (same height as socket shape).
 		
-		row_col.label(text=text)
+		Can be overridden.
+		"""
+		row.label(text=text)
+	
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		"""Called to draw the value column in unlinked input sockets.
 		
-		# Row: Preview (in box)
-		if hasattr(self, "draw_preview"):
-			if self.preview_active:
-				col_box = col.box()
-				self.draw_preview(col_box)
+		Can be overridden.
+		"""
+		pass
+	

@@ -5,24 +5,14 @@ import sympy as sp
 import sympy.physics.units as spu
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class PhysicalAreaBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalArea
+class PhysicalAreaBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.PhysicalArea
 	bl_label = "Physical Area"
 	use_units = True
-	
-	compatible_types = {
-		sp.Expr: {
-			lambda self, v: v.is_real,
-			lambda self, v: len(v.free_symbols) == 0,
-			lambda self, v: any(
-				contracts.is_exactly_expressed_as_unit(v, unit)
-				for unit in self.units.values()
-			)
-		},
-	}
 	
 	####################
 	# - Properties
@@ -32,19 +22,14 @@ class PhysicalAreaBLSocket(base.BLSocket):
 		description="Represents the unitless part of the area",
 		default=0.0,
 		precision=6,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	
 	####################
 	# - Socket UI
 	####################
-	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		label_col_row.label(text=text)
-		label_col_row.prop(self, "raw_unit", text="")
-	
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col_row = col.row(align=True)
-		col_row.prop(self, "raw_value", text="")
+		col.prop(self, "raw_value", text="")
 	
 	####################
 	# - Computation of Default Value
@@ -73,8 +58,7 @@ class PhysicalAreaBLSocket(base.BLSocket):
 # - Socket Configuration
 ####################
 class PhysicalAreaSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalArea
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.PhysicalArea
 	
 	default_unit: typ.Any | None = None
 	

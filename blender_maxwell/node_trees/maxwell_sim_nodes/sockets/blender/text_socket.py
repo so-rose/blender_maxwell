@@ -9,27 +9,42 @@ from ... import contracts
 ####################
 # - Blender Socket
 ####################
-class BlenderTextBLSocket(base.BLSocket):
+class BlenderTextBLSocket(base.MaxwellSimSocket):
 	socket_type = contracts.SocketType.BlenderText
-	bl_label = "BlenderText"
+	bl_label = "Blender Text"
+	
+	####################
+	# - Properties
+	####################
+	raw_value: bpy.props.PointerProperty(
+		name="Blender Text",
+		description="Represents a Blender text datablock",
+		type=bpy.types.Text,
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
+	)
+	
+	####################
+	# - UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> None:
-		pass
+	def value(self) -> bpy.types.Text:
+		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
+	@value.setter
+	def value(self, value: bpy.types.Text) -> None:
+		self.raw_value = value
 
 ####################
 # - Socket Configuration
 ####################
 class BlenderTextSocketDef(pyd.BaseModel):
 	socket_type: contracts.SocketType = contracts.SocketType.BlenderText
-	label: str
 	
 	def init(self, bl_socket: BlenderTextBLSocket) -> None:
 		pass

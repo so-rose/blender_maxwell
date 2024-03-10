@@ -2,83 +2,114 @@ import typing as typ
 
 import bpy
 import pydantic as pyd
+import sympy as sp
+import sympy.physics.units as spu
 import tidy3d as td
+import scipy as sc
 
+from .....utils.pydantic_sympy import ConstrSympyExpr,  Complex
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class MaxwellMediumBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.MaxwellMedium
+VAC_SPEED_OF_LIGHT = (
+	sc.constants.speed_of_light
+	* spu.meter/spu.second
+)
+
+class MaxwellMediumBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellMedium
 	bl_label = "Maxwell Medium"
-	
-	compatible_types = {
-		td.components.medium.AbstractMedium: {}
-	}
+	use_units = True
 	
 	####################
 	# - Properties
 	####################
-	rel_permittivity: bpy.props.FloatProperty(
-		name="Permittivity",
-		description="Represents a simple, real permittivity.",
-		default=0.0,
+	wl: bpy.props.FloatProperty(
+		name="WL",
+		description="WL to evaluate conductivity at",
+		default=500.0,
 		precision=4,
-		update=(lambda self, context: self.trigger_updates()),
+		step=50,
+		update=(lambda self, context: self.sync_prop("wl", context)),
+	)
+		
+	rel_permittivity: bpy.props.FloatVectorProperty(
+		name="Relative Permittivity",
+		description="Represents a simple, complex permittivity",
+		size=2,
+		default=(1.0, 0.0),
+		precision=2,
+		update=(lambda self, context: self.sync_prop("rel_permittivity", context)),
 	)
 	
 	####################
 	# - Socket UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		"""Draw the value of the area, including a toggle for
-		specifying the active unit.
-		"""
-		col_row = col.row(align=True)
-		col_row.prop(self, "rel_permittivity", text="ϵr")
+		col.prop(self, "wl", text="λ")
+		col.separator(factor=1.0)
+		
+		split = col.split(factor=0.35, align=False)
+		
+		col = split.column(align=True)
+		col.label(text="ϵ_r (ℂ)")
+		
+		col = split.column(align=True)
+		col.prop(self, "rel_permittivity", text="")
 	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> td.Medium:
-		"""Return the built-in medium representation as a `tidy3d` object,
-		ready to use in the simulation.
-		
-		Returns:
-			A completely normal medium with permittivity set.
-		"""
-		
-		return td.Medium(
-			permittivity=self.rel_permittivity,
+	def value(self) -> td.Medium:
+		freq = spu.convert_to(
+			VAC_SPEED_OF_LIGHT / (self.wl*self.unit),
+			spu.hertz,
+		) / spu.hertz
+		return td.Medium.from_nk(
+			n=self.rel_permittivity[0],
+			k=self.rel_permittivity[1],
+			freq=freq,
 		)
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		"""Set the built-in medium representation by adjusting the
-		permittivity, ONLY.
+	@value.setter
+	def value(
+		self,
+		value: tuple[ConstrSympyExpr(allow_variables=False), complex]
+	) -> None:
+		_wl, rel_permittivity = value
 		
-		Args:
-			value: Must be a tidy3d.Medium, or similar subclass.
-		"""
+		wl = float(
+			spu.convert_to(
+				_wl,
+				self.unit,
+			) / self.unit
+		)
+		self.wl = wl
+		self.rel_permittivity = (rel_permittivity.real, rel_permittivity.imag)
+	
+	def sync_unit_change(self):
+		"""Override unit change to only alter frequency unit."""
 		
-		# ONLY Allow td.Medium
-		if isinstance(value, td.Medium):
-			self.rel_permittivity = value.permittivity
-		
-		msg = f"Tried setting MaxwellMedium socket ({self}) to something that isn't a simple `tidy3d.Medium`"
-		raise ValueError(msg)
+		self.value = (
+			self.wl * self.prev_unit,
+			complex(*self.rel_permittivity)
+		)
+		self.prev_active_unit = self.active_unit
 
 ####################
 # - Socket Configuration
 ####################
 class MaxwellMediumSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.MaxwellMedium
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.MaxwellMedium
 	
-	rel_permittivity: float = 1.0
+	default_permittivity_real: float = 1.0
+	default_permittivity_imag: float = 0.0
 	
 	def init(self, bl_socket: MaxwellMediumBLSocket) -> None:
-		bl_socket.rel_permittivity = self.rel_permittivity
+		bl_socket.rel_permittivity = (
+			self.default_permittivity_real, self.default_permittivity_imag
+		)
 
 ####################
 # - Blender Registration

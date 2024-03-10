@@ -9,7 +9,7 @@ from . import types
 class BlenderMaxwellInstallDependenciesOperator(bpy.types.Operator):
 	bl_idname = types.BlenderMaxwellInstallDependencies
 	bl_label = "Install Dependencies for Blender Maxwell Addon"
-
+	
 	def execute(self, context):
 		addon_dir = Path(__file__).parent.parent
 		requirements_path = addon_dir / 'requirements.txt'
@@ -58,3 +58,5 @@ class BlenderMaxwellInstallDependenciesOperator(bpy.types.Operator):
 BL_REGISTER = [
 	BlenderMaxwellInstallDependenciesOperator,
 ]
+
+BL_KMI_REGISTER = []

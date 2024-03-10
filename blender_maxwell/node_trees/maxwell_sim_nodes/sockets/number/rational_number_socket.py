@@ -1,34 +1,62 @@
 import typing as typ
 
+import bpy
+import sympy as sp
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class RationalNumberBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.RationalNumber
+class RationalNumberBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.RationalNumber
 	bl_label = "Rational Number"
+	
+	####################
+	# - Properties
+	####################
+	raw_value: bpy.props.IntVectorProperty(
+		name="Rational Number",
+		description="Represents a rational number (int / int)",
+		size=2,
+		default=(1, 1),
+		subtype='NONE',
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
+	)
+	
+	####################
+	# - UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col_row = col.row(align=True)
+		col_row.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> None:
-		pass
+	def value(self) -> sp.Rational:
+		p, q = self.raw_value
+		return sp.Rational(p, q)
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
+	@value.setter
+	def value(self, value: float | tuple[int, int] | SympyExpr) -> None:
+		if isinstance(value, float):
+			approx_rational = sp.nsimplify(value)
+			self.raw_value = (approx_rational.p, approx_rational.q)
+		elif isinstance(value, tuple):
+			self.raw_value = value
+		else:
+			self.raw_value = (value.p, value.q)
 
 ####################
 # - Socket Configuration
 ####################
 class RationalNumberSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.RationalNumber
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.RationalNumber
 	
 	def init(self, bl_socket: RationalNumberBLSocket) -> None:
 		pass

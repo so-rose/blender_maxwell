@@ -4,23 +4,16 @@ import bpy
 import sympy as sp
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class ComplexNumberBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.ComplexNumber
+class ComplexNumberBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.ComplexNumber
 	bl_label = "Complex Number"
-	
-	compatible_types = {
-		complex: {},
-		sp.Expr: {
-			lambda self, v: v.is_complex,
-			lambda self, v: len(v.free_symbols) == 0,
-		},
-	}
 	
 	####################
 	# - Properties
@@ -31,7 +24,7 @@ class ComplexNumberBLSocket(base.BLSocket):
 		size=2,
 		default=(0.0, 0.0),
 		subtype='NONE',
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	coord_sys: bpy.props.EnumProperty(
 		name="Coordinate System",
@@ -41,7 +34,7 @@ class ComplexNumberBLSocket(base.BLSocket):
 			("POLAR", "Polar", "Use Polar Coordinates", "DRIVER_ROTATIONAL_DIFFERENCE", 1),
 		],
 		default="CARTESIAN",
-		update=lambda self, context: self._update_coord_sys(),
+		update=lambda self, context: self._sync_coord_sys(context),
 	)
 	
 	####################
@@ -55,34 +48,11 @@ class ComplexNumberBLSocket(base.BLSocket):
 		col_row.prop(self, "raw_value", text="")
 		col.prop(self, "coord_sys", text="")
 	
-	def draw_preview(self, col_box: bpy.types.UILayout) -> None:
-		"""Draw a live-preview value for the complex number, into the
-		given preview box.
-		
-		- Cartesian: a,b -> a + ib
-		- Polar: r,t -> re^(it)
-		
-		Returns:
-			The sympy expression representing the complex number.
-		"""
-		if self.coord_sys == "CARTESIAN":
-			text = f"= {self.default_value.n(2)}"
-		
-		elif self.coord_sys == "POLAR":
-			r = sp.Abs(self.default_value).n(2)
-			theta_rad = sp.arg(self.default_value).n(2)
-			text = f"= {r*sp.exp(sp.I*theta_rad)}"
-		
-		else:
-			raise RuntimeError("Invalid coordinate system for complex number")
-			
-		col_box.label(text=text)
-	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> sp.Expr:
+	def value(self) -> SympyExpr:
 		"""Return the complex number as a sympy expression, of a form
 		determined by the coordinate system.
 		
@@ -100,8 +70,8 @@ class ComplexNumberBLSocket(base.BLSocket):
 			"POLAR": v1 * sp.exp(sp.I*v2),
 		}[self.coord_sys]
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
+	@value.setter
+	def value(self, value: SympyExpr) -> None:
 		"""Set the complex number from a sympy expression, using an internal
 		representation determined by the coordinate system.
 		
@@ -122,7 +92,7 @@ class ComplexNumberBLSocket(base.BLSocket):
 	####################
 	# - Internal Update Methods
 	####################
-	def _update_coord_sys(self):
+	def _sync_coord_sys(self, context: bpy.types.Context):
 		if self.coord_sys == "CARTESIAN":
 			r, theta_rad = self.raw_value
 			self.raw_value = (
@@ -137,20 +107,17 @@ class ComplexNumberBLSocket(base.BLSocket):
 				sp.arg(cart_value) if y != 0 else 0,
 			)
 		
-		self.trigger_updates()
+		self.sync_prop("coord_sys", context)
 
 ####################
 # - Socket Configuration
 ####################
 class ComplexNumberSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.ComplexNumber
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.ComplexNumber
 	
-	preview: bool = False
 	coord_sys: typ.Literal["CARTESIAN", "POLAR"] = "CARTESIAN"
 	
 	def init(self, bl_socket: ComplexNumberBLSocket) -> None:
-		bl_socket.preview_active = self.preview
 		bl_socket.coord_sys = self.coord_sys
 
 ####################

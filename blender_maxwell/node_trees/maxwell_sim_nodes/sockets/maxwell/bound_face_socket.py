@@ -1,14 +1,15 @@
 import typing as typ
+import typing_extensions as typx
 
 import bpy
 import pydantic as pyd
 import tidy3d as td
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class MaxwellBoundFaceBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.MaxwellBoundFace
+class MaxwellBoundFaceBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellBoundFace
 	bl_label = "Maxwell Bound Face"
 	
 	####################
@@ -24,21 +25,20 @@ class MaxwellBoundFaceBLSocket(base.BLSocket):
 			("PERIODIC", "Periodic", "Infinitely periodic layer"),
 		],
 		default="PML",
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("default_choice", context)),
 	)
 	
 	####################
 	# - UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col_row = col.row(align=True)
-		col_row.prop(self, "default_choice", text="")
+		col.prop(self, "default_choice", text="")
 	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> td.BoundarySpec:
+	def value(self) -> td.BoundarySpec:
 		return {
 			"PML": td.PML(num_layers=12),
 			"PEC": td.PECBoundary(),
@@ -46,21 +46,20 @@ class MaxwellBoundFaceBLSocket(base.BLSocket):
 			"PERIODIC": td.Periodic(),
 		}[self.default_choice]
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		return None
+	@value.setter
+	def value(self, value: typx.Literal["PML", "PEC", "PMC", "PERIODIC"]) -> None:
+		self.default_choice = value
 
 ####################
 # - Socket Configuration
 ####################
 class MaxwellBoundFaceSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.MaxwellBoundFace
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundFace
 	
-	default_choice: str = "PML"
+	default_choice: typx.Literal["PML", "PEC", "PMC", "PERIODIC"] = "PML"
 	
 	def init(self, bl_socket: MaxwellBoundFaceBLSocket) -> None:
-		bl_socket.default_choice = self.default_choice
+		bl_socket.value = self.default_choice
 
 ####################
 # - Blender Registration

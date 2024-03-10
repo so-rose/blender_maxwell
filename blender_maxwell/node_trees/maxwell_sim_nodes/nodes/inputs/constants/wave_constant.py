@@ -3,75 +3,64 @@ import sympy as sp
 import sympy.physics.units as spu
 import scipy as sc
 
-from .... import contracts
+from .... import contracts as ct
 from .... import sockets
 from ... import base
 
-vac_speed_of_light = (
+VAC_SPEED_OF_LIGHT = (
 	sc.constants.speed_of_light
 	* spu.meter/spu.second
 )
 
-class WaveConstantNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.WaveConstant
+class WaveConstantNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.WaveConstant
 	
 	bl_label = "Wave Constant"
 	
-	input_sockets = {}
 	input_socket_sets = {
-		"vac_wl": {
-			"vac_wl": sockets.PhysicalVacWLSocketDef(
-				label="Vac WL",
-			),
+		"Vacuum WL": {
+			"WL": sockets.PhysicalLengthSocketDef(),
 		},
-		"freq": {
-			"freq": sockets.PhysicalFreqSocketDef(
-				label="Freq",
-			),
+		"Frequency": {
+			"Freq": sockets.PhysicalFreqSocketDef(),
 		},
 	}
 	output_sockets = {
-		"vac_wl": sockets.PhysicalVacWLSocketDef(
-			label="Vac WL",
-		),
-		"freq": sockets.PhysicalVacWLSocketDef(
-			label="Freq",
-		),
+		"WL": sockets.PhysicalLengthSocketDef(),
+		"Freq": sockets.PhysicalFreqSocketDef(),
 	}
-	output_socket_sets = {}
 	
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket("vac_wl")
-	def compute_vac_wl(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		if self.socket_set == "vac_wl":
-			return self.compute_input("vac_wl")
-			
-		elif self.socket_set == "freq":
-			freq = self.compute_input("freq")
+	@base.computes_output_socket(
+		"WL",
+		kind=ct.DataFlowKind.Value,
+		input_sockets={"WL", "Freq"},
+	)
+	def compute_vac_wl(self, input_socket_values: dict) -> sp.Expr:
+		if (vac_wl := input_socket_values["WL"]):
+			return vac_wl
+		elif (freq := input_socket_values["Freq"]):
 			return spu.convert_to(
-				vac_speed_of_light / freq,
+				VAC_SPEED_OF_LIGHT / freq,
 				spu.meter,
 			)
 		
-		raise ValueError("No valid socket set.")
+		raise RuntimeError("Vac WL and Freq are both non-truthy")
 	
-	@base.computes_output_socket("freq")
-	def compute_freq(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		if self.socket_set == "vac_wl":
-			vac_wl = self.compute_input("vac_wl")
+	@base.computes_output_socket(
+		"Freq",
+		input_sockets={"WL", "Freq"},
+	)
+	def compute_freq(self, input_sockets: dict) -> sp.Expr:
+		if (vac_wl := input_sockets["WL"]):
 			return spu.convert_to(
-				vac_speed_of_light / vac_wl,
+				VAC_SPEED_OF_LIGHT / vac_wl,
 				spu.hertz,
 			)
-			
-		elif self.socket_set == "freq":
-			return self.compute_input("freq")
-		
-		raise ValueError("No valid socket set.")
-
-
+		elif (freq := input_sockets["Freq"]):
+			return freq
 
 ####################
 # - Blender Registration
@@ -80,7 +69,7 @@ BL_REGISTER = [
 	WaveConstantNode,
 ]
 BL_NODES = {
-	contracts.NodeType.WaveConstant: (
-		contracts.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS
+	ct.NodeType.WaveConstant: (
+		ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS
 	)
 }

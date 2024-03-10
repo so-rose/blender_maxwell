@@ -4,7 +4,7 @@ import bpy
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
@@ -13,6 +13,7 @@ class BlenderMaxwellCreateAndAssignBLObject(bpy.types.Operator):
 	bl_idname = "blender_maxwell.create_and_assign_bl_object"
 	bl_label = "Create and Assign BL Object"
 	
+	## TODO: Refactor
 	def execute(self, context):
 		mesh = bpy.data.meshes.new("GenMesh")
 		new_bl_object = bpy.data.objects.new("GenObj", mesh)
@@ -32,9 +33,9 @@ class BlenderMaxwellCreateAndAssignBLObject(bpy.types.Operator):
 ####################
 # - Blender Socket
 ####################
-class BlenderObjectBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.BlenderObject
-	bl_label = "BlenderObject"
+class BlenderObjectBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.BlenderObject
+	bl_label = "Blender Object"
 	
 	####################
 	# - Properties
@@ -43,7 +44,7 @@ class BlenderObjectBLSocket(base.BLSocket):
 		name="Blender Object",
 		description="Represents a Blender object",
 		type=bpy.types.Object,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	
 	####################
@@ -57,23 +58,25 @@ class BlenderObjectBLSocket(base.BLSocket):
 			icon="ADD",
 		)
 	
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col.prop(self, "raw_value", text="")
+	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> bpy.types.Object | None:
+	def value(self) -> bpy.types.Object | None:
 		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: bpy.types.Object) -> None:
+	@value.setter
+	def value(self, value: bpy.types.Object) -> None:
 		self.raw_value = value
 
 ####################
 # - Socket Configuration
 ####################
 class BlenderObjectSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.BlenderObject
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.BlenderObject
 	
 	def init(self, bl_socket: BlenderObjectBLSocket) -> None:
 		pass

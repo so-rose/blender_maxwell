@@ -2,6 +2,27 @@ import sympy as sp
 import sympy.physics.units as spu
 
 ####################
+# - Useful Methods
+####################
+def uses_units(expression: sp.Expr) -> bool:
+	"""Checks if an expression uses any units (`Quantity`)."""
+	
+	for arg in sp.preorder_traversal(expression):
+		if isinstance(arg, spu.Quantity):
+			return True
+	return False
+
+# Function to return a set containing all units used in the expression
+def get_units(expression: sp.Expr):
+	"""Gets all the units of an expression (as `Quantity`)."""
+	
+	return {
+		arg
+		for arg in sp.preorder_traversal(expression)
+		if isinstance(arg, spu.Quantity)
+	}
+
+####################
 # - Force
 ####################
 # Newton
@@ -35,3 +56,25 @@ petahertz.set_global_relative_scale_factor(spu.peta, spu.hertz)
 
 exahertz = EHz = spu.Quantity("exahertz", abbrev="EHz")
 exahertz.set_global_relative_scale_factor(spu.exa, spu.hertz)
+
+####################
+# - Sympy Expression Typing
+####################
+#ALL_UNIT_SYMBOLS = {
+#	unit
+#	for unit in spu.__dict__.values()
+#	if isinstance(unit, spu.Quantity)
+#}
+#def has_units(expr: sp.Expr):
+#	return any(
+#		symbol in ALL_UNIT_SYMBOLS
+#		for symbol in expr.atoms(sp.Symbol)
+#	)
+#def is_exactly_expressed_as_unit(expr: sp.Expr, unit) -> bool:
+#	#try:
+#	converted_expr = expr / unit
+#	
+#	return (
+#		converted_expr.is_number
+#		and not converted_expr.has(spu.Quantity)
+#	)

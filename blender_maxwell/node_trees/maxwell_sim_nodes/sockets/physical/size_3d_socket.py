@@ -5,12 +5,13 @@ import sympy as sp
 import sympy.physics.units as spu
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class PhysicalSize3DBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalSize3D
-	bl_label = "Physical Volume"
+class PhysicalSize3DBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.PhysicalSize3D
+	bl_label = "3D Size"
 	use_units = True
 	
 	####################
@@ -22,28 +23,33 @@ class PhysicalSize3DBLSocket(base.BLSocket):
 		size=3,
 		default=(1.0, 1.0, 1.0),
 		precision=4,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
+	
+	####################
+	# - Socket UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col.prop(self, "raw_value", text="")
 	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> sp.Expr:
+	def value(self) -> SympyExpr:
 		return sp.Matrix(tuple(self.raw_value)) * self.unit
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		self.raw_value = self.value_as_unit(value)
+	@value.setter
+	def value(self, value: SympyExpr) -> None:
+		self.raw_value = tuple(spu.convert_to(value, self.unit) / self.unit)
 
 ####################
 # - Socket Configuration
 ####################
 class PhysicalSize3DSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalSize3D
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.PhysicalSize3D
 	
-	default_unit: typ.Any | None = None
+	default_unit: SympyExpr | None = None
 	
 	def init(self, bl_socket: PhysicalSize3DBLSocket) -> None:
 		if self.default_unit:

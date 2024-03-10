@@ -5,20 +5,14 @@ import sympy as sp
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class TextBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.Text
-	socket_color = (0.2, 0.2, 0.2, 1.0)
-	
+class TextBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.Text
 	bl_label = "Text"
-	
-	compatible_types = {
-		str: {},
-	}
 	
 	####################
 	# - Properties
@@ -27,7 +21,7 @@ class TextBLSocket(base.BLSocket):
 		name="Text",
 		description="Represents some text",
 		default="",
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	
 	####################
@@ -38,44 +32,27 @@ class TextBLSocket(base.BLSocket):
 		"""
 		label_col_row.prop(self, "raw_value", text=text)
 	
-	def draw_value(self, label_col_row: bpy.types.UILayout) -> None:
-		pass
-	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> str:
-		"""Return the text.
-		
-		Returns:
-			The text as a string.
-		"""
-		
+	def value(self) -> str:
 		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		"""Set the real number from some compatible type, namely
-		real sympy expressions with no symbols, or floats.
-		"""
-		
-		# (Guard) Value Compatibility
-		if not self.is_compatible(value):
-			msg = f"Tried setting socket ({self}) to incompatible value ({value}) of type {type(value)}"
-			raise ValueError(msg)
-		
-		self.raw_value = str(value)
+	@value.setter
+	def value(self, value: str) -> None:
+		self.raw_value = value
 
 ####################
 # - Socket Configuration
 ####################
 class TextSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.Text
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.Text
+	
+	default_text: str = ""
 	
 	def init(self, bl_socket: TextBLSocket) -> None:
-		pass
+		bl_socket.value = self.default_text
 
 ####################
 # - Blender Registration

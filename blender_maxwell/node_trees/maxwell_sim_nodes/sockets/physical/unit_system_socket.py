@@ -2,33 +2,48 @@ import typing as typ
 
 import bpy
 import sympy as sp
+import sympy.physics.units as spu
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-def contract_units_to_items(socket_type):
+ST = ct.SocketType
+SU = lambda socket_type: ct.SOCKET_UNITS[
+	socket_type
+]["values"]
+
+####################
+# - Utilities
+####################
+def contract_units_to_items(
+	socket_type: ST
+) -> list[tuple[str, str, str]]:
+	"""For a given socket type, get a bpy.props.EnumProperty-compatible list-tuple of items to display in the enum dropdown menu.
+	"""
 	return [
 		(
 			unit_key,
 			str(unit),
 			f"{socket_type}-compatible unit",
 		)
-		for unit_key, unit in contracts.SocketType_to_units[
-			socket_type
-		]["values"].items()
+		for unit_key, unit in SU(socket_type).items()
 	]
-def default_unit_key_for(socket_type):
-	return contracts.SocketType_to_units[
+
+def default_unit_key_for(socket_type: ST) -> str:
+	"""For a given socket type, return the default key corresponding to the default unit.
+	"""
+	return ct.SOCKET_UNITS[
 		socket_type
 	]["default"]
 
 ####################
 # - Blender Socket
 ####################
-class PhysicalUnitSystemBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalUnitSystem
-	bl_label = "PhysicalUnitSystem"
+class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
+	socket_type = ST.PhysicalUnitSystem
+	bl_label = "Unit System"
 	
 	####################
 	# - Properties
@@ -37,151 +52,147 @@ class PhysicalUnitSystemBLSocket(base.BLSocket):
 		name="Show Unit System Definition",
 		description="Toggle to show unit system definition",
 		default=False,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("show_definition", context)),
 	)
 		
 	unit_time: bpy.props.EnumProperty(
 		name="Time Unit",
 		description="Unit of time",
-		items=contract_units_to_items(contracts.SocketType.PhysicalTime),
-		default=default_unit_key_for(contracts.SocketType.PhysicalTime),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalTime),
+		default=default_unit_key_for(ST.PhysicalTime),
+		update=(lambda self, context: self.sync_prop("unit_time", context)),
 	)
 	
 	unit_angle: bpy.props.EnumProperty(
 		name="Angle Unit",
 		description="Unit of angle",
-		items=contract_units_to_items(contracts.SocketType.PhysicalAngle),
-		default=default_unit_key_for(contracts.SocketType.PhysicalAngle),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalAngle),
+		default=default_unit_key_for(ST.PhysicalAngle),
+		update=(lambda self, context: self.sync_prop("unit_angle", context)),
 	)
 	
 	unit_length: bpy.props.EnumProperty(
 		name="Length Unit",
 		description="Unit of length",
-		items=contract_units_to_items(contracts.SocketType.PhysicalLength),
-		default=default_unit_key_for(contracts.SocketType.PhysicalLength),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalLength),
+		default=default_unit_key_for(ST.PhysicalLength),
+		update=(lambda self, context: self.sync_prop("unit_length", context)),
 	)
 	unit_area: bpy.props.EnumProperty(
 		name="Area Unit",
 		description="Unit of area",
-		items=contract_units_to_items(contracts.SocketType.PhysicalArea),
-		default=default_unit_key_for(contracts.SocketType.PhysicalArea),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalArea),
+		default=default_unit_key_for(ST.PhysicalArea),
+		update=(lambda self, context: self.sync_prop("unit_area", context)),
 	)
 	unit_volume: bpy.props.EnumProperty(
 		name="Volume Unit",
 		description="Unit of time",
-		items=contract_units_to_items(contracts.SocketType.PhysicalVolume),
-		default=default_unit_key_for(contracts.SocketType.PhysicalVolume),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalVolume),
+		default=default_unit_key_for(ST.PhysicalVolume),
+		update=(lambda self, context: self.sync_prop("unit_volume", context)),
 	)
 	
 	unit_point_2d: bpy.props.EnumProperty(
 		name="Point2D Unit",
 		description="Unit of 2D points",
-		items=contract_units_to_items(contracts.SocketType.PhysicalPoint2D),
-		default=default_unit_key_for(contracts.SocketType.PhysicalPoint2D),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalPoint2D),
+		default=default_unit_key_for(ST.PhysicalPoint2D),
+		update=(lambda self, context: self.sync_prop("unit_point_2d", context)),
 	)
 	unit_point_3d: bpy.props.EnumProperty(
 		name="Point3D Unit",
 		description="Unit of 3D points",
-		items=contract_units_to_items(contracts.SocketType.PhysicalPoint3D),
-		default=default_unit_key_for(contracts.SocketType.PhysicalPoint3D),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalPoint3D),
+		default=default_unit_key_for(ST.PhysicalPoint3D),
+		update=(lambda self, context: self.sync_prop("unit_point_3d", context)),
 	)
 	
 	unit_size_2d: bpy.props.EnumProperty(
 		name="Size2D Unit",
 		description="Unit of 2D sizes",
-		items=contract_units_to_items(contracts.SocketType.PhysicalSize2D),
-		default=default_unit_key_for(contracts.SocketType.PhysicalSize2D),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalSize2D),
+		default=default_unit_key_for(ST.PhysicalSize2D),
+		update=(lambda self, context: self.sync_prop("unit_size_2d", context)),
 	)
 	unit_size_3d: bpy.props.EnumProperty(
 		name="Size3D Unit",
 		description="Unit of 3D sizes",
-		items=contract_units_to_items(contracts.SocketType.PhysicalSize3D),
-		default=default_unit_key_for(contracts.SocketType.PhysicalSize3D),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalSize3D),
+		default=default_unit_key_for(ST.PhysicalSize3D),
+		update=(lambda self, context: self.sync_prop("unit_size_3d", context)),
 	)
 	
 	unit_mass: bpy.props.EnumProperty(
 		name="Mass Unit",
 		description="Unit of mass",
-		items=contract_units_to_items(contracts.SocketType.PhysicalMass),
-		default=default_unit_key_for(contracts.SocketType.PhysicalMass),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalMass),
+		default=default_unit_key_for(ST.PhysicalMass),
+		update=(lambda self, context: self.sync_prop("unit_mass", context)),
 	)
 	
 	unit_speed: bpy.props.EnumProperty(
 		name="Speed Unit",
 		description="Unit of speed",
-		items=contract_units_to_items(contracts.SocketType.PhysicalSpeed),
-		default=default_unit_key_for(contracts.SocketType.PhysicalSpeed),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalSpeed),
+		default=default_unit_key_for(ST.PhysicalSpeed),
+		update=(lambda self, context: self.sync_prop("unit_speed", context)),
 	)
 	unit_accel_scalar: bpy.props.EnumProperty(
 		name="Accel Unit",
 		description="Unit of acceleration",
-		items=contract_units_to_items(contracts.SocketType.PhysicalAccelScalar),
-		default=default_unit_key_for(contracts.SocketType.PhysicalAccelScalar),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalAccelScalar),
+		default=default_unit_key_for(ST.PhysicalAccelScalar),
+		update=(lambda self, context: self.sync_prop("unit_accel_scalar", context)),
 	)
 	unit_force_scalar: bpy.props.EnumProperty(
 		name="Force Scalar Unit",
 		description="Unit of scalar force",
-		items=contract_units_to_items(contracts.SocketType.PhysicalForceScalar),
-		default=default_unit_key_for(contracts.SocketType.PhysicalForceScalar),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalForceScalar),
+		default=default_unit_key_for(ST.PhysicalForceScalar),
+		update=(lambda self, context: self.sync_prop("unit_force_scalar", context)),
 	)
 	unit_accel_3d_vector: bpy.props.EnumProperty(
 		name="Accel3D Unit",
 		description="Unit of 3D vector acceleration",
-		items=contract_units_to_items(contracts.SocketType.PhysicalAccel3DVector),
-		default=default_unit_key_for(contracts.SocketType.PhysicalAccel3DVector),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalAccel3DVector),
+		default=default_unit_key_for(ST.PhysicalAccel3DVector),
+		update=(lambda self, context: self.sync_prop("unit_accel_3d_vector", context)),
 	)
 	unit_force_3d_vector: bpy.props.EnumProperty(
 		name="Force3D Unit",
 		description="Unit of 3D vector force",
-		items=contract_units_to_items(contracts.SocketType.PhysicalForce3DVector),
-		default=default_unit_key_for(contracts.SocketType.PhysicalForce3DVector),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalForce3DVector),
+		default=default_unit_key_for(ST.PhysicalForce3DVector),
+		update=(lambda self, context: self.sync_prop("unit_force_3d_vector", context)),
 	)
 	
 	unit_freq: bpy.props.EnumProperty(
 		name="Freq Unit",
 		description="Unit of frequency",
-		items=contract_units_to_items(contracts.SocketType.PhysicalFreq),
-		default=default_unit_key_for(contracts.SocketType.PhysicalFreq),
-		update=(lambda self, context: self.trigger_updates()),
-	)
-	unit_vac_wl: bpy.props.EnumProperty(
-		name="VacWL Unit",
-		description="Unit of vacuum wavelength",
-		items=contract_units_to_items(contracts.SocketType.PhysicalVacWL),
-		default=default_unit_key_for(contracts.SocketType.PhysicalVacWL),
-		update=(lambda self, context: self.trigger_updates()),
+		items=contract_units_to_items(ST.PhysicalFreq),
+		default=default_unit_key_for(ST.PhysicalFreq),
+		update=(lambda self, context: self.sync_prop("unit_freq", context)),
 	)
 	
 	####################
 	# - UI
 	####################
-	def draw_label_row(self, label_col_row: bpy.types.UILayout, text) -> None:
-		label_col_row.label(text=text)
-		label_col_row.prop(self, "show_definition", toggle=True, text="", icon="MOD_LENGTH")
+	def draw_label_row(self, row: bpy.types.UILayout, text) -> None:
+		row.label(text=text)
+		row.prop(
+			self, "show_definition", toggle=True, text="", icon="MOD_LENGTH"
+		)
 	
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		if self.show_definition:
-			col_row=col.row(align=True)
+			# TODO: We need panels instead of rows!!
+			col_row=col.row(align=False)
 			col_row.alignment = "EXPAND"
 			col_row.prop(self, "unit_time", text="")
 			col_row.prop(self, "unit_angle", text="")
 			
-			col_row=col.row(align=True)
+			col_row=col.row(align=False)
 			col_row.alignment = "EXPAND"
 			col_row.prop(self, "unit_length", text="")
 			col_row.prop(self, "unit_area", text="")
@@ -237,14 +248,9 @@ class PhysicalUnitSystemBLSocket(base.BLSocket):
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> sp.Expr:
-		ST = contracts.SocketType
-		SM = lambda socket_type: contracts.SocketType_to_units[
-			socket_type
-		]["values"]
-		
+	def value(self) -> dict[ST, SympyExpr]:
 		return {
-			socket_type: SM(socket_type)[socket_unit_prop]
+			socket_type: SU(socket_type)[socket_unit_prop]
 			for socket_type, socket_unit_prop in [
 				(ST.PhysicalTime, self.unit_time),
 				(ST.PhysicalAngle, self.unit_angle),
@@ -271,17 +277,12 @@ class PhysicalUnitSystemBLSocket(base.BLSocket):
 				(ST.PhysicalVacWL, self.unit_vac_wl),
 			]
 		}
-	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
 
 ####################
 # - Socket Configuration
 ####################
 class PhysicalUnitSystemSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalUnitSystem
-	label: str
+	socket_type: ST = ST.PhysicalUnitSystem
 	
 	show_by_default: bool = False
 	

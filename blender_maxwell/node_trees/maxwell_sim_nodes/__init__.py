@@ -1,3 +1,9 @@
+import sympy as sp
+sp.printing.str.StrPrinter._default_settings['abbrev'] = True
+## In this tree, all Sympy unit printing must be abbreviated.
+## By configuring this in __init__.py, we guarantee it for all subimports.
+## (Unless, elsewhere, this setting is changed. Be careful!)
+
 from . import sockets
 from . import node_tree
 from . import nodes

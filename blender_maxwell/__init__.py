@@ -46,17 +46,39 @@ BL_REGISTER = [
 	*operators.BL_REGISTER,
 	*preferences.BL_REGISTER,
 ]
+BL_KMI_REGISTER = [
+	*operators.BL_KMI_REGISTER,
+]
 BL_NODE_CATEGORIES = [
 	*node_trees.BL_NODE_CATEGORIES,
 ]
 
+km = bpy.context.window_manager.keyconfigs.addon.keymaps.new(
+	name='Node Editor',
+	space_type="NODE_EDITOR",
+)
+REGISTERED_KEYMAPS = []
 def register():
+	global REGISTERED_KEYMAPS
+	
 	for cls in BL_REGISTER:
 		bpy.utils.register_class(cls)
+	
+	for kmi_def in BL_KMI_REGISTER:
+		kmi = km.keymap_items.new(
+			*kmi_def["_"],
+			ctrl=kmi_def["ctrl"],
+			shift=kmi_def["shift"],
+			alt=kmi_def["alt"],
+		)
+		REGISTERED_KEYMAPS.append(kmi)
     
 def unregister():
 	for cls in reversed(BL_REGISTER):
 		bpy.utils.unregister_class(cls)
+	
+	for kmi in REGISTERED_KEYMAPS:
+		km.keymap_items.remove(kmi)
 
 if __name__ == "__main__":
 	register()

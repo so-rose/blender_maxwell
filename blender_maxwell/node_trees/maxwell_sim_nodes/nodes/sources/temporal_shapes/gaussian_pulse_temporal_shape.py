@@ -1,13 +1,20 @@
+import typing as typ
+
 import tidy3d as td
+import numpy as np
 import sympy as sp
 import sympy.physics.units as spu
 
-from .... import contracts
+import bpy
+
+from ......utils import extra_sympy_units as spuex
+from .... import contracts as ct
 from .... import sockets
+from .... import managed_objs
 from ... import base
 
-class GaussianPulseTemporalShapeNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.GaussianPulseTemporalShape
+class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.GaussianPulseTemporalShape
 	
 	bl_label = "Gaussian Pulse Temporal Shape"
 	#bl_icon = ...
@@ -19,45 +26,85 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimTreeNode):
 		#"amplitude": sockets.RealNumberSocketDef(
 		#	label="Temporal Shape",
 		#),  ## Should have a unit of some kind...
-		"phase": sockets.PhysicalAngleSocketDef(
-			label="Phase",
+		"Freq Center": sockets.PhysicalFreqSocketDef(
+			default_value=500 * spuex.terahertz,
 		),
-		"freq_center": sockets.PhysicalFreqSocketDef(
-			label="Freq Center",
+		"Freq Std.": sockets.PhysicalFreqSocketDef(
+			default_value=200 * spuex.terahertz,
 		),
-		"freq_std": sockets.PhysicalFreqSocketDef(
-			label="Freq STD",
-		),
-		"time_delay_rel_ang_freq": sockets.RealNumberSocketDef(
-			label="Time Delay rel. Ang. Freq",
+		"Phase": sockets.PhysicalAngleSocketDef(),
+		"Delay rel. AngFreq": sockets.RealNumberSocketDef(
 			default_value=5.0,
 		),
-		"remove_dc_component": sockets.BoolSocketDef(
-			label="Remove DC",
+		"Remove DC": sockets.BoolSocketDef(
 			default_value=True,
 		),
 	}
 	output_sockets = {
-		"temporal_shape": sockets.MaxwellTemporalShapeSocketDef(
-			label="Temporal Shape",
-		),
+		"Temporal Shape": sockets.MaxwellTemporalShapeSocketDef(),
 	}
+	
+	managed_obj_defs = {
+		"amp_time": ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLImage(name),
+			name_prefix="amp_time_",
+		)
+	}
+	
+	####################
+	# - Properties
+	####################
+	plot_time_start: bpy.props.FloatProperty(
+		name="Plot Time Start (ps)",
+		description="The instance ID of a particular MaxwellSimNode instance, used to index caches",
+		default=0.0,
+		update=(lambda self, context: self.sync_prop("plot_time_start", context)),
+	)
+	plot_time_end: bpy.props.FloatProperty(
+		name="Plot Time End (ps)",
+		description="The instance ID of a particular MaxwellSimNode instance, used to index caches",
+		default=5,
+		update=(lambda self, context: self.sync_prop("plot_time_start", context)),
+	)
+	
+	####################
+	# - UI
+	####################
+	def draw_props(self, context, layout):
+		layout.label(text="Plot Settings")
+		split = layout.split(factor=0.6)
+		
+		col = split.column()
+		col.label(text="t-Range (ps)")
+		
+		col = split.column()
+		col.prop(self, "plot_time_start", text="")
+		col.prop(self, "plot_time_end", text="")
 	
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("temporal_shape")
-	def compute_source(self: contracts.NodeTypeProtocol) -> td.PointDipole:
-		_phase = self.compute_input("phase")
-		_freq_center = self.compute_input("freq_center")
-		_freq_std = self.compute_input("freq_std")
-		time_delay_rel_ang_freq = self.compute_input("time_delay_rel_ang_freq")
-		remove_dc_component = self.compute_input("remove_dc_component")
+	@base.computes_output_socket(
+		"Temporal Shape",
+		input_sockets={
+			"Freq Center", "Freq Std.", "Phase", "Delay rel. AngFreq",
+			"Remove DC",
+		}
+	)
+	def compute_source(self, input_sockets: dict) -> td.GaussianPulse:
+		if (
+			(_freq_center := input_sockets["Freq Center"]) is None
+			or (_freq_std := input_sockets["Freq Std."]) is None
+			or (_phase := input_sockets["Phase"]) is None
+			or (time_delay_rel_ang_freq := input_sockets["Delay rel. AngFreq"]) is None
+			or (remove_dc_component := input_sockets["Remove DC"]) is None
+		):
+			raise ValueError("Inputs not defined")
 		
 		cheating_amplitude = 1.0
-		phase = spu.convert_to(_phase, spu.radian) / spu.radian
 		freq_center = spu.convert_to(_freq_center, spu.hertz) / spu.hertz
 		freq_std = spu.convert_to(_freq_std, spu.hertz) / spu.hertz
+		phase = spu.convert_to(_phase, spu.radian) / spu.radian
 		
 		return td.GaussianPulse(
 			amplitude=cheating_amplitude,
@@ -66,6 +113,29 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimTreeNode):
 			fwidth=freq_std,
 			offset=time_delay_rel_ang_freq,
 			remove_dc_component=remove_dc_component,
+		)
+	
+	@base.on_show_plot(
+		managed_objs={"amp_time"},
+		props={"plot_time_start", "plot_time_end"},
+		output_sockets={"Temporal Shape"},
+		stop_propagation=True,
+	)
+	def on_show_plot(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+		output_sockets: dict[str, typ.Any],
+		props: dict[str, typ.Any],
+	):
+		temporal_shape = output_sockets["Temporal Shape"]
+		plot_time_start = props["plot_time_start"] * 1e-15
+		plot_time_end = props["plot_time_end"] * 1e-15
+		
+		times = np.linspace(plot_time_start, plot_time_end)
+		
+		managed_objs["amp_time"].mpl_plot_to_image(
+			lambda ax: temporal_shape.plot_spectrum(times, ax=ax),
+			bl_select=True,
 		)
 
 
@@ -77,7 +147,7 @@ BL_REGISTER = [
 	GaussianPulseTemporalShapeNode,
 ]
 BL_NODES = {
-	contracts.NodeType.GaussianPulseTemporalShape: (
-		contracts.NodeCategory.MAXWELLSIM_SOURCES_TEMPORALSHAPES
+	ct.NodeType.GaussianPulseTemporalShape: (
+		ct.NodeCategory.MAXWELLSIM_SOURCES_TEMPORALSHAPES
 	)
 }

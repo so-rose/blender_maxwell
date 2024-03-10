@@ -1,13 +1,15 @@
+from pathlib import Path
+
 import tidy3d as td
 import sympy as sp
 import sympy.physics.units as spu
 
-from .. import contracts
+from .. import contracts as ct
 from .. import sockets
 from . import base
 
-class KitchenSinkNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.KitchenSink
+class KitchenSinkNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.KitchenSink
 	
 	bl_label = "Kitchen Sink"
 	#bl_icon = ...
@@ -15,75 +17,75 @@ class KitchenSinkNode(base.MaxwellSimTreeNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {}
+	input_sockets = {
+		"Static Data": sockets.AnySocketDef(),
+	}
 	input_socket_sets = {
-		"basic": {
-			"basic_any": sockets.AnySocketDef(label="Any"),
-			"basic_bool": sockets.BoolSocketDef(label="Bool"),
-			"basic_filepath": sockets.FilePathSocketDef(label="FilePath"),
-			"basic_text": sockets.TextSocketDef(label="Text"),
+		"Basic": {
+			"Any": sockets.AnySocketDef(),
+			"Bool": sockets.BoolSocketDef(),
+			"FilePath": sockets.FilePathSocketDef(),
+			"Text": sockets.TextSocketDef(),
 		},
-		"number": {
-			"number_integer": sockets.IntegerNumberSocketDef(label="IntegerNumber"),
-			"number_rational": sockets.RationalNumberSocketDef(label="RationalNumber"),
-			"number_real": sockets.RealNumberSocketDef(label="RealNumber"),
-			"number_complex": sockets.ComplexNumberSocketDef(label="ComplexNumber"),
+		"Number": {
+			"Integer": sockets.IntegerNumberSocketDef(),
+			"Rational": sockets.RationalNumberSocketDef(),
+			"Real": sockets.RealNumberSocketDef(),
+			"Complex": sockets.ComplexNumberSocketDef(),
 		},
-		"vector": {
-			"vector_real2dvector": sockets.Real2DVectorSocketDef(label="Real2DVector"),
-			"vector_complex2dvector": sockets.Complex2DVectorSocketDef(label="Complex2DVector"),
-			"vector_real3dvector": sockets.Real3DVectorSocketDef(label="Real3DVector"),
-			"vector_complex3dvector": sockets.Complex3DVectorSocketDef(label="Complex3DVector"),
+		"Vector": {
+			"Real 2D": sockets.Real2DVectorSocketDef(),
+			"Real 3D": sockets.Real3DVectorSocketDef(
+				default_value=sp.Matrix([0.0, 0.0, 0.0])
+			),
+			"Complex 2D": sockets.Complex2DVectorSocketDef(),
+			"Complex 3D": sockets.Complex3DVectorSocketDef(),
 		},
-		"physical": {
-			"physical_time": sockets.PhysicalTimeSocketDef(label="PhysicalTime"),
-			#"physical_point_2d": sockets.PhysicalPoint2DSocketDef(label="PhysicalPoint2D"),
-			"physical_angle": sockets.PhysicalAngleSocketDef(label="PhysicalAngle"),
-			"physical_length": sockets.PhysicalLengthSocketDef(label="PhysicalLength"),
-			"physical_area": sockets.PhysicalAreaSocketDef(label="PhysicalArea"),
-			"physical_volume": sockets.PhysicalVolumeSocketDef(label="PhysicalVolume"),
-			"physical_point_3d": sockets.PhysicalPoint3DSocketDef(label="PhysicalPoint3D"),
-			#"physical_size_2d": sockets.PhysicalSize2DSocketDef(label="PhysicalSize2D"),
-			"physical_size_3d": sockets.PhysicalSize3DSocketDef(label="PhysicalSize3D"),
-			"physical_mass": sockets.PhysicalMassSocketDef(label="PhysicalMass"),
-			"physical_speed": sockets.PhysicalSpeedSocketDef(label="PhysicalSpeed"),
-			"physical_accel_scalar": sockets.PhysicalAccelScalarSocketDef(label="PhysicalAccelScalar"),
-			"physical_force_scalar": sockets.PhysicalForceScalarSocketDef(label="PhysicalForceScalar"),
-			#"physical_accel_3dvector": sockets.PhysicalAccel3DVectorSocketDef(label="PhysicalAccel3DVector"),
-			#"physical_force_3dvector": sockets.PhysicalForce3DVectorSocketDef(label="PhysicalForce3DVector"),
-			"physical_pol": sockets.PhysicalPolSocketDef(label="PhysicalPol"),
-			"physical_freq": sockets.PhysicalFreqSocketDef(label="PhysicalFreq"),
-			"physical_spec_power_dist": sockets.PhysicalSpecPowerDistSocketDef(label="PhysicalSpecPowerDist"),
-			"physical_spec_rel_perm_dist": sockets.PhysicalSpecRelPermDistSocketDef(label="PhysicalSpecRelPermDist"),
+		"Physical": {
+			"Time": sockets.PhysicalTimeSocketDef(),
+			#"physical_point_2d": sockets.PhysicalPoint2DSocketDef(),
+			"Angle": sockets.PhysicalAngleSocketDef(),
+			"Length": sockets.PhysicalLengthSocketDef(),
+			"Area": sockets.PhysicalAreaSocketDef(),
+			"Volume": sockets.PhysicalVolumeSocketDef(),
+			"Point 3D": sockets.PhysicalPoint3DSocketDef(),
+			##"physical_size_2d": sockets.PhysicalSize2DSocketDef(),
+			"Size 3D": sockets.PhysicalSize3DSocketDef(),
+			"Mass": sockets.PhysicalMassSocketDef(),
+			"Speed": sockets.PhysicalSpeedSocketDef(),
+			"Accel Scalar": sockets.PhysicalAccelScalarSocketDef(),
+			"Force Scalar": sockets.PhysicalForceScalarSocketDef(),
+			#"physical_accel_3dvector": sockets.PhysicalAccel3DVectorSocketDef(),
+			##"physical_force_3dvector": sockets.PhysicalForce3DVectorSocketDef(),
+			"Pol": sockets.PhysicalPolSocketDef(),
+			"Freq": sockets.PhysicalFreqSocketDef(),
 		},
-		"blender": {
-			"blender_object": sockets.BlenderObjectSocketDef(label="BlenderObject"),
-			"blender_collection": sockets.BlenderCollectionSocketDef(label="BlenderCollection"),
-			"blender_image": sockets.BlenderImageSocketDef(label="BlenderImage"),
-			"blender_volume": sockets.BlenderVolumeSocketDef(label="BlenderVolume"),
-			"blender_geonodes": sockets.BlenderGeoNodesSocketDef(label="BlenderGeoNodes"),
-			"blender_text": sockets.BlenderTextSocketDef(label="BlenderText"),
+		"Blender": {
+			"Object": sockets.BlenderObjectSocketDef(),
+			"Collection": sockets.BlenderCollectionSocketDef(),
+			"Image": sockets.BlenderImageSocketDef(),
+			"GeoNodes": sockets.BlenderGeoNodesSocketDef(),
+			"Text": sockets.BlenderTextSocketDef(),
 		},
-		"maxwell": {
-			"maxwell_source": sockets.MaxwellSourceSocketDef(label="MaxwellSource"),
-			"maxwell_temporal_shape": sockets.MaxwellTemporalShapeSocketDef(label="MaxwellTemporalShape"),
-			"maxwell_medium": sockets.MaxwellMediumSocketDef(label="MaxwellMedium"),
-			#"maxwell_medium_nonlinearity": sockets.MaxwellMediumNonLinearitySocketDef(label="MaxwellMediumNonLinearity"),
-			"maxwell_structure": sockets.MaxwellStructureSocketDef(label="MaxwellMedium"),
-			"maxwell_bound_box": sockets.MaxwellBoundBoxSocketDef(label="MaxwellBoundBox"),
-			"maxwell_bound_face": sockets.MaxwellBoundFaceSocketDef(label="MaxwellBoundFace"),
-			"maxwell_monitor": sockets.MaxwellMonitorSocketDef(label="MaxwellMonitor"),
-			"maxwell_fdtd_sim": sockets.MaxwellFDTDSimSocketDef(label="MaxwellFDTDSim"),
-			"maxwell_sim_grid": sockets.MaxwellSimGridSocketDef(label="MaxwellSimGrid"),
-			"maxwell_sim_grid_axis": sockets.MaxwellSimGridAxisSocketDef(label="MaxwellSimGridAxis"),
+		"Maxwell": {
+			"Source": sockets.MaxwellSourceSocketDef(),
+			"Temporal Shape": sockets.MaxwellTemporalShapeSocketDef(),
+			"Medium": sockets.MaxwellMediumSocketDef(),
+			"Medium Non-Linearity": sockets.MaxwellMediumNonLinearitySocketDef(),
+			"Structure": sockets.MaxwellStructureSocketDef(),
+			"Bound Box": sockets.MaxwellBoundBoxSocketDef(),
+			"Bound Face": sockets.MaxwellBoundFaceSocketDef(),
+			"Monitor": sockets.MaxwellMonitorSocketDef(),
+			"FDTD Sim": sockets.MaxwellFDTDSimSocketDef(),
+			"Sim Grid": sockets.MaxwellSimGridSocketDef(),
+			"Sim Grid Axis": sockets.MaxwellSimGridAxisSocketDef(),
 		},
 	}
 	
-	output_sockets = {}
-	output_socket_sets = {
-		k + " Output": v
-		for k, v in input_socket_sets.items()
+	output_sockets = {
+		"Static Data": sockets.AnySocketDef(),
 	}
+	output_socket_sets = input_socket_sets
 
 
 
@@ -94,7 +96,7 @@ BL_REGISTER = [
 	KitchenSinkNode,
 ]
 BL_NODES = {
-	contracts.NodeType.KitchenSink: (
-		contracts.NodeCategory.MAXWELLSIM_INPUTS
+	ct.NodeType.KitchenSink: (
+		ct.NodeCategory.MAXWELLSIM_INPUTS
 	)
 }

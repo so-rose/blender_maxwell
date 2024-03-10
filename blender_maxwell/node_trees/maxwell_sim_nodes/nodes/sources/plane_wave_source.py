@@ -4,79 +4,93 @@ import tidy3d as td
 import sympy as sp
 import sympy.physics.units as spu
 
-from ... import contracts
+import bpy
+
+from ... import contracts as ct
 from ... import sockets
 from .. import base
 
-class PlaneWaveSourceNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.PlaneWaveSource
-	
+class PlaneWaveSourceNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.PlaneWaveSource
 	bl_label = "Plane Wave Source"
-	#bl_icon = ...
 	
 	####################
 	# - Sockets
 	####################
 	input_sockets = {
-		"temporal_shape": sockets.MaxwellTemporalShapeSocketDef(
-			label="Temporal Shape",
-		),
-		"center": sockets.PhysicalPoint3DSocketDef(
-			label="Center",
-		),
-		"size": sockets.PhysicalSize3DSocketDef(
-			label="Size",
-		),
-		"direction": sockets.BoolSocketDef(
-			label="+ Direction?",
+		"Temporal Shape": sockets.MaxwellTemporalShapeSocketDef(),
+		"Center": sockets.PhysicalPoint3DSocketDef(),
+		"Direction": sockets.BoolSocketDef(
 			default_value=True,
 		),
-		"angle_theta": sockets.PhysicalAngleSocketDef(
-			label="θ",
-		),
-		"angle_phi": sockets.PhysicalAngleSocketDef(
-			label="φ",
-		),
-		"angle_pol": sockets.PhysicalAngleSocketDef(
-			label="Pol Angle",
-		),
+		"Pol": sockets.PhysicalPolSocketDef(),
 	}
 	output_sockets = {
-		"source": sockets.MaxwellSourceSocketDef(
-			label="Source",
-		),
+		"Source": sockets.MaxwellSourceSocketDef(),
 	}
+	
+	####################
+	# - Properties
+	####################
+	inj_axis: bpy.props.EnumProperty(
+		name="Injection Axis",
+		description="Axis to inject plane wave along",
+		items=[
+			("X", "X", "X-Axis"),
+			("Y", "Y", "Y-Axis"),
+			("Z", "Z", "Z-Axis"),
+		],
+		default="Y",
+		update=(lambda self, context: self.sync_prop("inj_axis")),
+	)
 	
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("source")
-	def compute_source(self: contracts.NodeTypeProtocol) -> td.PointDipole:
-		temporal_shape = self.compute_input("temporal_shape")
-		_center = self.compute_input("center")
-		_size = self.compute_input("size")
-		_direction = self.compute_input("direction")
-		_angle_theta = self.compute_input("angle_theta")
-		_angle_phi = self.compute_input("angle_phi")
-		_angle_pol = self.compute_input("angle_pol")
+	@base.computes_output_socket(
+		"Source",
+		input_sockets={"Temporal Shape", "Center", "Direction", "Pol"},
+		props={"inj_axis"},
+	)
+	def compute_source(self, input_sockets: dict, props: dict):
+		temporal_shape = input_sockets["Temporal Shape"]
+		_center = input_sockets["Center"]
+		_direction = input_sockets["Direction"]
+		_inj_axis = props["inj_axis"]
+		pol = input_sockets["Pol"]
 		
+		direction = {
+			False: "-",
+			True: "+",
+		}[_direction]
 		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		size = tuple(
-			0 if val == 1.0 else math.inf
-			for val in spu.convert_to(_size, spu.um) / spu.um
-		)
-		angle_theta = spu.convert_to(_angle_theta, spu.rad) / spu.rad
-		angle_phi = spu.convert_to(_angle_phi, spu.rad) / spu.rad
-		angle_pol = spu.convert_to(_angle_pol, spu.rad) / spu.rad
+		size = {
+			"X": (0, math.inf, math.inf),
+			"Y": (math.inf, 0, math.inf),
+			"Z": (math.inf, math.inf, 0),
+		}[_inj_axis]
 		
+		S0, S1, S2, S3 = tuple(pol)
+		
+		chi = 0.5 * sp.atan2(S2, S1)
+		psi = 0.5 * sp.asin(S3/S0)
+		## chi: Pol angle
+		## psi: Ellipticity
+		
+		## TODO: Something's wonky.
+		#angle_theta = chi
+		#angle_phi = psi
+		pol_angle = sp.pi/2 - chi
+
+		# Display the results
 		return td.PlaneWave(
-			center=center,
+			center=tuple(_center),
 			size=size,
 			source_time=temporal_shape,
 			direction="+" if _direction else "-",
-			angle_theta=angle_theta,
-			angle_phi=angle_phi,
-			pol_angle=angle_pol,
+			#angle_theta=angle_theta,
+			#angle_phi=angle_phi,
+			#pol_angle=pol_angle,
 		)
 
 
@@ -88,7 +102,7 @@ BL_REGISTER = [
 	PlaneWaveSourceNode,
 ]
 BL_NODES = {
-	contracts.NodeType.PlaneWaveSource: (
-		contracts.NodeCategory.MAXWELLSIM_SOURCES
+	ct.NodeType.PlaneWaveSource: (
+		ct.NodeCategory.MAXWELLSIM_SOURCES
 	)
 }

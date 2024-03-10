@@ -34,14 +34,7 @@ from . import pol_socket
 PhysicalPolSocketDef = pol_socket.PhysicalPolSocketDef
 
 from . import freq_socket
-from . import vac_wl_socket
 PhysicalFreqSocketDef = freq_socket.PhysicalFreqSocketDef
-PhysicalVacWLSocketDef = vac_wl_socket.PhysicalVacWLSocketDef
-
-from . import spec_rel_permit_dist_socket
-from . import spec_power_dist_socket
-PhysicalSpecRelPermDistSocketDef = spec_rel_permit_dist_socket.PhysicalSpecRelPermDistSocketDef
-PhysicalSpecPowerDistSocketDef = spec_power_dist_socket.PhysicalSpecPowerDistSocketDef
 
 
 BL_REGISTER = [
@@ -68,7 +61,4 @@ BL_REGISTER = [
 	*pol_socket.BL_REGISTER,
 	
 	*freq_socket.BL_REGISTER,
-	*vac_wl_socket.BL_REGISTER,
-	*spec_rel_permit_dist_socket.BL_REGISTER,
-	*spec_power_dist_socket.BL_REGISTER,
 ]

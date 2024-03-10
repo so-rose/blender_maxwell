@@ -4,14 +4,14 @@ import bpy
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class IntegerNumberBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.IntegerNumber
-	bl_label = "IntegerNumber"
+class IntegerNumberBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.IntegerNumber
+	bl_label = "Integer Number"
 	
 	####################
 	# - Properties
@@ -20,31 +20,37 @@ class IntegerNumberBLSocket(base.BLSocket):
 		name="Integer",
 		description="Represents an integer",
 		default=0,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
+	
+	####################
+	# - Socket UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col_row = col.row()
+		col_row.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> None:
+	def value(self) -> int:
 		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		self.raw_value = int(value)
+	@value.setter
+	def value(self, value: int) -> None:
+		self.raw_value = value
 
 ####################
 # - Socket Configuration
 ####################
 class IntegerNumberSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.IntegerNumber
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.IntegerNumber
 	
 	default_value: int = 0
 	
 	def init(self, bl_socket: IntegerNumberBLSocket) -> None:
-		bl_socket.raw_value = self.default_value
+		bl_socket.value = self.default_value
 
 ####################
 # - Blender Registration

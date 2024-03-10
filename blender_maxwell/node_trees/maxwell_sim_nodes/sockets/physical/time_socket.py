@@ -1,51 +1,61 @@
 import typing as typ
 
 import bpy
+import sympy.physics.units as spu
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class PhysicalTimeBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.PhysicalTime
-	bl_label = "PhysicalTime"
+class PhysicalTimeBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.PhysicalTime
+	bl_label = "Time"
 	use_units = True
 	
 	####################
 	# - Properties
 	####################
 	raw_value: bpy.props.FloatProperty(
-		name="Unitless Force",
-		description="Represents the unitless part of the force",
+		name="Unitless Time",
+		description="Represents the unitless part of time",
 		default=0.0,
-		precision=6,
-		update=(lambda self, context: self.trigger_updates()),
+		precision=4,
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
+	
+	####################
+	# - Socket UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col.prop(self, "raw_value", text="")
 	
 	####################
 	# - Default Value
 	####################
 	@property
-	def default_value(self) -> None:
+	def value(self) -> SympyExpr:
 		return self.raw_value * self.unit
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		self.raw_value = self.value_as_unit(value)
+	@value.setter
+	def value(self, value: SympyExpr) -> None:
+		self.raw_value = spu.convert_to(value, self.unit) / self.unit
 
 ####################
 # - Socket Configuration
 ####################
 class PhysicalTimeSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.PhysicalTime
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.PhysicalTime
 	
+	default_value: SympyExpr | None = None
 	default_unit: typ.Any | None = None
 	
 	def init(self, bl_socket: PhysicalTimeBLSocket) -> None:
+		if self.default_value:
+			bl_socket.value = self.default_value
 		if self.default_unit:
 			bl_socket.unit = self.default_unit
 

@@ -5,33 +5,17 @@ import pydantic as pyd
 import tidy3d as td
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
-class MaxwellFDTDSimBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.MaxwellFDTDSim
-	bl_label = "Maxwell Source"
-	
-	compatible_types = {
-		td.Simulation: {},
-	}
-	
-	####################
-	# - Computation of Default Value
-	####################
-	@property
-	def default_value(self) -> None:
-		return None
-	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		pass
+class MaxwellFDTDSimBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellFDTDSim
+	bl_label = "Maxwell FDTD Simulation"
 
 ####################
 # - Socket Configuration
 ####################
 class MaxwellFDTDSimSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.MaxwellFDTDSim
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.MaxwellFDTDSim
 	
 	def init(self, bl_socket: MaxwellFDTDSimBLSocket) -> None:
 		pass

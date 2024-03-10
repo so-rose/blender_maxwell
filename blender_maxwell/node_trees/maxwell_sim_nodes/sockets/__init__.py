@@ -31,23 +31,19 @@ PhysicalAccelScalarSocketDef = physical.PhysicalAccelScalarSocketDef
 PhysicalForceScalarSocketDef = physical.PhysicalForceScalarSocketDef
 PhysicalPolSocketDef = physical.PhysicalPolSocketDef
 PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
-PhysicalVacWLSocketDef = physical.PhysicalVacWLSocketDef
-PhysicalSpecRelPermDistSocketDef = physical.PhysicalSpecRelPermDistSocketDef
-PhysicalSpecPowerDistSocketDef = physical.PhysicalSpecPowerDistSocketDef
 
 from . import blender
 BlenderObjectSocketDef = blender.BlenderObjectSocketDef
 BlenderCollectionSocketDef = blender.BlenderCollectionSocketDef
 BlenderImageSocketDef = blender.BlenderImageSocketDef
-BlenderVolumeSocketDef = blender.BlenderVolumeSocketDef
 BlenderGeoNodesSocketDef = blender.BlenderGeoNodesSocketDef
 BlenderTextSocketDef = blender.BlenderTextSocketDef
-BlenderPreviewTargetSocketDef = blender.BlenderPreviewTargetSocketDef
 
 from . import maxwell
 MaxwellBoundBoxSocketDef = maxwell.MaxwellBoundBoxSocketDef
 MaxwellBoundFaceSocketDef = maxwell.MaxwellBoundFaceSocketDef
 MaxwellMediumSocketDef = maxwell.MaxwellMediumSocketDef
+MaxwellMediumNonLinearitySocketDef = maxwell.MaxwellMediumNonLinearitySocketDef
 MaxwellSourceSocketDef = maxwell.MaxwellSourceSocketDef
 MaxwellTemporalShapeSocketDef = maxwell.MaxwellTemporalShapeSocketDef
 MaxwellStructureSocketDef = maxwell.MaxwellStructureSocketDef
@@ -55,6 +51,10 @@ MaxwellMonitorSocketDef = maxwell.MaxwellMonitorSocketDef
 MaxwellFDTDSimSocketDef = maxwell.MaxwellFDTDSimSocketDef
 MaxwellSimGridSocketDef = maxwell.MaxwellSimGridSocketDef
 MaxwellSimGridAxisSocketDef = maxwell.MaxwellSimGridAxisSocketDef
+MaxwellSimDomainSocketDef = maxwell.MaxwellSimDomainSocketDef
+
+from . import tidy3d
+Tidy3DCloudTaskSocketDef = tidy3d.Tidy3DCloudTaskSocketDef
 
 BL_REGISTER = [
 	*basic.BL_REGISTER,
@@ -63,4 +63,5 @@ BL_REGISTER = [
 	*physical.BL_REGISTER,
 	*blender.BL_REGISTER,
 	*maxwell.BL_REGISTER,
+	*tidy3d.BL_REGISTER,
 ]

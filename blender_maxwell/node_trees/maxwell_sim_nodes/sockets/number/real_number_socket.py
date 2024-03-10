@@ -4,23 +4,16 @@ import bpy
 import sympy as sp
 import pydantic as pyd
 
+from .....utils.pydantic_sympy import SympyExpr
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
-class RealNumberBLSocket(base.BLSocket):
-	socket_type = contracts.SocketType.RealNumber
+class RealNumberBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.RealNumber
 	bl_label = "Real Number"
-	
-	compatible_types = {
-		float: {},
-		sp.Expr: {
-			lambda self, v: v.is_real,
-			lambda self, v: len(v.free_symbols) == 0,
-		},
-	}
 	
 	####################
 	# - Properties
@@ -30,46 +23,40 @@ class RealNumberBLSocket(base.BLSocket):
 		description="Represents a real number",
 		default=0.0,
 		precision=6,
-		update=(lambda self, context: self.trigger_updates()),
+		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
+	
+	####################
+	# - Socket UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		col_row = col.row()
+		col_row.prop(self, "raw_value", text="")
 	
 	####################
 	# - Computation of Default Value
 	####################
 	@property
-	def default_value(self) -> float:
-		"""Return the real number.
-		
-		Returns:
-			The real number as a float.
-		"""
-		
+	def value(self) -> float:
 		return self.raw_value
 	
-	@default_value.setter
-	def default_value(self, value: typ.Any) -> None:
-		"""Set the real number from some compatible type, namely
-		real sympy expressions with no symbols, or floats.
-		"""
-		
-		# (Guard) Value Compatibility
-		if not self.is_compatible(value):
-			msg = f"Tried setting socket ({self}) to incompatible value ({value}) of type {type(value)}"
-			raise ValueError(msg)
-		
-		self.raw_value = float(value)
+	@value.setter
+	def value(self, value: float | SympyExpr) -> None:
+		if isinstance(value, float):
+			self.raw_value = value
+		else:
+			float(value.n())
 
 ####################
 # - Socket Configuration
 ####################
 class RealNumberSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.RealNumber
-	label: str
+	socket_type: ct.SocketType = ct.SocketType.RealNumber
 	
 	default_value: float = 0.0
 	
 	def init(self, bl_socket: RealNumberBLSocket) -> None:
-		bl_socket.default_value = self.default_value
+		bl_socket.value = self.default_value
 
 ####################
 # - Blender Registration
