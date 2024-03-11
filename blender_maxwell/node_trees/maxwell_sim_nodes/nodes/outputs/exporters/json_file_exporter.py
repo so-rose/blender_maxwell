@@ -46,7 +46,7 @@ class JSONFileExporterNode(base.MaxwellSimNode):
 		),
 	}
 	output_sockets = {
-		"JSON String": sockets.TextSocketDef(),
+		"JSON String": sockets.StringSocketDef(),
 	}
 	
 	####################

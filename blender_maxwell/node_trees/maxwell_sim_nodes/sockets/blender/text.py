@@ -4,13 +4,13 @@ import bpy
 import pydantic as pyd
 
 from .. import base
-from ... import contracts
+from ... import contracts as ct
 
 ####################
 # - Blender Socket
 ####################
 class BlenderTextBLSocket(base.MaxwellSimSocket):
-	socket_type = contracts.SocketType.BlenderText
+	socket_type = ct.SocketType.BlenderText
 	bl_label = "Blender Text"
 	
 	####################
@@ -44,7 +44,7 @@ class BlenderTextBLSocket(base.MaxwellSimSocket):
 # - Socket Configuration
 ####################
 class BlenderTextSocketDef(pyd.BaseModel):
-	socket_type: contracts.SocketType = contracts.SocketType.BlenderText
+	socket_type: ct.SocketType = ct.SocketType.BlenderText
 	
 	def init(self, bl_socket: BlenderTextBLSocket) -> None:
 		pass

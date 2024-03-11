@@ -79,11 +79,6 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 		- Polar: r,t -> re^(it)
 		"""
 		
-		# (Guard) Value Compatibility
-		if not self.is_compatible(value):
-			msg = f"Tried setting socket ({self}) to incompatible value ({value}) of type {type(value)}"
-			raise ValueError(msg)
-		
 		self.raw_value = {
 			"CARTESIAN": (sp.re(value), sp.im(value)),
 			"POLAR": (sp.Abs(value), sp.arg(value)),
@@ -115,9 +110,11 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 class ComplexNumberSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.ComplexNumber
 	
+	default_value: SympyExpr = sp.S(0 + 0j)
 	coord_sys: typ.Literal["CARTESIAN", "POLAR"] = "CARTESIAN"
 	
 	def init(self, bl_socket: ComplexNumberBLSocket) -> None:
+		bl_socket.value = self.default_value
 		bl_socket.coord_sys = self.coord_sys
 
 ####################

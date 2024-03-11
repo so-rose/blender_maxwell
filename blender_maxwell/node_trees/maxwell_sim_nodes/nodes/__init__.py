@@ -1,4 +1,4 @@
-from . import kitchen_sink
+#from . import kitchen_sink
 
 from . import inputs
 from . import outputs
@@ -11,7 +11,7 @@ from . import simulations
 #from . import utilities
 
 BL_REGISTER = [
-	*kitchen_sink.BL_REGISTER,
+	#*kitchen_sink.BL_REGISTER,
 	*inputs.BL_REGISTER,
 	*outputs.BL_REGISTER,
 	*sources.BL_REGISTER,
@@ -23,7 +23,7 @@ BL_REGISTER = [
 #	*utilities.BL_REGISTER,
 ]
 BL_NODES = {
-	**kitchen_sink.BL_NODES,
+	#**kitchen_sink.BL_NODES,
 	**inputs.BL_NODES,
 	**outputs.BL_NODES,
 	**sources.BL_NODES,

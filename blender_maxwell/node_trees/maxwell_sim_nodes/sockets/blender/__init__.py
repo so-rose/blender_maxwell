@@ -1,22 +1,21 @@
-from . import object_socket
-from . import collection_socket
+from . import object as object_socket
+from . import collection
 BlenderObjectSocketDef = object_socket.BlenderObjectSocketDef
-BlenderCollectionSocketDef = collection_socket.BlenderCollectionSocketDef
+BlenderCollectionSocketDef = collection.BlenderCollectionSocketDef
 
-from . import image_socket
-BlenderImageSocketDef = image_socket.BlenderImageSocketDef
+from . import image
+BlenderImageSocketDef = image.BlenderImageSocketDef
 
-from . import geonodes_socket
-from . import text_socket
-BlenderGeoNodesSocketDef = geonodes_socket.BlenderGeoNodesSocketDef
-BlenderTextSocketDef = text_socket.BlenderTextSocketDef
+from . import geonodes
+from . import text
+BlenderGeoNodesSocketDef = geonodes.BlenderGeoNodesSocketDef
+BlenderTextSocketDef = text.BlenderTextSocketDef
 
 BL_REGISTER = [
 	*object_socket.BL_REGISTER,
-	*collection_socket.BL_REGISTER,
+	*collection.BL_REGISTER,
 	
-	*image_socket.BL_REGISTER,
-	
-	*geonodes_socket.BL_REGISTER,
-	*text_socket.BL_REGISTER,
+	*text.BL_REGISTER,
+	*image.BL_REGISTER,
+	*geonodes.BL_REGISTER,
 ]

@@ -15,7 +15,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 	####################
 	input_sockets = {
 		"Domain": sockets.MaxwellSimDomainSocketDef(),
-		"BCs": sockets.MaxwellBoundBoxSocketDef(),
+		"BCs": sockets.MaxwellBoundCondsSocketDef(),
 		"Sources": sockets.MaxwellSourceSocketDef(),
 		"Structures": sockets.MaxwellStructureSocketDef(),
 		"Monitors": sockets.MaxwellMonitorSocketDef(),

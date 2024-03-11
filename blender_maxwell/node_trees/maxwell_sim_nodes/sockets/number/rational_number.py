@@ -58,8 +58,10 @@ class RationalNumberBLSocket(base.MaxwellSimSocket):
 class RationalNumberSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.RationalNumber
 	
+	default_value: SympyExpr = sp.Rational(0, 1)
+	
 	def init(self, bl_socket: RationalNumberBLSocket) -> None:
-		pass
+		bl_socket.value = self.default_value
 
 ####################
 # - Blender Registration

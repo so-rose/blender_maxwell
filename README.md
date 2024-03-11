@@ -1,18 +1,24 @@
 # Nodes
+**LEGEND**:
+- [-] Exists but doesn't quite work good enough.
+- [x] Done to working degree (the standard is "good enough for the demo").
+	- See check marks underneath
+- [?] Unsure whether we should do this.
+
 ## Inputs
 [x] Wave Constant
-- [ ] Implement export of frequency / wavelength ranges.
-[ ] Unit System
+- [ ] Implement export of frequency / wavelength array/range.
+[-] Unit System
 - [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
 
-[ ] Constants / Blender Constant
-[ ] Constants / Number Constant
+[ ] Constants / Scientific Constant
+[x] Constants / Number Constant
 [ ] Constants / Physical Constant
 - [ ] Pol: Elliptical plot viz
 - [ ] Pol: Poincare sphere viz
-[ ] Constants / Scientific Constant
+[x] Constants / Blender Constant
 
-[ ] Web / Tidy3D Web Importer
+[x] Web / Tidy3D Web Importer
 
 [ ] File Import / JSON File Import
 - [ ] Dropdown to choose various supported JSON-sourced objects incl. 
@@ -25,12 +31,14 @@
 - [ ] Implement a LazyValue to provide a data path that avoids having to load massive arrays every time always.
 
 ## Outputs
-[ ] Viewer
+[x] Viewer
+- [ ] **BIG ONE**: Remove image preview when disabling plots.
+- [ ] Either enforce singleton, or find a way to have several viewers at the same time.
 - [ ] A setting that live-previews just a value.
 - [ ] Pop-up multiline string print as alternative to console print.
-- [ ] Toggleable auto-plot, auto-3D-preview, auto-value-view, (?)auto-text-view.
+- [x] Toggleable auto-plot, auto-3D-preview, auto-value-view, (?)auto-text-view.
 
-[ ] File Export / JSON File Export
+[x] File Export / JSON File Export
 [ ] File Import / Tidy3D File Export
 - [ ] Implement HDF-based export of Tidy3D-exported object (which includes ex. mesh data and such)
 [ ] File Export / Array File Export
@@ -41,16 +49,18 @@
 ## Viz
 [ ] Monitor Data Viz
 - [ ] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
+- [ ] Project field values onto a plane object (managed)
 
 ## Sources
-[ ] Temporal Shapes / Gaussian Pulse Temporal Shape
-[ ] Temporal Shapes / Continuous Wave Temporal Shape
+[x] Temporal Shapes / Gaussian Pulse Temporal Shape
+[x] Temporal Shapes / Continuous Wave Temporal Shape
 [ ] Temporal Shapes / Symbolic Temporal Shape
 - [ ] Specify a Sympy function to generate appropriate array based on
 [ ] Temporal Shapes / Array Temporal Shape
 
-[ ] Point Dipole Source
-[ ] Plane Wave Source
+[x] Point Dipole Source
+- [ ] Consider a "real" mesh - the empty kind of gets stuck inside of the sim domain.
+[-] Plane Wave Source
 - [ ] Implement an oriented vector input with 3D preview.
 [ ] Uniform Current Source
 [ ] TFSF Source
@@ -84,8 +94,9 @@
 
 ## Structures
 [ ] BLObject Structure
-[ ] GeoNodes Structure
-- [ ] Use the modifier itself as memory, via the ManagedObj
+[x] GeoNodes Structure
+- [x] Rewrite the `bl_socket_map.py`
+- [x] Use the modifier itself as memory, via the ManagedObj
 - [?] When GeoNodes themselves declare panels, implement a grid-like tab system to select which sockets should be exposed in the node at a given point in time.
 
 [ ] Primitive Structures / Plane
@@ -120,11 +131,11 @@
 ## Simulations
 [-] FDTDSim
 
-[-] Sim Domain
+[x] Sim Domain
 - [ ] By-Medium batching of Structures when building the td.Simulation object, which can have significant performance implications.
 
-[-] Boundary Conds
-- [ ] Rename from Bounds / BoundBox
+[x] Boundary Conds
+- [x] Rename from Bounds / BoundBox
 [ ] Boundary Cond / PML Bound Face
 - [ ] Implement dropdown for "Normal" and "Stable"
 [ ] Boundary Cond / PEC Bound Face
@@ -174,36 +185,59 @@
 
 
 # Benchmark / Example Sims
-- [ ] Tunable Chiral Metasurface <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/TunableChiralMetasurface.html>
+[ ] Research-Grade Experiment
+- Membrane 15nm thickness suspended in air
+- Square lattice of holes period 900nm (900nm between each hole, air inside holes)
+- Holes square radius 100nm
+- Square lattice
+- Analysis of transmission
+- Guided mode resonance
+[ ] Tunable Chiral Metasurface <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/TunableChiralMetasurface.html>
 
 
 
 # Sockets
 ## Basic
-[ ] Any
-[ ] Bool
-[ ] String
+[x] Any
+[x] Bool
+[x] String
 - [ ] Rename from "Text"
-[ ] File Path
+[x] File Path
+[x] Color
+
+## Number
+[x] Integer
+[x] Rational
+- [ ] Implement constrained SympyExpr check for Rational.
+[x] Real
+- [ ] Implement min/max for ex. 0..1 factor support.
+- [ ] Implement constrained SympyExpr check for Rational.
+[x] Complex
 
 ## Blender
-[ ] Object
-[ ] Collection
+[x] Object
+- [ ] Implement default SocketDef object name
+[x] Collection
+- [ ] Implement default SocketDef collection name
 
-[ ] Image
+[x] Image
+- [ ] Implement default SocketDef image name
 
-[ ] GeoNodes
-[ ] Text
+[x] GeoNodes
+- [ ] Implement default SocketDef geonodes name
+[x] Text
+- [ ] Implement default SocketDef object name
 
 ## Maxwell
-[ ] Bound Conds
+[x] Bound Conds
 [ ] Bound Cond
 
-[ ] Medium
+[x] Medium
 [ ] Medium Non-Linearity
 
-[ ] Source
+[x] Source
 [ ] Temporal Shape
+- [ ] Sane-default pulses for easy access.
 
 [ ] Structure
 [ ] Monitor
@@ -217,47 +251,46 @@
 [ ] Simulation Data
 
 ## Tidy3D
-[ ] Cloud Task
-
-## Number
-[ ] Integer
-[ ] Rational
-[ ] Real
-[ ] Complex
+[x] Cloud Task
+- [ ] Implement switcher for API-key-having config filconfig file vs. direct entry of API key. It should be auto-filled with the config file when such a thing exists.
 
 ## Physical
-[ ] Unit System
+[x] Unit System
 - [ ] Implement more comprehensible UI; honestly, probably with the new panels (<https://developer.blender.org/docs/release_notes/4.1/python_api/>)
 
-[ ] Time
+[x] Time
 
-[ ] Angle
+[x] Angle
 [ ] Solid Angle (steradian)
 
-[ ] Frequency (hertz)
+[x] Frequency (hertz)
 [ ] Angular Frequency (`rad*hertz`)
 ### Cartesian
-[ ] Length
-[ ] Area
-[ ] Volume
+[x] Length
+[x] Area
+[x] Volume
 
 [ ] Point 1D
 [ ] Point 2D
-[ ] Point 3D
+[x] Point 3D
 
 [ ] Size 2D
-[ ] Size 3D
+[x] Size 3D
+
+[ ] Rotation 3D
+- [ ] Implement Euler methods
+- [ ] Implement Quaternion methods
 ### Mechanical
 [ ] Mass
 
-[ ] Speed
+[x] Speed
 [ ] Velocity 3D
-[ ] Acceleration Scalar
+[x] Acceleration Scalar
 [ ] Acceleration 3D
-[ ] Force Scalar
+[x] Force Scalar
 [ ] Force 3D
 [ ] Pressure
-### Statistical
+### Energy
 [ ] Energy (joule)
 [ ] Power (watt)
 [ ] Temperature
@@ -283,7 +316,7 @@
 [ ] Illuminance (lux)
 ### Optical
 [ ] Jones Polarization
-[ ] Polarization
+[ ] Polarization (Stokes)
 
 
 
@@ -295,17 +328,20 @@
 
 # Architecture
 ## Registration and Contracts
-[ ] Finish the contract code converting from Blender sockets to our sockets based on dimensionality and the property description.
-[ ] Refactor the node category code; it's ugly as all fuck.
+[x] Finish the contract code converting from Blender sockets to our sockets based on dimensionality and the property description.
+[ ] Refactor the node category code; it's ugly.
 [?] Would be nice with some kind of indicator somewhere to help set good socket descriptions when using geonodes and wanting units.
 
 ## Managed Objects
-[ ] Implement modifier support on the managed BL object, with special attention paid to the needs of the GeoNodes socket.
-- [ ] Implement preview toggling too, ex. using the relevant node tree collections
+[x] Implement modifier support on the managed BL object, with special attention paid to the needs of the GeoNodes socket.
+- [x] Implement preview toggling too, ex. using the relevant node tree collections
 - Remember, the managed object is "dumb". It's the node's responsibility to react to any relevant `on_value_change`, and forward all state needed by the modifier to the managed obj. It's only the managed obj's responsibility to not update any modifier value that wouldn't change anything.
 [ ] Implement loading the xarray-defined voxels into OpenVDB, saving it, and loading it as a managed BL object with the volume setting.
 [ ] Implement basic jax-driven volume voxel processing, especially cube based slicing.
 [ ] Implement jax-driven linear interpolation of volume voxels to an image texture, whose pixels are sized according to the dimensions of another managed plane object (perhaps a uniquely described Managed BL object itself).
+
+## Utils or Services
+[ ] Dedicated module for managing the interaction with the tidy3d cloud, to help nuke all the random caches out of existance.
 
 ## Node Base Class
 [ ] Dedicated `draw_preview`-type draw functions for plot customizations.
@@ -314,8 +350,9 @@
 [ ] When presets are used, if a preset is selected and the user alters a preset setting, then dynamically switch the preset indicator back to "Custom"  to indicate that there is no active preset
 [ ] It seems that `node.inputs` and `node.outputs` allows the use of a `move` method, which may allow reordering sockets dynamically, which we should expose to the user as user-configurable ordering rules (maybe resolved with a constraint solver).
 [?] Mechanism for dynamic names (ex. "Library Medium" becoming "Au Medium")
-[ ] Mechanism for selecting a blender object managed by a particular node.
+[-] Mechanism for selecting a blender object managed by a particular node.
 [ ] Mechanism for ex. specially coloring a node that is currently participating in the preview.
+[ ] Custom callbacks when deleting a node (in `free()`), to ex. delete all previews with the viewer node.
 
 ## Socket Base Class
 [ ] A feature `use_array` which allows a socket to declare that it can be both a single value and array-like (possibly constrained to a given shape). This should also allow the SocketDef to request that the input socket be initialised as a multi-input socket, once Blender updates to support those.
@@ -352,46 +389,3 @@
 [ ] Test on Windows
 
 ## Node Tree Cache Semantics
-
-## Projects / Plugins
-### Field Data
-[ ] Directly dealing with field data, instead of having field manipulations be baked into viz node(s).
-[ ] Yee Cell Data as Attributes on By-Cell Point Cloud w/GeoNodes Integrations
-- In effect, when we have xarray data defined based on Yee Cells ex. Poynting vector coordinates, let's import this to Blender as a simple point cloud centered at each cell and grant each an attribute corresponding to the data.
-- What we can then do is use vanilla GeoNodes to ex. read the vector attribute, and draw small arrow meshes (maybe resampled which auto-interpolates the field values) from each point, thus effectively visualizing . vector fields and many other fun things.
-- Of course, this is no good for volume cell data - but we can just overlay the raw volume cell data as we please. We can also, if we're sneaky, deal with our volume data as points as far as we can, and then finally do a "points to volume" type deal to make it sufficiently "fluffy/cloudy".
-- I wonder if we could use the Attribute node in the shader editor to project interpolated values from points, onto a ex. plane mesh, in a way that would also be visualizable in the viewport.
-
-### Tidy3D Features
-[ ] Symmetry for Performance
-- [ ] Implement <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/Symmetry.html>
-[ ] Dispersive Model Fitting
-[ ] Scattering Matrix Calculator
-[ ] Resonance Finder
-[ ] Adjoint Optimization
-[ ] Design Space Exploration / Parameterization
-
-### Preview Semantics
-[ ] Custom gizmos attached to preview toggles!
-- There is a WIP for GN-driven gizmos: <https://projects.blender.org/blender/blender/pulls/112677>
-- Probably best to wait for that, then just add gizmos to existing driven GN trees, as opposed to unholy OGL spaghetti.
-[ ] Node-ManagedObj Selection binding
-- BL to Node:
-	- Trigger: The post-depsgraph handler seems appropriate.
-	- Input: Read the object location (origin), using a unit system.
-	- Output: Write the input socket value.
-	- Condition: Input socket is unlinked. (If it's linked, then lock the object's position. Use sync_link_added() for that)
-- Node to BL:
-	- Trigger: "Report" action on an input socket that the managed object declares reliance on.
-	- Input: The input socket value (linked or unlinked)
-	- Output: The object location (origin), using a unit system.
-
-### Parametric Geometry UX
-[ ] Consider allowing a mesh attribute (set in ex. geometry node) to specify the name of a medium.
-- This allows assembling complex multi-medium structures in one geonodes tree.
-- This should result in the spawning of several Medium input sockets in the GeoNodes structure node, named as the attributes are.
-- The GeoNodes structure node should then output as array-like TriMeshes, for which mediums are correctly defined.
-
-### Alternative Engines
-[ ] MEEP integration (<https://meep.readthedocs.io/en/latest/>)
-- The main boost would be if we could setup a MEEP simulation entirely from a td.Simulation object.

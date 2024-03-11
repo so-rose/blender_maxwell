@@ -26,7 +26,11 @@ from .socket_types import SocketType
 from .socket_units import SOCKET_UNITS
 from .socket_colors import SOCKET_COLORS
 from .socket_shapes import SOCKET_SHAPES
-from .socket_bl_maps import BLSocketToSocket
+
+from .socket_from_bl_desc import BL_SOCKET_DESCR_TYPE_MAP
+from .socket_from_bl_direct import BL_SOCKET_DIRECT_TYPE_MAP
+
+from .socket_from_bl_desc import BL_SOCKET_DESCR_ANNOT_STRING
 
 ####################
 # - Node Types

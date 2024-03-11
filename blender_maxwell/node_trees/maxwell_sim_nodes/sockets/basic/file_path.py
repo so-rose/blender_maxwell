@@ -24,7 +24,6 @@ class FilePathBLSocket(base.MaxwellSimSocket):
 		subtype="FILE_PATH",
 		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
-	## TODO: Use bpy methods to constrain the path
 	
 	####################
 	# - Socket UI

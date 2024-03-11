@@ -7,26 +7,22 @@ from .. import base
 from ... import contracts as ct
 
 ####################
-# - Blender Socket
+# - Create and Assign BL Object
 ####################
 class BlenderMaxwellCreateAndAssignBLObject(bpy.types.Operator):
 	bl_idname = "blender_maxwell.create_and_assign_bl_object"
 	bl_label = "Create and Assign BL Object"
 	
-	## TODO: Refactor
+	node_tree_name = bpy.props.StringProperty(name="Node Tree Name")
+	node_name = bpy.props.StringProperty(name="Node Name")
+	socket_name = bpy.props.StringProperty(name="Socket Name")
+	
 	def execute(self, context):
-		mesh = bpy.data.meshes.new("GenMesh")
-		new_bl_object = bpy.data.objects.new("GenObj", mesh)
+		node_tree = bpy.data.node_groups[self.node_tree_name]
+		node = node_tree.nodes[self.node_name]
+		socket = node.inputs[self.socket_name]
 		
-		context.collection.objects.link(new_bl_object)
-		
-		node = context.node
-		for bl_socket_name, bl_socket in node.inputs.items():
-			if isinstance(bl_socket, BlenderObjectBLSocket):
-				bl_socket.default_value = new_bl_object
-		
-		if hasattr(node, "update_sockets_from_geonodes"):
-			node.update_sockets_from_geonodes()
+		socket.create_and_assign_bl_object()
 		
 		return {'FINISHED'}
 
@@ -52,14 +48,30 @@ class BlenderObjectBLSocket(base.MaxwellSimSocket):
 	####################
 	def draw_label_row(self, label_col_row, text):
 		label_col_row.label(text=text)
-		label_col_row.operator(
+		
+		op = label_col_row.operator(
 			"blender_maxwell.create_and_assign_bl_object",
 			text="",
 			icon="ADD",
 		)
+		op.socket_name = self.name
+		op.node_name = self.node.name
+		op.node_tree_name = self.node.id_data.name
 	
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		col.prop(self, "raw_value", text="")
+	
+	####################
+	# - Methods
+	####################
+	def create_and_assign_bl_object(self):
+		node_tree = self.node.id_data
+		mesh = bpy.data.meshes.new("MaxwellMesh")
+		new_bl_object = bpy.data.objects.new("MaxwellObject", mesh)
+		
+		bpy.context.collection.objects.link(new_bl_object)
+		
+		self.value = new_bl_object
 	
 	####################
 	# - Default Value

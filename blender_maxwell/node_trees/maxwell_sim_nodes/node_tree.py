@@ -61,17 +61,6 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	bl_label = "Maxwell Sim Editor"
 	bl_icon = ct.Icon.SimNodeEditor.value
 	
-	managed_collection: bpy.props.PointerProperty(
-		name="Managed Collection",
-		description="Collection of Blender objects managed by this tree",
-		type=bpy.types.Collection,
-	)
-	preview_collection: bpy.props.PointerProperty(
-		name="Preview Collection",
-		description="Collection of Blender objects that will be previewed",
-		type=bpy.types.Collection,
-	)
-	
 	####################
 	# - Lock Methods
 	####################
@@ -80,6 +69,18 @@ class MaxwellSimTree(bpy.types.NodeTree):
 			node.locked = False
 			for bl_socket in [*node.inputs, *node.outputs]:
 				bl_socket.locked = False
+	
+	####################
+	# - Init Methods
+	####################
+	def on_load(self):
+		"""Run by Blender when loading the NodeSimTree, ex. on file load, on creation, etc. .
+		
+		It's a bit of a "fake" function - in practicality, it's triggered on the first update() function.
+		"""
+		## TODO: Consider tying this to an "on_load" handler
+		self._node_link_cache = NodeLinkCache(self)
+		
 	
 	####################
 	# - Update Methods
@@ -105,7 +106,7 @@ class MaxwellSimTree(bpy.types.NodeTree):
 		Updates an internal node link cache, then updates sockets that just lost/gained an input link.
 		"""
 		if not hasattr(self, "_node_link_cache"):
-			self._node_link_cache = NodeLinkCache(self)
+			self.on_load()
 			## We presume update() is run before the first link is altered.
 			## - Else, the first link of the session will not update caches.
 			## - We remain slightly unsure of the semantics.

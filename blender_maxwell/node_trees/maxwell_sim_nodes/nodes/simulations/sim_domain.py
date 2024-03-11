@@ -3,9 +3,13 @@ import sympy as sp
 import sympy.physics.units as spu
 import scipy as sc
 
+from .....utils import analyze_geonodes
 from ... import contracts as ct
 from ... import sockets
 from .. import base
+from ... import managed_objs
+
+GEONODES_DOMAIN_BOX = "domain_box"
 
 class SimDomainNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.SimDomain
@@ -22,6 +26,13 @@ class SimDomainNode(base.MaxwellSimNode):
 	}
 	output_sockets = {
 		"Domain": sockets.MaxwellSimDomainSocketDef(),
+	}
+	
+	managed_obj_defs = {
+		"domain_box": ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLObject(name),
+			name_prefix="domain_box_",
+		)
 	}
 	
 	####################
@@ -46,6 +57,54 @@ class SimDomainNode(base.MaxwellSimNode):
 				grid_spec=grid,
 				medium=medium,
 			)
+	
+	####################
+	# - Preview
+	####################
+	@base.on_value_changed(
+		socket_name="Size",
+		input_sockets={"Size"},
+		managed_objs={"domain_box"},
+	)
+	def on_value_changed__center(
+		self,
+		input_sockets: dict,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	):
+		_size = input_sockets["Size"]
+		size = tuple([
+			float(el)
+			for el in spu.convert_to(_size, spu.um) / spu.um
+		])
+		## TODO: Preview unit system?? Presume um for now
+		
+		# Retrieve Hard-Coded GeoNodes and Analyze Input
+		geo_nodes = bpy.data.node_groups[GEONODES_DOMAIN_BOX]
+		geonodes_interface = analyze_geonodes.interface(
+			geo_nodes, direc="INPUT"
+		)
+		
+		# Sync Modifier Inputs
+		managed_objs["domain_box"].sync_geonodes_modifier(
+			geonodes_node_group=geo_nodes,
+			geonodes_identifier_to_value={
+				geonodes_interface["Size"].identifier: size
+				## TODO: Use 'bl_socket_map.value_to_bl`!
+				## - This accounts for auto-conversion, unit systems, etc. .
+				## - We could keep it in the node base class...
+				## - ...But it needs aligning with Blender, too. Hmm.
+			}
+		)
+	
+	@base.on_show_preview(
+		managed_objs={"domain_box"},
+	)
+	def on_show_preview(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	):
+		managed_objs["domain_box"].show_preview("MESH")
+		self.on_value_changed__center()
 
 ####################
 # - Blender Registration

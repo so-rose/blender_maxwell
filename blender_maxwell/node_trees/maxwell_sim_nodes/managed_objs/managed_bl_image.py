@@ -27,15 +27,30 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 	
 	@name.setter
 	def name(self, value: str):
-		## TODO: Check that blender doesn't have any other images by the same name.
-		if (bl_image := bpy.data.images.get(self.name)):
-			bl_image.name = value
+		# Image Doesn't Exist 
+		if not (bl_image := bpy.data.images.get(self._bl_image_name)):
+			# ...AND Desired Image Name is Not Taken
+			if not bpy.data.objects.get(value):
+				self._bl_image_name = value
+				return
+			
+			# ...AND Desired Image Name is Taken
+			else:
+				msg = f"Desired name {value} for BL image is taken"
+				raise ValueError(msg)
 		
-		self._bl_image_name = value
+		# Object DOES Exist
+		bl_image.name = value
+		self._bl_image_name = bl_image.name
+		## - When name exists, Blender adds .### to prevent overlap.
+		## - `set_name` is allowed to change the name; nodes account for this.
 	
 	def free(self):
-		if (bl_image := bpy.data.images.get(self.name)):
-			bpy.data.images.remove(bl_image)
+		if not (bl_image := bpy.data.images.get(self.name)):
+			msg = "Can't free BL image that doesn't exist"
+			raise ValueError(msg)
+		
+		bpy.data.images.remove(bl_image)
 	
 	####################
 	# - Managed Object Management

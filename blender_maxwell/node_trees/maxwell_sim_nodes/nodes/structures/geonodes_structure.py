@@ -1,3 +1,5 @@
+import typing as typ
+
 import tidy3d as td
 import numpy as np
 import sympy as sp
@@ -7,290 +9,174 @@ import bpy
 from bpy_types import bpy_types
 import bmesh
 
-from ... import contracts
+from .....utils import analyze_geonodes
+from ... import bl_socket_map
+from ... import contracts as ct
 from ... import sockets
 from .. import base
+from ... import managed_objs
 
-GEONODES_MODIFIER_NAME = "BLMaxwell_GeoNodes"
-
-# Monkey-Patch Sympy Types
-## TODO: This needs to be a more generic thing, this isn't the only place we're setting blender interface values.
-def parse_scalar(scalar):
-	if isinstance(scalar, sp.Integer):
-		return int(scalar)
-	elif isinstance(scalar, sp.Float):
-		return float(scalar)
-	elif isinstance(scalar, sp.Rational):
-		return float(scalar)
-	elif isinstance(scalar, sp.Expr):
-		return float(scalar.n())
-	
-	return scalar
-
-def parse_bl_to_sp(scalar):
-	if isinstance(scalar, bpy_types.bpy_prop_array):
-		return sp.Matrix(tuple(scalar))
-	
-	return scalar
-
-class GeoNodesStructureNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.GeoNodesStructure
+class GeoNodesStructureNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.GeoNodesStructure
 	bl_label = "GeoNodes Structure"
-	#bl_icon = ...
 	
 	####################
 	# - Sockets
 	####################
 	input_sockets = {
-		"preview_target": sockets.BlenderPreviewTargetSocketDef(
-			label="Preview Target",
-		),
-		"blender_unit_system": sockets.PhysicalUnitSystemSocketDef(
-			label="Blender Units",
-		),
-		"medium": sockets.MaxwellMediumSocketDef(
-			label="Medium",
-		),
-		"geo_nodes": sockets.BlenderGeoNodesSocketDef(
-			label="GeoNodes",
-		),
+		"Unit System": sockets.PhysicalUnitSystemSocketDef(),
+		"Medium": sockets.MaxwellMediumSocketDef(),
+		"GeoNodes": sockets.BlenderGeoNodesSocketDef(),
 	}
 	output_sockets = {
-		"structure": sockets.MaxwellStructureSocketDef(
-			label="Structure",
-		),
+		"Structure": sockets.MaxwellStructureSocketDef(),
+	}
+	
+	managed_obj_defs = {
+		"geometry": ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLObject(name),
+			name_prefix="geonodes_",
+		)
 	}
 	
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("structure")
-	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.TriangleMesh:
-		# Extract the Blender Object
-		bl_object = self.compute_input("object")
+	@base.computes_output_socket(
+		"Structure",
+		input_sockets={"Medium"},
+		managed_objs={"geometry"},
+	)
+	def compute_structure(
+		self,
+		input_sockets: dict[str, typ.Any],
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	) -> td.Structure:
+		# Extract the Managed Blender Object
+		mobj = managed_objs["geometry"]
 		
-		# Ensure Updated Geometry
-		bpy.context.view_layer.update()
+		# Extract Geometry as Arrays
+		geometry_as_arrays = mobj.mesh_as_arrays
 		
-		# Triangulate Object Mesh
-		bmesh_mesh = bmesh.new()
-		bmesh_mesh.from_object(
-			bl_object,
-			bpy.context.evaluated_depsgraph_get(),
-		)
-		bmesh.ops.triangulate(bmesh_mesh, faces=bmesh_mesh.faces)
-		
-		mesh = bpy.data.meshes.new(name="TriangulatedMesh")
-		bmesh_mesh.to_mesh(mesh)
-		bmesh_mesh.free()
-		
-		# Extract Vertices and Faces
-		vertices = np.array([vert.co for vert in mesh.vertices])
-		faces = np.array([
-			[vert for vert in poly.vertices]
-			for poly in mesh.polygons
-		])
-		
-		# Remove Temporary Mesh
-		bpy.data.meshes.remove(mesh)
-		
+		# Return TriMesh Structure
 		return td.Structure(
-			geometry=td.TriangleMesh.from_vertices_faces(vertices, faces),
-			medium=self.compute_input("medium")
+			geometry=td.TriangleMesh.from_vertices_faces(
+				geometry_as_arrays["verts"],
+				geometry_as_arrays["faces"],
+			),
+			medium=input_sockets["Medium"],
 		)
 	
 	####################
-	# - Update Function
+	# - Event Methods
 	####################
-	def free(self) -> None:
-		bl_socket = self.g_input_bl_socket("preview_target")
+	@base.on_value_changed(
+		socket_name="GeoNodes",
 		
-		bl_socket.free()
+		managed_objs={"geometry"},
+		input_sockets={"GeoNodes"},
+	)
+	def on_value_changed__geonodes(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+		input_sockets: dict[str, typ.Any],
+	) -> None:
+		"""Called whenever the GeoNodes socket is changed.
 		
-	def update_cb(self) -> None:
-		bl_object = self.compute_input("preview_target")
-		if bl_object is None: return
+		Refreshes the Loose Input Sockets, which map directly to the GeoNodes tree input sockets.
+		"""
+		if not (geo_nodes := input_sockets["GeoNodes"]):
+			managed_objs["geometry"].free()
+			self.loose_input_sockets = {}
+			return
 		
-		geo_nodes = self.compute_input("geo_nodes")
-		if geo_nodes is None: return
+		# Analyze GeoNodes
+		## Extract Valid Inputs (via GeoNodes Tree "Interface")
+		geonodes_interface = analyze_geonodes.interface(
+			geo_nodes, direc="INPUT"
+		)
 		
-		bl_modifier = bl_object.modifiers.get(GEONODES_MODIFIER_NAME)
-		if bl_modifier is None: return
-		
-		# Set GeoNodes Modifier Attributes
-		for idx, interface_item in enumerate(
-			geo_nodes.interface.items_tree.values()
-		):
-			if idx == 0: continue  ## Always-on "Geometry" Input (from Object)
-			
-			# Retrieve Input Socket
-			bl_socket = self.inputs[
-				interface_item.name
-			]
-			
-			# Retrieve Linked/Unlinked Input Socket Value
-			if bl_socket.is_linked:
-				linked_bl_socket = bl_socket.links[0].from_socket
-				linked_bl_node = bl_socket.links[0].from_node
-				val = linked_bl_node.compute_output(
-					linked_bl_node.g_output_socket_name(
-						linked_bl_socket.name
-					)
-				)  ## What a bunch of spaghetti
-			else:
-				val = bl_socket.default_value
-			
-			# Retrieve Unit-System Corrected Modifier Value
-			bl_unit_system = self.compute_input("blender_unit_system")
-			
-			socket_type = contracts.SocketType[
-				bl_socket.bl_idname.removesuffix("SocketType")
-			]
-			if socket_type in bl_unit_system:
-				unitless_val = spu.convert_to(
-					val,
-					bl_unit_system[socket_type],
-				) / bl_unit_system[socket_type]
-			else:
-				unitless_val = val
-			
-			if isinstance(unitless_val, sp.matrices.MatrixBase):
-				unitless_val = tuple(
-					parse_scalar(scalar)
-					for scalar in unitless_val
-				)
-			else:
-				unitless_val = parse_scalar(unitless_val)
-			
-			# Conservatively Set Differing Values
-			if bl_modifier[interface_item.identifier] != unitless_val:
-				bl_modifier[interface_item.identifier] = unitless_val
-			
-		# Update DepGraph
-		bl_object.data.update()
-		
-	def update_sockets_from_geonodes(self) -> None:
-		# Remove All "Loose" Sockets
-		socket_labels = {
-			socket_def.label
-			for socket_def in self.input_sockets.values()
-		} | {
-			socket_def.label
-			for socket_set_name, socket_set in self.input_socket_sets.items()
-			for socket_name, socket_def in socket_set.items()
-		}
-		bl_sockets_to_remove = {
-			bl_socket
-			for bl_socket_name, bl_socket in self.inputs.items()
-			if bl_socket_name not in socket_labels
+		# Set Loose Input Sockets
+		## Retrieve the appropriate SocketDef for the Blender Interface Socket
+		self.loose_input_sockets = {
+			socket_name: bl_socket_map.socket_def_from_bl_interface_socket(
+				bl_interface_socket
+			)()  ## === <SocketType>SocketDef(), but with dynamic SocketDef
+			for socket_name, bl_interface_socket in geonodes_interface.items()
 		}
 		
-		for bl_socket in bl_sockets_to_remove:
-			self.inputs.remove(bl_socket)
-		
-		# Query for Blender Object / Geo Nodes
-		bl_object = self.compute_input("preview_target")
-		if bl_object is None: return
-		
-		# Remove Existing GeoNodes Modifier
-		if GEONODES_MODIFIER_NAME in bl_object.modifiers:
-			modifier_to_remove = bl_object.modifiers[GEONODES_MODIFIER_NAME]
-			bl_object.modifiers.remove(modifier_to_remove)
-		
-		# Retrieve GeoNodes Tree
-		geo_nodes = self.compute_input("geo_nodes")
-		if geo_nodes is None: return
-		
-		# Add Non-Static Sockets from GeoNodes
-		for bl_socket_name, bl_socket in geo_nodes.interface.items_tree.items():
-			# For now, don't allow Geometry inputs.
-			if bl_socket.socket_type == "NodeSocketGeometry": continue
+		## Set Loose `socket.value` from Interface `default_value`
+		for socket_name in self.loose_input_sockets:
+			socket = self.inputs[socket_name]
+			bl_interface_socket = geonodes_interface[socket_name]
 			
-			# Establish Dimensions of GeoNodes Input Sockets
-			if (
-				bl_socket.description.startswith("2D")
-			):
-				dimensions = 2
-			elif (
-				bl_socket.socket_type.startswith("NodeSocketVector")
-				or bl_socket.socket_type.startswith("NodeSocketColor")
-				or bl_socket.socket_type.startswith("NodeSocketRotation")
-			):
-				dimensions = 3
-			else:
-				dimensions = 1
-			
-			# Choose Socket via. Description Hint (if exists)
-			if (
-				":" in bl_socket.description
-				and "(" in (desc_hint := bl_socket.description.split(":")[0])
-				and ")" in desc_hint
-			):
-				for tag in contracts.BLNodeSocket_to_SocketType_by_desc[
-					dimensions
-				]:
-					if desc_hint.startswith(tag):
-						self.inputs.new(
-							contracts.BLNodeSocket_to_SocketType_by_desc[
-								dimensions
-							][tag],
-							bl_socket_name,
-						)
-						
-						if len([
-							(unit := _unit)
-							for _unit in contracts.SocketType_to_units[
-								contracts.SocketType[
-									self.inputs[bl_socket_name].bl_idname.removesuffix("SocketType")
-								]
-							]["values"].values()
-							if desc_hint[
-								desc_hint.find("(")+1 : desc_hint.find(")")
-							] == str(_unit)
-						]) > 0:
-							self.inputs[bl_socket_name].unit = unit
-					
-			elif bl_socket.socket_type in contracts.BLNodeSocket_to_SocketType[
-				dimensions
-			]:
-				self.inputs.new(
-					contracts.BLNodeSocket_to_SocketType[
-						dimensions
-					][bl_socket.socket_type],
-					bl_socket_name,
+			socket.value = bl_socket_map.value_from_bl(bl_interface_socket)
+		
+		## Implicitly triggers the loose-input `on_value_changed` for each.
+	
+	@base.on_value_changed(
+		any_loose_input_socket=True,
+		
+		managed_objs={"geometry"},
+		input_sockets={"Unit System", "GeoNodes"},
+	)
+	def on_value_changed__loose_inputs(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+		input_sockets: dict[str, typ.Any],
+		loose_input_sockets: dict[str, typ.Any],
+	):
+		"""Called whenever a Loose Input Socket is altered.
+		
+		Synchronizes the change to the actual GeoNodes modifier, so that the change is immediately visible.
+		"""
+		# Retrieve Data
+		unit_system = input_sockets["Unit System"]
+		mobj = managed_objs["geometry"]
+		
+		if not (geo_nodes := input_sockets["GeoNodes"]): return
+		
+		# Analyze GeoNodes Interface (input direction)
+		## This retrieves NodeTreeSocketInterface elements
+		geonodes_interface = analyze_geonodes.interface(
+			geo_nodes, direc="INPUT"
+		)
+		
+		## TODO: Check that Loose Sockets matches the Interface
+		## - If the user deletes an interface socket, bad things will happen.
+		## - We will try to set an identifier that doesn't exist!
+		## - Instead, this should update the loose input sockets.
+		
+		## Push Values to the GeoNodes Modifier
+		mobj.sync_geonodes_modifier(
+			geonodes_node_group=geo_nodes,
+			geonodes_identifier_to_value={
+				bl_interface_socket.identifier: bl_socket_map.value_to_bl(
+					bl_interface_socket,
+					loose_input_sockets[socket_name],
+					unit_system,
 				)
-			
+				for socket_name, bl_interface_socket in (
+					geonodes_interface.items()
+				)
+			}
+		)
+	
+	####################
+	# - Event Methods
+	####################
+	@base.on_show_preview(
+		managed_objs={"geometry"},
+	)
+	def on_show_preview(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	):
+		"""Called whenever a Loose Input Socket is altered.
 		
-		# Create New GeoNodes Modifier
-		if GEONODES_MODIFIER_NAME not in bl_object.modifiers:
-			modifier = bl_object.modifiers.new(
-				name=GEONODES_MODIFIER_NAME,
-				type="NODES",
-			)
-			modifier.node_group = geo_nodes
-		
-		# Set Default Values
-		for interface_item in geo_nodes.interface.items_tree.values():
-			if (
-				interface_item.name in self.inputs
-				and hasattr(interface_item, "default_value") 
-			):
-				bl_socket = self.inputs[
-					interface_item.name
-				]
-				if hasattr(bl_socket, "use_units"):
-					bl_unit_system = self.compute_input("blender_unit_system")
-					socket_type = contracts.SocketType[
-						bl_socket.bl_idname.removesuffix("SocketType")
-					]
-					
-					bl_socket.default_value = (
-						parse_bl_to_sp(interface_item.default_value)
-						* bl_unit_system[socket_type]
-					)
-				else:
-					bl_socket.default_value = parse_bl_to_sp(interface_item.default_value)
-
+		Synchronizes the change to the actual GeoNodes modifier, so that the change is immediately visible.
+		"""
+		managed_objs["geometry"].show_preview("MESH")
 
 
 ####################
@@ -300,7 +186,7 @@ BL_REGISTER = [
 	GeoNodesStructureNode,
 ]
 BL_NODES = {
-	contracts.NodeType.GeoNodesStructure: (
-		contracts.NodeCategory.MAXWELLSIM_STRUCTURES
+	ct.NodeType.GeoNodesStructure: (
+		ct.NodeCategory.MAXWELLSIM_STRUCTURES
 	)
 }

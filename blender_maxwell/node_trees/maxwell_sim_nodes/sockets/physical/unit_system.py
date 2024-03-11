@@ -152,19 +152,19 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 		default=default_unit_key_for(ST.PhysicalForceScalar),
 		update=(lambda self, context: self.sync_prop("unit_force_scalar", context)),
 	)
-	unit_accel_3d_vector: bpy.props.EnumProperty(
+	unit_accel_3d: bpy.props.EnumProperty(
 		name="Accel3D Unit",
 		description="Unit of 3D vector acceleration",
-		items=contract_units_to_items(ST.PhysicalAccel3DVector),
-		default=default_unit_key_for(ST.PhysicalAccel3DVector),
-		update=(lambda self, context: self.sync_prop("unit_accel_3d_vector", context)),
+		items=contract_units_to_items(ST.PhysicalAccel3D),
+		default=default_unit_key_for(ST.PhysicalAccel3D),
+		update=(lambda self, context: self.sync_prop("unit_accel_3d", context)),
 	)
-	unit_force_3d_vector: bpy.props.EnumProperty(
+	unit_force_3d: bpy.props.EnumProperty(
 		name="Force3D Unit",
 		description="Unit of 3D vector force",
-		items=contract_units_to_items(ST.PhysicalForce3DVector),
-		default=default_unit_key_for(ST.PhysicalForce3DVector),
-		update=(lambda self, context: self.sync_prop("unit_force_3d_vector", context)),
+		items=contract_units_to_items(ST.PhysicalForce3D),
+		default=default_unit_key_for(ST.PhysicalForce3D),
+		update=(lambda self, context: self.sync_prop("unit_force_3d", context)),
 	)
 	
 	unit_freq: bpy.props.EnumProperty(
@@ -226,23 +226,18 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 			col_row.label(text="Accel")
 			col_row.prop(self, "unit_accel_scalar", text="")
 			#col_row.prop(self, "unit_accel_2d_vector", text="")
-			col_row.prop(self, "unit_accel_3d_vector", text="")
+			col_row.prop(self, "unit_accel_3d", text="")
 			
 			col_row=col.row(align=True)
 			col_row.label(text="Force")
 			col_row.prop(self, "unit_force_scalar", text="")
 			#col_row.prop(self, "unit_force_2d_vector", text="")
-			col_row.prop(self, "unit_force_3d_vector", text="")
+			col_row.prop(self, "unit_force_3d", text="")
 			
 			col_row=col.row(align=True)
 			col_row.alignment = "EXPAND"
 			col_row.label(text="Freq")
 			col_row.prop(self, "unit_freq", text="")
-			
-			col_row=col.row(align=True)
-			col_row.alignment = "EXPAND"
-			col_row.label(text="Vac WL")
-			col_row.prop(self, "unit_vac_wl", text="")
 	
 	####################
 	# - Default Value
@@ -270,11 +265,10 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 				(ST.PhysicalSpeed, self.unit_speed),
 				(ST.PhysicalAccelScalar, self.unit_accel_scalar),
 				(ST.PhysicalForceScalar, self.unit_force_scalar),
-				(ST.PhysicalAccel3DVector, self.unit_accel_3d_vector),
-				(ST.PhysicalForce3DVector, self.unit_force_3d_vector),
+				(ST.PhysicalAccel3D, self.unit_accel_3d),
+				(ST.PhysicalForce3D, self.unit_force_3d),
 			
 				(ST.PhysicalFreq, self.unit_freq),
-				(ST.PhysicalVacWL, self.unit_vac_wl),
 			]
 		}
 

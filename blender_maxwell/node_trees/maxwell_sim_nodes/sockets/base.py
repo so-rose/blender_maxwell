@@ -170,6 +170,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	def value(self, value: typ.Any) -> None:
 		raise NotImplementedError
 	
+	def value_as_unit_system(
+		self,
+		unit_system: dict,
+		dimensionless: bool = True
+	) -> typ.Any:
+		## TODO: Caching could speed this boi up quite a bit
+		
+		unit_system_unit = unit_system[self.socket_type]
+		return spu.convert_to(
+			self.value,
+			unit_system_unit,
+		) / unit_system_unit
+	
 	@property
 	def lazy_value(self) -> None:
 		raise NotImplementedError

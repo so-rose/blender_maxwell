@@ -36,7 +36,7 @@ class NodeCategory(BlenderTypeEnum):
 	
 	# Bounds/
 	MAXWELLSIM_BOUNDS = enum.auto()
-	MAXWELLSIM_BOUNDS_BOUNDFACES = enum.auto()
+	MAXWELLSIM_BOUNDS_BOUNDCONDS = enum.auto()
 	
 	# Monitors/
 	MAXWELLSIM_MONITORS = enum.auto()

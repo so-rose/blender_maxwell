@@ -8,8 +8,8 @@ import tidy3d as td
 from .. import base
 from ... import contracts as ct
 
-class MaxwellBoundFaceBLSocket(base.MaxwellSimSocket):
-	socket_type = ct.SocketType.MaxwellBoundFace
+class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellBoundCond
 	bl_label = "Maxwell Bound Face"
 	
 	####################
@@ -53,17 +53,17 @@ class MaxwellBoundFaceBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellBoundFaceSocketDef(pyd.BaseModel):
-	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundFace
+class MaxwellBoundCondSocketDef(pyd.BaseModel):
+	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundCond
 	
 	default_choice: typx.Literal["PML", "PEC", "PMC", "PERIODIC"] = "PML"
 	
-	def init(self, bl_socket: MaxwellBoundFaceBLSocket) -> None:
+	def init(self, bl_socket: MaxwellBoundCondBLSocket) -> None:
 		bl_socket.value = self.default_choice
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	MaxwellBoundFaceBLSocket,
+	MaxwellBoundCondBLSocket,
 ]

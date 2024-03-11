@@ -20,8 +20,8 @@ BOUND_MAP = {
 	"PERIODIC": td.Periodic(),
 }
 
-class MaxwellBoundBoxBLSocket(base.MaxwellSimSocket):
-	socket_type = ct.SocketType.MaxwellBoundBox
+class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellBoundConds
 	bl_label = "Maxwell Bound Box"
 	
 	####################
@@ -126,15 +126,15 @@ class MaxwellBoundBoxBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellBoundBoxSocketDef(pyd.BaseModel):
-	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundBox
+class MaxwellBoundCondsSocketDef(pyd.BaseModel):
+	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundConds
 	
-	def init(self, bl_socket: MaxwellBoundBoxBLSocket) -> None:
+	def init(self, bl_socket: MaxwellBoundCondsBLSocket) -> None:
 		pass
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	MaxwellBoundBoxBLSocket,
+	MaxwellBoundCondsBLSocket,
 ]

@@ -2,12 +2,12 @@ import tidy3d as td
 import sympy as sp
 import sympy.physics.units as spu
 
-from ... import contracts
+from ... import contracts as ct
 from ... import sockets
 from .. import base
 
-class BoundBoxNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.BoundBox
+class BoundCondsNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.BoundConds
 	bl_label = "Bound Box"
 	#bl_icon = ...
 	
@@ -15,42 +15,31 @@ class BoundBoxNode(base.MaxwellSimTreeNode):
 	# - Sockets
 	####################
 	input_sockets = {
-		"x_pos": sockets.MaxwellBoundFaceSocketDef(
-			label="+x",
-		),
-		"x_neg": sockets.MaxwellBoundFaceSocketDef(
-			label="-x",
-		),
-		"y_pos": sockets.MaxwellBoundFaceSocketDef(
-			label="+y",
-		),
-		"y_neg": sockets.MaxwellBoundFaceSocketDef(
-			label="-y",
-		),
-		"z_pos": sockets.MaxwellBoundFaceSocketDef(
-			label="+z",
-		),
-		"z_neg": sockets.MaxwellBoundFaceSocketDef(
-			label="-z",
-		),
+		"+X": sockets.MaxwellBoundCondSocketDef(),
+		"-X": sockets.MaxwellBoundCondSocketDef(),
+		"+Y": sockets.MaxwellBoundCondSocketDef(),
+		"-Y": sockets.MaxwellBoundCondSocketDef(),
+		"+Z": sockets.MaxwellBoundCondSocketDef(),
+		"-Z": sockets.MaxwellBoundCondSocketDef(),
 	}
 	output_sockets = {
-		"bound": sockets.MaxwellBoundBoxSocketDef(
-			label="Bound",
-		),
+		"BCs": sockets.MaxwellBoundCondsSocketDef(),
 	}
 	
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("bound")
-	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.BoundarySpec:
-		x_pos = self.compute_input("x_pos")
-		x_neg = self.compute_input("x_neg")
-		y_pos = self.compute_input("x_pos")
-		y_neg = self.compute_input("x_neg")
-		z_pos = self.compute_input("x_pos")
-		z_neg = self.compute_input("x_neg")
+	@base.computes_output_socket(
+		"BCs",
+		input_sockets={"+X", "-X", "+Y", "-Y", "+Z", "-Z"}
+	)
+	def compute_simulation(self, input_sockets) -> td.BoundarySpec:
+		x_pos = input_sockets["+X"]
+		x_neg = input_sockets["-X"]
+		y_pos = input_sockets["+Y"]
+		y_neg = input_sockets["-Y"]
+		z_pos = input_sockets["+Z"]
+		z_neg = input_sockets["-Z"]
 		
 		return td.BoundarySpec(
 			x=td.Boundary(
@@ -73,10 +62,10 @@ class BoundBoxNode(base.MaxwellSimTreeNode):
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	BoundBoxNode,
+	BoundCondsNode,
 ]
 BL_NODES = {
-	contracts.NodeType.BoundBox: (
-		contracts.NodeCategory.MAXWELLSIM_BOUNDS
+	ct.NodeType.BoundConds: (
+		ct.NodeCategory.MAXWELLSIM_BOUNDS
 	)
 }

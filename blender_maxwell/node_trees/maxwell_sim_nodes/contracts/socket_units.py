@@ -194,7 +194,7 @@ SOCKET_UNITS = {
 			"NEWT": spu.newton,
 		},
 	},
-	ST.PhysicalAccel3DVector: {
+	ST.PhysicalAccel3D: {
 		"default": "UM_S_SQ",
 		"values": {
 			"PM_S_SQ": spu.picometer / spu.second**2,
@@ -206,7 +206,7 @@ SOCKET_UNITS = {
 			"FT_S_SQ": spu.feet / spu.second**2,
 		},
 	},
-	ST.PhysicalForce3DVector: {
+	ST.PhysicalForce3D: {
 		"default": "UNEWT",
 		"values": {
 			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,

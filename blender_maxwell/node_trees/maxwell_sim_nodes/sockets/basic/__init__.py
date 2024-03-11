@@ -1,19 +1,19 @@
-from . import any_socket
+from . import any as any_socket
 AnySocketDef = any_socket.AnySocketDef
 
-from . import bool_socket
+from . import bool as bool_socket
 BoolSocketDef = bool_socket.BoolSocketDef
 
-from . import text_socket
-TextSocketDef = text_socket.TextSocketDef
+from . import string
+StringSocketDef = string.StringSocketDef
 
-from . import file_path_socket
-FilePathSocketDef = file_path_socket.FilePathSocketDef
+from . import file_path
+FilePathSocketDef = file_path.FilePathSocketDef
 
 
 BL_REGISTER = [
 	*any_socket.BL_REGISTER,
 	*bool_socket.BL_REGISTER,
-	*text_socket.BL_REGISTER,
-	*file_path_socket.BL_REGISTER,
+	*string.BL_REGISTER,
+	*file_path.BL_REGISTER,
 ]

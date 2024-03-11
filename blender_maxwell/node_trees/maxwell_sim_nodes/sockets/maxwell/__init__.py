@@ -1,45 +1,45 @@
-from . import bound_box_socket
-from . import bound_face_socket
-MaxwellBoundBoxSocketDef = bound_box_socket.MaxwellBoundBoxSocketDef
-MaxwellBoundFaceSocketDef = bound_face_socket.MaxwellBoundFaceSocketDef
+from . import bound_cond
+from . import bound_conds
+MaxwellBoundCondSocketDef = bound_cond.MaxwellBoundCondSocketDef
+MaxwellBoundCondsSocketDef = bound_conds.MaxwellBoundCondsSocketDef
 
-from . import medium_socket
-from . import medium_non_linearity_socket
-MaxwellMediumSocketDef = medium_socket.MaxwellMediumSocketDef
-MaxwellMediumNonLinearitySocketDef = medium_non_linearity_socket.MaxwellMediumNonLinearitySocketDef
+from . import medium
+from . import medium_non_linearity
+MaxwellMediumSocketDef = medium.MaxwellMediumSocketDef
+MaxwellMediumNonLinearitySocketDef = medium_non_linearity.MaxwellMediumNonLinearitySocketDef
 
-from . import source_socket
-from . import temporal_shape_socket
-MaxwellSourceSocketDef = source_socket.MaxwellSourceSocketDef
-MaxwellTemporalShapeSocketDef = temporal_shape_socket.MaxwellTemporalShapeSocketDef
+from . import source
+from . import temporal_shape
+MaxwellSourceSocketDef = source.MaxwellSourceSocketDef
+MaxwellTemporalShapeSocketDef = temporal_shape.MaxwellTemporalShapeSocketDef
 
-from . import structure_socket
-MaxwellStructureSocketDef = structure_socket.MaxwellStructureSocketDef
+from . import structure
+MaxwellStructureSocketDef = structure.MaxwellStructureSocketDef
 
-from . import monitor_socket
-MaxwellMonitorSocketDef = monitor_socket.MaxwellMonitorSocketDef
+from . import monitor
+MaxwellMonitorSocketDef = monitor.MaxwellMonitorSocketDef
 
-from . import fdtd_sim_socket
-from . import sim_grid_socket
-from . import sim_grid_axis_socket
-from . import sim_domain_socket
-MaxwellFDTDSimSocketDef = fdtd_sim_socket.MaxwellFDTDSimSocketDef
-MaxwellSimGridSocketDef = sim_grid_socket.MaxwellSimGridSocketDef
-MaxwellSimGridAxisSocketDef = sim_grid_axis_socket.MaxwellSimGridAxisSocketDef
-MaxwellSimDomainSocketDef = sim_domain_socket.MaxwellSimDomainSocketDef
+from . import fdtd_sim
+from . import sim_grid
+from . import sim_grid_axis
+from . import sim_domain
+MaxwellFDTDSimSocketDef = fdtd_sim.MaxwellFDTDSimSocketDef
+MaxwellSimGridSocketDef = sim_grid.MaxwellSimGridSocketDef
+MaxwellSimGridAxisSocketDef = sim_grid_axis.MaxwellSimGridAxisSocketDef
+MaxwellSimDomainSocketDef = sim_domain.MaxwellSimDomainSocketDef
 
 
 BL_REGISTER = [
-	*bound_box_socket.BL_REGISTER,
-	*bound_face_socket.BL_REGISTER,
-	*medium_socket.BL_REGISTER,
-	*medium_non_linearity_socket.BL_REGISTER,
-	*source_socket.BL_REGISTER,
-	*temporal_shape_socket.BL_REGISTER,
-	*structure_socket.BL_REGISTER,
-	*monitor_socket.BL_REGISTER,
-	*fdtd_sim_socket.BL_REGISTER,
-	*sim_grid_socket.BL_REGISTER,
-	*sim_grid_axis_socket.BL_REGISTER,
-	*sim_domain_socket.BL_REGISTER,
+	*bound_cond.BL_REGISTER,
+	*bound_conds.BL_REGISTER,
+	*medium.BL_REGISTER,
+	*medium_non_linearity.BL_REGISTER,
+	*source.BL_REGISTER,
+	*temporal_shape.BL_REGISTER,
+	*structure.BL_REGISTER,
+	*monitor.BL_REGISTER,
+	*fdtd_sim.BL_REGISTER,
+	*sim_grid.BL_REGISTER,
+	*sim_grid_axis.BL_REGISTER,
+	*sim_domain.BL_REGISTER,
 ]

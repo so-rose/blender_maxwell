@@ -13,8 +13,17 @@ class BlenderMaxwellResetGeoNodesSocket(bpy.types.Operator):
 	bl_idname = "blender_maxwell.reset_geo_nodes_socket"
 	bl_label = "Reset GeoNodes Socket"
 	
+	node_tree_name: bpy.props.StringProperty(name="Node Tree Name")
+	node_name: bpy.props.StringProperty(name="Node Name")
+	socket_name: bpy.props.StringProperty(name="Socket Name")
+	
 	def execute(self, context):
-		context.socket.update_geonodes_node()
+		node_tree = bpy.data.node_groups[self.node_tree_name]
+		node = node_tree.nodes[self.node_name]
+		socket = node.inputs[self.socket_name]
+		
+		# Report as though the GeoNodes Tree Changed
+		socket.sync_prop("raw_value", context)
 		
 		return {'FINISHED'}
 
@@ -33,7 +42,7 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 		name="Blender GeoNodes Tree",
 		description="Represents a Blender GeoNodes Tree",
 		type=bpy.types.NodeTree,
-		poll=(lambda self, obj: obj.bl_idname == 'GeometryNodeTree'),
+		poll=(lambda self, obj: obj.bl_idname == "GeometryNodeTree"),
 		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)
 	
@@ -42,12 +51,16 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 	####################
 	def draw_label_row(self, label_col_row, text):
 		label_col_row.label(text=text)
-		if self.raw_value:
-			label_col_row.operator(
-				"blender_maxwell.reset_geo_nodes_socket",
-				text="",
-				icon="FILE_REFRESH",
-			)
+		if not self.raw_value: return
+		
+		op = label_col_row.operator(
+			BlenderMaxwellResetGeoNodesSocket.bl_idname,
+			text="",
+			icon="FILE_REFRESH",
+		)
+		op.socket_name = self.name
+		op.node_name = self.node.name
+		op.node_tree_name = self.node.id_data.name
 	
 	####################
 	# - UI

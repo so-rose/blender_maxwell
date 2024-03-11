@@ -18,7 +18,7 @@ class BlenderCollectionBLSocket(base.MaxwellSimSocket):
 	####################
 	raw_value: bpy.props.PointerProperty(
 		name="Blender Collection",
-		description="Represents a Blender collection",
+		description="A Blender collection",
 		type=bpy.types.Collection,
 		update=(lambda self, context: self.sync_prop("raw_value", context)),
 	)

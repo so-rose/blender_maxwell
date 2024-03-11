@@ -67,7 +67,7 @@ class MaxwellSimNode(bpy.types.Node):
 			name="Sim Node Name",
 			description="The name of a particular MaxwellSimNode node, which can be used to help identify data managed by the node",
 			default="",
-			update=(lambda self, context: self._sync_sim_node_name(context))
+			update=(lambda self, context: self.sync_sim_node_name(context))
 		)
 		
 		# Setup Locked Property for Node
@@ -151,7 +151,7 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 				],
 				default=socket_set_names[0],
-				update=(lambda self, _: self._sync_sockets()),
+				update=(lambda self, _: self.sync_sockets()),
 			)
 		
 		# Setup Preset Dropdown
@@ -172,24 +172,27 @@ class MaxwellSimNode(bpy.types.Node):
 				],
 				default=list(cls.presets.keys())[0],
 				update=lambda self, context: (
-					self._sync_active_preset()()
+					self.sync_active_preset()()
 				),
 			)
 	
 	####################
 	# - Generic Properties
 	####################
-	def _sync_sim_node_name(self, context):
-		for managed_obj in self.managed_objs.values():
-			managed_obj.name = self.sim_node_name
+	def sync_sim_node_name(self, context):
+		if (mobjs := CACHE[self.instance_id].get("managed_objs")) is None:
+			return
+		
+		for mobj_id, mobj in mobjs.items():
+			# Retrieve Managed Obj Definition
+			mobj_def = self.managed_obj_defs[mobj_id]
 			
-			# Recurse Until Equal
-			if managed_obj.name != self.sim_node_name:
-				self.sim_node_name = managed_obj.name 
-				## ManagedObj is allowed to alter the name when setting it.
-				## - This will happen whenever the name is taken.
-				## - If altered, set the 'sim_node_name' to the altered name.
-				## - This will cause recursion, but only once.
+			# Set Managed Obj Name
+			mobj.name = mobj_def.name_prefix + self.sim_node_name
+			## ManagedObj is allowed to alter the name when setting it.
+			## - This will happen whenever the name is taken.
+			## - If altered, set the 'sim_node_name' to the altered name.
+			## - This will cause recursion, but only once.
 	
 	####################
 	# - Managed Object Properties
@@ -205,7 +208,7 @@ class MaxwellSimNode(bpy.types.Node):
 		## - ManagedObjects MUST the same object by name.
 		## - We sync our 'sim_node_name' with all managed objects.
 		## - (There is also a class-defined 'name_prefix' to differentiate)
-		## - See the 'sim_node_name' w/its _sync function.
+		## - See the 'sim_node_name' w/its sync function.
 		if CACHE[self.instance_id].get("managed_objs") is None:
 			# Initialize the Managed Object Instance Cache
 			CACHE[self.instance_id]["managed_objs"] = {}
@@ -304,7 +307,7 @@ class MaxwellSimNode(bpy.types.Node):
 				for model in deser.values()
 			],
 			"models": [
-				dict(model)
+				model.model_dump()
 				for model in deser.values()
 				if isinstance(model, pyd.BaseModel)
 			],
@@ -336,7 +339,7 @@ class MaxwellSimNode(bpy.types.Node):
 		self.ser_loose_input_sockets = self._ser_loose_sockets(value)
 		
 		# Synchronize Sockets
-		self._sync_sockets()
+		self.sync_sockets()
 		## TODO: Perhaps re-init() all loose sockets anyway?
 	
 	@loose_output_sockets.setter
@@ -346,7 +349,7 @@ class MaxwellSimNode(bpy.types.Node):
 		self.ser_loose_output_sockets = self._ser_loose_sockets(value)
 		
 		# Synchronize Sockets
-		self._sync_sockets()
+		self.sync_sockets()
 		## TODO: Perhaps re-init() all loose sockets anyway?
 	
 	####################
@@ -402,7 +405,7 @@ class MaxwellSimNode(bpy.types.Node):
 			for socket_name, socket_def in created_sockets.items():
 				socket_def.init(bl_sockets[socket_name])
 	
-	def _sync_sockets(self) -> None:
+	def sync_sockets(self) -> None:
 		"""Synchronize the node's sockets with the active sockets.
 		
 		- Any non-existing active socket will be added and initialized.
@@ -418,7 +421,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Preset Management
 	####################
-	def _sync_active_preset(self) -> None:
+	def sync_active_preset(self) -> None:
 		"""Applies the active preset by overwriting the value of
 		preset-defined input sockets.
 		"""
@@ -555,7 +558,11 @@ class MaxwellSimNode(bpy.types.Node):
 					and socket_name == method._extra_data.get("changed_socket")
 				) or (
 					prop_name
-					and socket_name == method._extra_data.get("changed_prop")
+					and prop_name == method._extra_data.get("changed_prop")
+				) or (
+					socket_name
+					and method._extra_data.get("changed_loose_input")
+					and socket_name in self.loose_input_sockets
 				):
 					method(self)
 			
@@ -626,11 +633,11 @@ class MaxwellSimNode(bpy.types.Node):
 		## Only shown in draw_buttons if 'self.use_sim_node_name'
 		
 		# Initialize Sockets
-		self._sync_sockets()
+		self.sync_sockets()
 		
 		# Apply Default Preset
 		if self.active_preset:
-			self._sync_active_preset()
+			self.sync_active_preset()
 	
 	def update(self) -> None:
 		pass
@@ -672,6 +679,8 @@ def chain_event_decorator(
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	input_sockets: set[str] = set(),  ## For now, presume
 	output_sockets: set[str] = set(),  ## For now, presume
+	loose_input_sockets: bool = False,
+	loose_output_sockets: bool = False,
 	props: set[str] = set(),
 	managed_objs: set[str] = set(),
 	
@@ -714,6 +723,24 @@ def chain_event_decorator(
 					for output_socket_name in output_sockets
 				}
 				method_kw_args |= dict(output_sockets=_output_sockets)
+			
+			## Add Loose Sockets
+			if loose_input_sockets:
+				_loose_input_sockets = {
+					input_socket_name: node._compute_input(input_socket_name, kind)
+					for input_socket_name in node.loose_input_sockets
+				}
+				method_kw_args |= dict(
+					loose_input_sockets=_loose_input_sockets
+				)
+			if loose_output_sockets:
+				_loose_output_sockets = {
+					output_socket_name: node.compute_output(output_socket_name, kind)
+					for output_socket_name in node.loose_output_sockets
+				}
+				method_kw_args |= dict(
+					loose_output_sockets=_loose_output_sockets
+				)
 			
 			## Add Props
 			if props:
@@ -808,17 +835,25 @@ def computes_output_socket(
 def on_value_changed(
 	socket_name: ct.SocketName | None = None,
 	prop_name: str | None = None,
+	any_loose_input_socket: bool = False,
+	
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	input_sockets: set[str] = set(),
 	props: set[str] = set(),
 	managed_objs: set[str] = set(),
 ):
-	if socket_name is not None and prop_name is not None:
-		msg = "Either socket_name or prop_name, not both"
+	if sum([
+		int(socket_name is not None),
+		int(prop_name is not None),
+		int(any_loose_input_socket),
+	]) > 1:
+		msg = "Define only one of socket_name, prop_name or any_loose_input_socket"
 		raise ValueError(msg)
 	
 	req_params = {"self"} | (
 		{"input_sockets"} if input_sockets else set()
+	) | (
+		{"loose_input_sockets"} if any_loose_input_socket else set()
 	) | (
 		{"props"} if props else set()
 	) | (
@@ -827,13 +862,14 @@ def on_value_changed(
 	
 	return chain_event_decorator(
 		callback_type="on_value_changed",
-		index_by=(socket_name, prop_name),
 		extra_data={
 			"changed_socket": socket_name,
 			"changed_prop": prop_name,
+			"changed_loose_input": any_loose_input_socket,
 		},
 		kind=kind,
 		input_sockets=input_sockets,
+		loose_input_sockets=any_loose_input_socket,
 		props=props,
 		managed_objs=managed_objs,
 		req_params=req_params,
@@ -841,8 +877,8 @@ def on_value_changed(
 
 def on_show_preview(
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),  ## For now, presume
-	output_sockets: set[str] = set(),  ## For now, presume
+	input_sockets: set[str] = set(),  ## For now, presume only same kind
+	output_sockets: set[str] = set(),  ## For now, presume only same kind
 	props: set[str] = set(),
 	managed_objs: set[str] = set(),
 ):

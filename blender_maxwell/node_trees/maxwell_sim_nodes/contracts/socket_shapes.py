@@ -4,9 +4,8 @@ SOCKET_SHAPES = {
 	# Basic
 	ST.Any: "CIRCLE",
 	ST.Bool: "CIRCLE",
-	ST.Text: "SQUARE",
+	ST.String: "SQUARE",
 	ST.FilePath: "SQUARE",
-	ST.Secret: "SQUARE",
 	
 	# Number
 	ST.IntegerNumber: "CIRCLE",
@@ -35,8 +34,8 @@ SOCKET_SHAPES = {
 	ST.PhysicalSpeed: "CIRCLE",
 	ST.PhysicalAccelScalar: "CIRCLE",
 	ST.PhysicalForceScalar: "CIRCLE",
-	ST.PhysicalAccel3DVector: "SQUARE_DOT",
-	ST.PhysicalForce3DVector: "SQUARE_DOT",
+	ST.PhysicalAccel3D: "SQUARE_DOT",
+	ST.PhysicalForce3D: "SQUARE_DOT",
 	ST.PhysicalPol: "DIAMOND",
 	ST.PhysicalFreq: "CIRCLE",
 	
@@ -44,10 +43,8 @@ SOCKET_SHAPES = {
 	ST.BlenderObject: "SQUARE",
 	ST.BlenderCollection: "SQUARE",
 	ST.BlenderImage: "DIAMOND",
-	ST.BlenderVolume: "DIAMOND",
 	ST.BlenderGeoNodes: "DIAMOND",
 	ST.BlenderText: "SQUARE",
-	ST.BlenderPreviewTarget: "SQUARE",
 	
 	# Maxwell
 	ST.MaxwellSource: "CIRCLE",
@@ -55,8 +52,8 @@ SOCKET_SHAPES = {
 	ST.MaxwellMedium: "CIRCLE",
 	ST.MaxwellMediumNonLinearity: "CIRCLE",
 	ST.MaxwellStructure: "SQUARE",
-	ST.MaxwellBoundBox: "SQUARE",
-	ST.MaxwellBoundFace: "DIAMOND",
+	ST.MaxwellBoundConds: "SQUARE",
+	ST.MaxwellBoundCond: "DIAMOND",
 	ST.MaxwellMonitor: "CIRCLE",
 	ST.MaxwellFDTDSim: "SQUARE",
 	ST.MaxwellSimGrid: "SQUARE",

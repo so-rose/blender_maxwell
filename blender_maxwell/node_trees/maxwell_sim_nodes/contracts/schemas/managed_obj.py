@@ -3,6 +3,8 @@ import typing as typx
 
 import pydantic as pyd
 
+import bpy
+
 from ..bl import ManagedObjName, SocketName
 from ..managed_obj_type import ManagedObjType
 

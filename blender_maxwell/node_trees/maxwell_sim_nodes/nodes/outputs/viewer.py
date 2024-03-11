@@ -11,6 +11,7 @@ import tidy3d as td
 from ... import contracts as ct
 from ... import sockets
 from .. import base
+from ...managed_objs import managed_bl_object
 
 
 class ConsoleViewOperator(bpy.types.Operator):
@@ -51,16 +52,52 @@ class ViewerNode(base.MaxwellSimNode):
 	}
 	
 	####################
+	# - Properties
+	####################
+	auto_plot: bpy.props.BoolProperty(
+		name="Auto-Plot",
+		description="Whether to auto-plot anything plugged into the viewer node",
+		default=False,
+		update=lambda self, context: self.sync_prop("auto_plot", context),
+	)
+	
+	auto_3d_preview: bpy.props.BoolProperty(
+		name="Auto 3D Preview",
+		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
+		default=False,
+		update=lambda self, context: self.sync_prop("auto_3d_preview", context),
+	)
+	
+	####################
 	# - UI
 	####################
 	def draw_operators(self, context, layout):
-		row = layout.row(align=True)
-		row.label(text="Console")
-		row.operator(ConsoleViewOperator.bl_idname, text="Print")
+		split = layout.split(factor=0.4)
 		
-		row = layout.row(align=True)
-		row.label(text="Plot")
-		row.operator(RefreshPlotViewOperator.bl_idname, text="", icon="FILE_REFRESH")
+		# Split LHS
+		col = split.column(align=False)
+		col.label(text="Console")
+		col.label(text="Plot")
+		col.label(text="3D")
+		
+		# Split RHS
+		col = split.column(align=False)
+		
+		## Console Options
+		col.operator(ConsoleViewOperator.bl_idname, text="Print")
+		
+		## Plot Options
+		row = col.row(align=True)
+		row.prop(self, "auto_plot", text="Plot", toggle=True)
+		row.operator(
+			RefreshPlotViewOperator.bl_idname,
+			text="",
+			icon="FILE_REFRESH",
+		)
+		
+		## 3D Preview Options
+		row = col.row(align=True)
+		row.prop(self, "auto_3d_preview", text="3D Preview", toggle=True)
 	
 	####################
 	# - Methods
@@ -75,11 +112,46 @@ class ViewerNode(base.MaxwellSimNode):
 		print(str(data))
 	
 	####################
-	# - Update
+	# - Updates
 	####################
-	@base.on_value_changed(socket_name="Data")
-	def on_value_changed__data(self):
-		self.trigger_action("show_plot")
+	@base.on_value_changed(
+		socket_name="Data",
+		props={"auto_3d_preview"},
+	)
+	def on_value_changed__data(self, props):
+		# Show Plot
+		## Don't have to un-show other plots.
+		if self.auto_plot:
+			self.trigger_action("show_plot")
+		
+		# Remove Anything Previewed
+		preview_collection = managed_bl_object.bl_collection(
+			managed_bl_object.PREVIEW_COLLECTION_NAME,
+			view_layer_exclude=False,
+		)
+		for bl_object in preview_collection.objects.values():
+			preview_collection.objects.unlink(bl_object)
+		
+		# Preview Anything that Should be Previewed (maybe)
+		if props["auto_3d_preview"]:
+			self.trigger_action("show_preview")
+	
+	@base.on_value_changed(
+		prop_name="auto_3d_preview",
+		props={"auto_3d_preview"},
+	)
+	def on_value_changed__auto_3d_preview(self, props):
+		# Remove Anything Previewed
+		preview_collection = managed_bl_object.bl_collection(
+			managed_bl_object.PREVIEW_COLLECTION_NAME,
+			view_layer_exclude=False,
+		)
+		for bl_object in preview_collection.objects.values():
+			preview_collection.objects.unlink(bl_object)
+		
+		# Preview Anything that Should be Previewed (maybe)
+		if props["auto_3d_preview"]:
+			self.trigger_action("show_preview")
 
 
 ####################

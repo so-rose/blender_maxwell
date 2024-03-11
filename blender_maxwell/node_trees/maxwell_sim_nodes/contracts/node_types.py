@@ -97,16 +97,16 @@ class NodeType(BlenderTypeEnum):
 	
 	
 	# Bounds
-	BoundBox = enum.auto()
+	BoundConds = enum.auto()
 	
 	## Bounds / Bound Faces
-	PMLBoundFace = enum.auto()
-	PECBoundFace = enum.auto()
-	PMCBoundFace = enum.auto()
+	PMLBoundCond = enum.auto()
+	PECBoundCond = enum.auto()
+	PMCBoundCond = enum.auto()
 	
-	BlochBoundFace = enum.auto()
-	PeriodicBoundFace = enum.auto()
-	AbsorbingBoundFace = enum.auto()
+	BlochBoundCond = enum.auto()
+	PeriodicBoundCond = enum.auto()
+	AbsorbingBoundCond = enum.auto()
 	
 	
 	# Monitors

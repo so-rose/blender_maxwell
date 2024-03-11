@@ -8,6 +8,7 @@ import bpy
 from ... import contracts as ct
 from ... import sockets
 from .. import base
+from ... import managed_objs
 
 class PointDipoleSourceNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.PointDipoleSource
@@ -25,6 +26,13 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	}
 	output_sockets = {
 		"Source": sockets.MaxwellSourceSocketDef(),
+	}
+	
+	managed_obj_defs = {
+		"sphere_empty": ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLObject(name),
+			name_prefix="point_dipole_",
+		)
 	}
 	
 	####################
@@ -76,6 +84,39 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			polarization=pol_axis,
 		)
 		return _res
+	
+	####################
+	# - Preview
+	####################
+	@base.on_value_changed(
+		socket_name="Center",
+		input_sockets={"Center"},
+		managed_objs={"sphere_empty"},
+	)
+	def on_value_changed__center(
+		self,
+		input_sockets: dict,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	):
+		_center = input_sockets["Center"]
+		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
+		## TODO: Preview unit system?? Presume um for now
+		
+		mobj = managed_objs["sphere_empty"]
+		bl_object = mobj.bl_object("EMPTY")
+		bl_object.location = center #tuple([float(el) for el in center])
+	
+	@base.on_show_preview(
+		managed_objs={"sphere_empty"},
+	)
+	def on_show_preview(
+		self,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
+	):
+		managed_objs["sphere_empty"].show_preview(
+			"EMPTY",
+			empty_display_type="SPHERE",
+		)
 
 
 

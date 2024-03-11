@@ -3,9 +3,9 @@ import sympy as sp
 import sympy.physics.units as spu
 import scipy as sc
 
-from .... import contracts as ct
-from .... import sockets
-from ... import base
+from ... import contracts as ct
+from ... import sockets
+from .. import base
 
 VAC_SPEED_OF_LIGHT = (
 	sc.constants.speed_of_light

@@ -33,8 +33,7 @@ class _SympyExpr:
 	) -> pyd_core_schema.CoreSchema:
 		def validate_from_str(value: str) -> AllowedSympyExprs:
 			if not isinstance(value, str):
-				msg = f"Value {value} is not a string"
-				raise ValueError(msg)
+				return value
 			
 			try:
 				return sp.sympify(value)
@@ -52,19 +51,14 @@ class _SympyExpr:
 			
 			return value
 		
-		from_expr_schema = pyd_core_schema.chain_schema([
-			pyd_core_schema.no_info_plain_validator_function(validate_from_expr),
+		sympy_expr_schema = pyd_core_schema.chain_schema([
 			pyd_core_schema.no_info_plain_validator_function(validate_from_str),
+			pyd_core_schema.no_info_plain_validator_function(validate_from_expr),
+			pyd_core_schema.is_instance_schema(AllowedSympyExprs),
 		])
 		return pyd_core_schema.json_or_python_schema(
-			json_schema=from_expr_schema,
-			python_schema=pyd_core_schema.union_schema(
-				[
-					# check if it's an instance first before doing any further work
-					pyd_core_schema.is_instance_schema(AllowedSympyExprs),
-					from_expr_schema,
-				]
-			),
+			json_schema=sympy_expr_schema,
+			python_schema=sympy_expr_schema,
 			serialization=pyd_core_schema.plain_serializer_function_ser_schema(
 				lambda instance: str(instance)
 			),

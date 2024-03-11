@@ -29,7 +29,7 @@ NODE_CAT_LABELS = {
 	
 	# Bounds/
 	NC.MAXWELLSIM_BOUNDS: "Bounds",
-	NC.MAXWELLSIM_BOUNDS_BOUNDFACES: "Bound Faces",
+	NC.MAXWELLSIM_BOUNDS_BOUNDCONDS: "Bound Conds",
 	
 	# Monitors/
 	NC.MAXWELLSIM_MONITORS: "Monitors",

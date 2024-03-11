@@ -8,9 +8,8 @@ SOCKET_COLORS = {
 	# Basic
 	ST.Any: (0.8, 0.8, 0.8, 1.0),  # Light Grey
 	ST.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
-	ST.Text: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
+	ST.String: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
-	ST.Secret: (0.0, 0.0, 0.0, 1.0),  # Black
 
 	# Number
 	ST.IntegerNumber: (0.5, 0.5, 1.0, 1.0),  # Light Blue
@@ -39,8 +38,8 @@ SOCKET_COLORS = {
 	ST.PhysicalSpeed: (0.8, 0.55, 0.35, 1.0),  # Medium Light Orange
 	ST.PhysicalAccelScalar: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
 	ST.PhysicalForceScalar: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
-	ST.PhysicalAccel3DVector: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
-	ST.PhysicalForce3DVector: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
+	ST.PhysicalAccel3D: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
+	ST.PhysicalForce3D: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
 	ST.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
 	ST.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
 
@@ -48,10 +47,8 @@ SOCKET_COLORS = {
 	ST.BlenderObject: (0.7, 0.5, 1.0, 1.0),  # Light Purple
 	ST.BlenderCollection: (0.6, 0.45, 0.9, 1.0),  # Medium Light Purple
 	ST.BlenderImage: (0.5, 0.4, 0.8, 1.0),  # Medium Purple
-	ST.BlenderVolume: (0.4, 0.35, 0.7, 1.0),  # Medium Dark Purple
 	ST.BlenderGeoNodes: (0.3, 0.3, 0.6, 1.0),  # Dark Purple
 	ST.BlenderText: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
-	ST.BlenderPreviewTarget: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
 
 	# Maxwell
 	ST.MaxwellSource: (1.0, 1.0, 0.5, 1.0),  # Light Yellow
@@ -59,8 +56,8 @@ SOCKET_COLORS = {
 	ST.MaxwellMedium: (0.8, 0.8, 0.4, 1.0),  # Medium Yellow
 	ST.MaxwellMediumNonLinearity: (0.7, 0.7, 0.35, 1.0),  # Medium Dark Yellow
 	ST.MaxwellStructure: (0.6, 0.6, 0.3, 1.0),  # Dark Yellow
-	ST.MaxwellBoundBox: (0.9, 0.8, 0.5, 1.0),  # Light Gold
-	ST.MaxwellBoundFace: (0.8, 0.7, 0.45, 1.0),  # Medium Light Gold
+	ST.MaxwellBoundConds: (0.9, 0.8, 0.5, 1.0),  # Light Gold
+	ST.MaxwellBoundCond: (0.8, 0.7, 0.45, 1.0),  # Medium Light Gold
 	ST.MaxwellMonitor: (0.7, 0.6, 0.4, 1.0),  # Medium Gold
 	ST.MaxwellFDTDSim: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
 	ST.MaxwellSimGrid: (0.5, 0.4, 0.3, 1.0),  # Dark Gold

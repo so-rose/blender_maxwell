@@ -1,33 +1,32 @@
 import bpy
 import sympy as sp
 
-from ... import contracts
+from ... import contracts as ct
 from ... import sockets
 from .. import base
 
-class PhysicalUnitSystemNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.UnitSystem
-	
-	bl_label = "Unit System Constant"
+class PhysicalUnitSystemNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.UnitSystem
+	bl_label = "Unit System"
 	
 	input_sockets = {
-		"unit_system": sockets.PhysicalUnitSystemSocketDef(
-			label="Unit System",
+		"Unit System": sockets.PhysicalUnitSystemSocketDef(
 			show_by_default=True,
 		),
 	}
 	output_sockets = {
-		"unit_system": sockets.PhysicalUnitSystemSocketDef(
-			label="Unit System",
-		),
+		"Unit System": sockets.PhysicalUnitSystemSocketDef(),
 	}
 	
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket("unit_system")
-	def compute_value(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		return self.compute_input("unit_system")
+	@base.computes_output_socket(
+		"Unit System",
+		input_sockets = {"Unit System"},
+	)
+	def compute_value(self, input_sockets) -> dict:
+		return input_sockets["Unit System"]
 
 
 
@@ -38,7 +37,7 @@ BL_REGISTER = [
 	PhysicalUnitSystemNode,
 ]
 BL_NODES = {
-	contracts.NodeType.UnitSystem: (
-		contracts.NodeCategory.MAXWELLSIM_INPUTS
+	ct.NodeType.UnitSystem: (
+		ct.NodeCategory.MAXWELLSIM_INPUTS
 	)
 }

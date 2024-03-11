@@ -1,7 +1,9 @@
+from . import base
+
 from . import basic
 AnySocketDef = basic.AnySocketDef
 BoolSocketDef = basic.BoolSocketDef
-TextSocketDef = basic.TextSocketDef
+StringSocketDef = basic.StringSocketDef
 FilePathSocketDef = basic.FilePathSocketDef
 
 from . import number
@@ -40,8 +42,8 @@ BlenderGeoNodesSocketDef = blender.BlenderGeoNodesSocketDef
 BlenderTextSocketDef = blender.BlenderTextSocketDef
 
 from . import maxwell
-MaxwellBoundBoxSocketDef = maxwell.MaxwellBoundBoxSocketDef
-MaxwellBoundFaceSocketDef = maxwell.MaxwellBoundFaceSocketDef
+MaxwellBoundCondSocketDef = maxwell.MaxwellBoundCondSocketDef
+MaxwellBoundCondsSocketDef = maxwell.MaxwellBoundCondsSocketDef
 MaxwellMediumSocketDef = maxwell.MaxwellMediumSocketDef
 MaxwellMediumNonLinearitySocketDef = maxwell.MaxwellMediumNonLinearitySocketDef
 MaxwellSourceSocketDef = maxwell.MaxwellSourceSocketDef
