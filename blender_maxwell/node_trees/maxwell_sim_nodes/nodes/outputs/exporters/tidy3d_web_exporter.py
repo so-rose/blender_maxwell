@@ -74,7 +74,7 @@ class Tidy3DTaskStatusModalOperator(bpy.types.Operator):
 		node = context.node
 		wm = context.window_manager
 		
-		self._timer = wm.event_timer_add(0.25, window=context.window)
+		self._timer = wm.event_timer_add(2.0, window=context.window)
 		self._task_id = node.uploaded_task_id
 		self._node = node
 		self._status = task_status(self._task_id)
@@ -335,7 +335,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 				"queued": (0.0, "Queued..."),
 				"preprocessing": (0.05, "Pre-processing..."),
 				"running": (0.2, "Running..."),
-				"postprocessing": (0.85, "Post-processing..."),
+				"postprocess": (0.85, "Post-processing..."),
 				"success": (1.0, f"Success (={billed_task_cost(self.uploaded_task_id)} credits)"),
 				"error": (1.0, f"Error (={billed_task_cost(self.uploaded_task_id)} credits)"),
 			}[task_status(self.uploaded_task_id)]

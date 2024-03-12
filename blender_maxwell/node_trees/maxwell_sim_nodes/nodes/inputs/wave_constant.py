@@ -38,10 +38,10 @@ class WaveConstantNode(base.MaxwellSimNode):
 		kind=ct.DataFlowKind.Value,
 		input_sockets={"WL", "Freq"},
 	)
-	def compute_vac_wl(self, input_socket_values: dict) -> sp.Expr:
-		if (vac_wl := input_socket_values["WL"]):
+	def compute_vac_wl(self, input_sockets: dict) -> sp.Expr:
+		if (vac_wl := input_sockets["WL"]):
 			return vac_wl
-		elif (freq := input_socket_values["Freq"]):
+		elif (freq := input_sockets["Freq"]):
 			return spu.convert_to(
 				VAC_SPEED_OF_LIGHT / freq,
 				spu.meter,

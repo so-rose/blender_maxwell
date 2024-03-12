@@ -20,10 +20,12 @@ class SocketType(BlenderTypeEnum):
 	ComplexNumber = enum.auto()
 	
 	# Vector
+	Integer2DVector = enum.auto()
 	Real2DVector = enum.auto()
 	Real2DVectorDir = enum.auto()
 	Complex2DVector = enum.auto()
 	
+	Integer3DVector = enum.auto()
 	Real3DVector = enum.auto()
 	Real3DVectorDir = enum.auto()
 	Complex3DVector = enum.auto()

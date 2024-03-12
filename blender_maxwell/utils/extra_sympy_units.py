@@ -23,6 +23,13 @@ def get_units(expression: sp.Expr):
 	}
 
 ####################
+# - Time
+####################
+femtosecond = fs = spu.Quantity("femtosecond", abbrev="fs")
+femtosecond.set_global_relative_scale_factor(spu.femto, spu.second)
+
+
+####################
 # - Force
 ####################
 # Newton

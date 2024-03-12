@@ -45,11 +45,14 @@ class FDTDSimNode(base.MaxwellSimNode):
 			sources = [sources]
 		if not isinstance(structures, list):
 			structures = [structures]
+		if not isinstance(monitors, list):
+			monitors = [monitors]
 		
 		return td.Simulation(
 			**sim_domain,  ## run_time=, size=, grid=, medium=
 			structures=structures,
 			sources=sources,
+			monitors=monitors,
 			boundary_spec=bounds,
 		)
 

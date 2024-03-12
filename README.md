@@ -38,6 +38,10 @@
 - [ ] Pop-up multiline string print as alternative to console print.
 - [x] Toggleable auto-plot, auto-3D-preview, auto-value-view, (?)auto-text-view.
 
+[x] Web Export / Tidy3D Web Exporter
+- [ ] We need better ways of doing checks before uploading, like for monitor data size. Maybe a SimInfo node?
+- [ ] We need to be able to "delete and re-upload" (or maybe just delete from the interface).
+
 [x] File Export / JSON File Export
 [ ] File Import / Tidy3D File Export
 - [ ] Implement HDF-based export of Tidy3D-exported object (which includes ex. mesh data and such)
@@ -47,6 +51,9 @@
 - [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
 
 ## Viz
+[ ] Sim Info
+- [ ] Implement estimation of monitor storage
+- [ ] Implement cost estimation
 [ ] Monitor Data Viz
 - [ ] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
 - [ ] Project field values onto a plane object (managed)
@@ -61,7 +68,8 @@
 [x] Point Dipole Source
 - [ ] Consider a "real" mesh - the empty kind of gets stuck inside of the sim domain.
 [-] Plane Wave Source
-- [ ] Implement an oriented vector input with 3D preview.
+- [ ] **IMPORTANT**: Fix the math so that an actually valid construction emerges!!
+- [x] Implement an oriented vector input with 3D preview.
 [ ] Uniform Current Source
 [ ] TFSF Source
 

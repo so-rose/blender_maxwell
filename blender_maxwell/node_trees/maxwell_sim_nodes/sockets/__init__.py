@@ -15,6 +15,7 @@ ComplexNumberSocketDef = number.ComplexNumberSocketDef
 from . import vector
 Real2DVectorSocketDef = vector.Real2DVectorSocketDef
 Complex2DVectorSocketDef = vector.Complex2DVectorSocketDef
+Integer3DVectorSocketDef = vector.Integer3DVectorSocketDef
 Real3DVectorSocketDef = vector.Real3DVectorSocketDef
 Complex3DVectorSocketDef = vector.Complex3DVectorSocketDef
 

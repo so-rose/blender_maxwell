@@ -456,7 +456,9 @@ class MaxwellSimNode(bpy.types.Node):
 		# Draw Name
 		col = layout.column(align=False)
 		if self.use_sim_node_name:
-			col.prop(self, "sim_node_name", text="")
+			row = col.row(align=True)
+			row.label(text="", icon="EVENT_N")
+			row.prop(self, "sim_node_name", text="")
 		
 		# Draw Name
 		self.draw_props(context, col)
@@ -555,13 +557,13 @@ class MaxwellSimNode(bpy.types.Node):
 			for method in self._on_value_changed_methods:
 				if (
 					socket_name
-					and socket_name == method._extra_data.get("changed_socket")
+					and socket_name in method._extra_data.get("changed_sockets")
 				) or (
 					prop_name
-					and prop_name == method._extra_data.get("changed_prop")
+					and prop_name in method._extra_data.get("changed_props")
 				) or (
 					socket_name
-					and method._extra_data.get("changed_loose_input")
+					and method._extra_data["changed_loose_input"]
 					and socket_name in self.loose_input_sockets
 				):
 					method(self)
@@ -833,8 +835,8 @@ def computes_output_socket(
 # - Decorator: On Show Preview
 ####################
 def on_value_changed(
-	socket_name: ct.SocketName | None = None,
-	prop_name: str | None = None,
+	socket_name: set[ct.SocketName] | ct.SocketName | None = None,
+	prop_name: set[str] | str | None = None,
 	any_loose_input_socket: bool = False,
 	
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
@@ -863,8 +865,12 @@ def on_value_changed(
 	return chain_event_decorator(
 		callback_type="on_value_changed",
 		extra_data={
-			"changed_socket": socket_name,
-			"changed_prop": prop_name,
+			"changed_sockets": (
+				socket_name if isinstance(socket_name, set) else {socket_name}
+			),
+			"changed_props": (
+				prop_name if isinstance(prop_name, set) else {prop_name}
+			),
 			"changed_loose_input": any_loose_input_socket,
 		},
 		kind=kind,

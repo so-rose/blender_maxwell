@@ -18,8 +18,10 @@ SOCKET_COLORS = {
 	ST.ComplexNumber: (0.2, 0.2, 0.7, 1.0),  # Dark Blue
 
 	# Vector
+	ST.Integer2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
 	ST.Real2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
 	ST.Complex2DVector: (0.4, 0.9, 0.4, 1.0),  # Medium Light Green
+	ST.Integer3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
 	ST.Real3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
 	ST.Complex3DVector: (0.2, 0.7, 0.2, 1.0),  # Dark Green
 	

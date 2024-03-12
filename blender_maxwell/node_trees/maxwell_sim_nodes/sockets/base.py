@@ -24,6 +24,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Options
 	#link_limit: int = 0
 	use_units: bool = False
+	#list_like: bool = False
 	
 	# Computed
 	bl_idname: str

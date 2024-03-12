@@ -14,8 +14,10 @@ SOCKET_SHAPES = {
 	ST.ComplexNumber: "CIRCLE_DOT",
 	
 	# Vector
+	ST.Integer2DVector: "SQUARE_DOT",
 	ST.Real2DVector: "SQUARE_DOT",
 	ST.Complex2DVector: "DIAMOND_DOT",
+	ST.Integer3DVector: "SQUARE_DOT",
 	ST.Real3DVector: "SQUARE_DOT",
 	ST.Complex3DVector: "DIAMOND_DOT",
 	

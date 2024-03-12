@@ -1,5 +1,5 @@
 import sympy.physics.units as spu
-from ....utils import extra_sympy_units as spuex
+from ....utils import extra_sympy_units as spux
 
 from .socket_types import SocketType as ST
 
@@ -7,6 +7,7 @@ SOCKET_UNITS = {
 	ST.PhysicalTime: {
 		"default": "PS",
 		"values": {
+			"FS": spux.femtosecond,
 			"PS": spu.picosecond,
 			"NS": spu.nanosecond,
 			"MS": spu.microsecond,
@@ -188,9 +189,9 @@ SOCKET_UNITS = {
 		"default": "UNEWT",
 		"values": {
 			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,
-			"NNEWT": spuex.nanonewton,
-			"UNEWT": spuex.micronewton,
-			"MNEWT": spuex.millinewton,
+			"NNEWT": spux.nanonewton,
+			"UNEWT": spux.micronewton,
+			"MNEWT": spux.millinewton,
 			"NEWT": spu.newton,
 		},
 	},
@@ -210,9 +211,9 @@ SOCKET_UNITS = {
 		"default": "UNEWT",
 		"values": {
 			"KG_M_S_SQ": spu.kg * spu.m/spu.second**2,
-			"NNEWT": spuex.nanonewton,
-			"UNEWT": spuex.micronewton,
-			"MNEWT": spuex.millinewton,
+			"NNEWT": spux.nanonewton,
+			"UNEWT": spux.micronewton,
+			"MNEWT": spux.millinewton,
 			"NEWT": spu.newton,
 		},
 	},
@@ -221,12 +222,12 @@ SOCKET_UNITS = {
 		"default": "THZ",
 		"values": {
 			"HZ": spu.hertz,
-			"KHZ": spuex.kilohertz,
-			"MHZ": spuex.megahertz,
-			"GHZ": spuex.gigahertz,
-			"THZ": spuex.terahertz,
-			"PHZ": spuex.petahertz,
-			"EHZ": spuex.exahertz,
+			"KHZ": spux.kilohertz,
+			"MHZ": spux.megahertz,
+			"GHZ": spux.gigahertz,
+			"THZ": spux.terahertz,
+			"PHZ": spux.petahertz,
+			"EHZ": spux.exahertz,
 		},
 	},
 	ST.PhysicalPol: {
