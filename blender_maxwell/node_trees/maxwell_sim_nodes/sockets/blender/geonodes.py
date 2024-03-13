@@ -49,18 +49,18 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 	####################
 	# - UI
 	####################
-	def draw_label_row(self, label_col_row, text):
-		label_col_row.label(text=text)
-		if not self.raw_value: return
-		
-		op = label_col_row.operator(
-			BlenderMaxwellResetGeoNodesSocket.bl_idname,
-			text="",
-			icon="FILE_REFRESH",
-		)
-		op.socket_name = self.name
-		op.node_name = self.node.name
-		op.node_tree_name = self.node.id_data.name
+	#def draw_label_row(self, label_col_row, text):
+	#	label_col_row.label(text=text)
+	#	if not self.raw_value: return
+	#	
+	#	op = label_col_row.operator(
+	#		BlenderMaxwellResetGeoNodesSocket.bl_idname,
+	#		text="",
+	#		icon="FILE_REFRESH",
+	#	)
+	#	op.socket_name = self.name
+	#	op.node_name = self.node.name
+	#	op.node_tree_name = self.node.id_data.name
 	
 	####################
 	# - UI

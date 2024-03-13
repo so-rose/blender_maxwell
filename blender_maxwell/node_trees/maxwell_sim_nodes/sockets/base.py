@@ -19,12 +19,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"CIRCLE", "SQUARE", "DIAMOND", "CIRCLE_DOT", "SQUARE_DOT",
 		"DIAMOND_DOT",
 	]
+	## We use the following conventions for shapes:
+	## - CIRCLE: Single Value.
+	## - SQUARE: Container of Value.
+	## - DIAMOND: Pointer Value.
+	## - +DOT: Uses Units
 	socket_color: tuple
 	
 	# Options
 	#link_limit: int = 0
 	use_units: bool = False
-	#list_like: bool = False
+	use_prelock: bool = False
 	
 	# Computed
 	bl_idname: str
@@ -52,8 +57,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		cls.socket_color = ct.SOCKET_COLORS[cls.socket_type]
 		cls.socket_shape = ct.SOCKET_SHAPES[cls.socket_type]
 		
+		# Setup List
+		cls.__annotations__["is_list"] = bpy.props.BoolProperty(
+			name="Is List",
+			description="Whether or not a particular socket is a list type socket",
+			default=False,
+			update=lambda self, context: self.sync_is_list(context)
+		)
+		
 		# Configure Use of Units
 		if cls.use_units:
+			# Set Shape :)
+			cls.socket_shape += "_DOT"
+			
 			if not (socket_units := ct.SOCKET_UNITS.get(cls.socket_type)):
 				msg = "Tried to `use_units` on {cls.bl_idname} socket, but `SocketType` has no units defined in `contracts.SOCKET_UNITS`"
 				raise RuntimeError(msg)
@@ -123,6 +139,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Action Chain: Event Handlers
 	####################
+	def sync_is_list(self, context: bpy.types.Context):
+		"""Called when the "is_list_ property has been updated.
+		"""
+		if self.is_list:
+			if self.use_units:
+				self.display_shape = "SQUARE_DOT"
+			else:
+				self.display_shape = "SQUARE"
+		
+		self.trigger_action("value_changed")
+	
 	def sync_prop(self, prop_name: str, context: bpy.types.Context):
 		"""Called when a property has been updated.
 		"""
@@ -166,9 +193,15 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	@property
 	def value(self) -> typ.Any:
 		raise NotImplementedError
-	
 	@value.setter
 	def value(self, value: typ.Any) -> None:
+		raise NotImplementedError
+	
+	@property
+	def value_list(self) -> typ.Any:
+		return [self.value]
+	@value_list.setter
+	def value_list(self, value: typ.Any) -> None:
 		raise NotImplementedError
 	
 	def value_as_unit_system(
@@ -187,9 +220,15 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	@property
 	def lazy_value(self) -> None:
 		raise NotImplementedError
-	
 	@lazy_value.setter
 	def lazy_value(self, lazy_value: typ.Any) -> None:
+		raise NotImplementedError
+	
+	@property
+	def lazy_value_list(self) -> typ.Any:
+		return [self.lazy_value]
+	@lazy_value_list.setter
+	def lazy_value_list(self, value: typ.Any) -> None:
 		raise NotImplementedError
 	
 	@property
@@ -205,11 +244,15 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		**NOTE**: Low-level method. Use `compute_data` instead.
 		"""
 		if kind == ct.DataFlowKind.Value:
-			return self.value
-		if kind == ct.DataFlowKind.LazyValue:
+			if self.is_list: return self.value_list
+			else: return self.value
+		elif kind == ct.DataFlowKind.LazyValue:
+			if self.is_list: return self.lazy_value_list
+			else: return self.lazy_value
 			return self.lazy_value
-		if kind == ct.DataFlowKind.Capabilities:
+		elif kind == ct.DataFlowKind.Capabilities:
 			return self.capabilities
+		
 		return None
 	
 	def compute_data(
@@ -222,8 +265,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			- If output socket, ask node for data.
 		"""
 		# Compute Output Socket
+		## List-like sockets guarantee that a list of a thing is passed.
 		if self.is_output:
-			return self.node.compute_output(self.name, kind=kind)
+			res = self.node.compute_output(self.name, kind=kind)
+			if self.is_list and not isinstance(res, list): return [res]
+			return res
 		
 		# Compute Input Socket
 		## Unlinked: Retrieve Socket Value
@@ -334,12 +380,20 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	) -> None:
 		"""Called by Blender to draw the socket UI.
 		"""
-		if self.locked: layout.enabled = False
 		
 		if self.is_output:
 			self.draw_output(context, layout, node, text)
 		else:
 			self.draw_input(context, layout, node, text)
+	
+	def draw_prelock(
+		self,
+		context: bpy.types.Context,
+		col: bpy.types.UILayout,
+		node: bpy.types.Node,
+		text: str,
+	) -> None:
+		pass
 	
 	def draw_input(
 		self,
@@ -350,18 +404,20 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	) -> None:
 		"""Draws the socket UI, when the socket is an input socket.
 		"""
-		# Draw Linked Input: Label Row
-		if self.is_linked:
-			layout.label(text=text)
-			return
-		
-		# Parent Column
 		col = layout.column(align=False)
 		
-		# Draw Label Row
-		row = col.row(align=True)
+		# Label Row
+		row = col.row(align=False)
+		if self.locked: row.enabled = False
+		
+		## Linked Label
+		if self.is_linked:
+			row.label(text=text)
+			return
+		
+		## User Label Row (incl. Units)
 		if self.use_units:
-			split = row.split(factor=0.65, align=True)
+			split = row.split(factor=0.6, align=True)
 			
 			_row = split.row(align=True)
 			self.draw_label_row(_row, text)
@@ -371,8 +427,25 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		else:
 			self.draw_label_row(row, text)
 		
-		# Draw Value Row(s)
-		self.draw_value(col)
+		# Prelock Row
+		row = col.row(align=False)
+		if self.use_prelock:
+			_col = row.column(align=False)
+			_col.enabled = True
+			self.draw_prelock(context, _col, node, text)
+			
+			if self.locked:
+				row = col.row(align=False)
+				row.enabled = False
+		else:
+			if self.locked: row.enabled = False
+		
+		# Value Column(s)
+		col = row.column(align=True)
+		if self.is_list:
+			self.draw_value_list(col)
+		else:
+			self.draw_value(col)
 	
 	def draw_output(
 		self,
@@ -401,6 +474,13 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		"""Called to draw the value column in unlinked input sockets.
+		
+		Can be overridden.
+		"""
+		pass
+	
+	def draw_value_list(self, col: bpy.types.UILayout) -> None:
+		"""Called to draw the value list column in unlinked input sockets.
 		
 		Can be overridden.
 		"""

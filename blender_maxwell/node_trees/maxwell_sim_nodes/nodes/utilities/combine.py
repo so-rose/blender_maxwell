@@ -2,103 +2,167 @@ import sympy as sp
 import sympy.physics.units as spu
 import scipy as sc
 
-from ... import contracts
+import bpy
+
+from ... import contracts as ct
 from ... import sockets
 from .. import base
 
+MAX_AMOUNT = 20
+
 class CombineNode(base.MaxwellSimNode):
-	node_type = contracts.NodeType.Combine
+	node_type = ct.NodeType.Combine
 	bl_label = "Combine"
 	#bl_icon = ...
 	
 	####################
 	# - Sockets
 	####################
-	input_sockets = {}
 	input_socket_sets = {
-		"real_3d_vector": {
-			f"x_{i}": sockets.RealNumberSocketDef(
-				label=f"x_{i}"
-			)
+		"Maxwell Sources": {},
+		"Maxwell Structures": {},
+		"Maxwell Monitors": {},
+		"Real 3D Vector": {
+			f"x_{i}": sockets.RealNumberSocketDef()
 			for i in range(3)
 		},
-		"point_3d": {
-			axis: sockets.PhysicalLengthSocketDef(
-				label=axis
-			)
-			for i, axis in zip(
-				range(3),
-				["x", "y", "z"]
-			)
-		},
-		"size_3d": {
-			axis_key: sockets.PhysicalLengthSocketDef(
-				label=axis_label
-			)
-			for i, axis_key, axis_label in zip(
-				range(3),
-				["x_size", "y_size", "z_size"],
-				["X Size", "Y Size", "Z Size"],
-			)
-		},
+		#"Point 3D": {
+		#	axis: sockets.PhysicalLengthSocketDef()
+		#	for i, axis in zip(
+		#		range(3),
+		#		["x", "y", "z"]
+		#	)
+		#},
+		#"Size 3D": {
+		#	axis_key: sockets.PhysicalLengthSocketDef()
+		#	for i, axis_key, axis_label in zip(
+		#		range(3),
+		#		["x_size", "y_size", "z_size"],
+		#		["X Size", "Y Size", "Z Size"],
+		#	)
+		#},
 	}
-	output_sockets = {}
 	output_socket_sets = {
-		"real_3d_vector": {
-			"real_3d_vector": sockets.Real3DVectorSocketDef(
-				label="Real 3D Vector",
+		"Maxwell Sources": {
+			"Sources": sockets.MaxwellSourceSocketDef(
+				is_list=True,
 			),
 		},
-		"point_3d": {
-			"point_3d": sockets.PhysicalPoint3DSocketDef(
-				label="3D Point",
+		"Maxwell Structures": {
+			"Structures": sockets.MaxwellStructureSocketDef(
+				is_list=True,
 			),
 		},
-		"size_3d": {
-			"size_3d": sockets.PhysicalSize3DSocketDef(
-				label="3D Size",
+		"Maxwell Monitors": {
+			"Monitors": sockets.MaxwellMonitorSocketDef(
+				is_list=True,
 			),
 		},
+		"Real 3D Vector": {
+			"Real 3D Vector": sockets.Real3DVectorSocketDef(),
+		},
+		#"Point 3D": {
+		#	"3D Point": sockets.PhysicalPoint3DSocketDef(),
+		#},
+		#"Size 3D": {
+		#	"3D Size": sockets.PhysicalSize3DSocketDef(),
+		#},
 	}
+	
+	amount: bpy.props.IntProperty(
+		name="# Objects to Combine",
+		description="Amount of Objects to Combine",
+		default=1,
+		min=1,
+		max=MAX_AMOUNT,
+		update=lambda self, context: self.sync_prop("amount", context)
+	)
+	
+	####################
+	# - Draw
+	####################
+	def draw_props(self, context, layout):
+		layout.prop(self, "amount", text="#")
 	
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket("real_3d_vector")
-	def compute_real_3d_vector(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		x1, x2, x3 = [
-			self.compute_input(f"x_{i}")
-			for i in range(3)
-		]
-		
-		return (x1, x2, x3)
+	@base.computes_output_socket(
+		"Real 3D Vector",
+		input_sockets={"x_0", "x_1", "x_2"}
+	)
+	def compute_real_3d_vector(self, input_sockets) -> sp.Expr:
+		return sp.Matrix([input_sockets[f"x_{i}"] for i in range(3)])
 	
-	@base.computes_output_socket("point_3d")
-	def compute_point_3d(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		x, y, z = [
-			self.compute_input(axis)
-			#spu.convert_to(
-			#	self.compute_input(axis),
-			#	spu.meter,
-			#) / spu.meter
-			for axis in ["x", "y", "z"]
+	@base.computes_output_socket(
+		"Sources",
+		input_sockets={f"Source #{i}" for i in range(MAX_AMOUNT)},
+		props={"amount"},
+	)
+	def compute_sources(self, input_sockets, props) -> sp.Expr:
+		return [
+			input_sockets[f"Source #{i}"]
+			for i in range(props["amount"])
 		]
-		
-		return sp.Matrix([x, y, z])# * spu.meter
 	
-	@base.computes_output_socket("size_3d")
-	def compute_size_3d(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		x_size, y_size, z_size = [
-			self.compute_input(axis)
-			#spu.convert_to(
-			#	self.compute_input(axis),
-			#	spu.meter,
-			#) / spu.meter
-			for axis in ["x_size", "y_size", "z_size"]
+	@base.computes_output_socket(
+		"Structures",
+		input_sockets={f"Structure #{i}" for i in range(MAX_AMOUNT)},
+		props={"amount"},
+	)
+	def compute_structures(self, input_sockets, props) -> sp.Expr:
+		return [
+			input_sockets[f"Structure #{i}"]
+			for i in range(props["amount"])
 		]
-		
-		return sp.Matrix([x_size, y_size, z_size])# * spu.meter
+	
+	@base.computes_output_socket(
+		"Monitors",
+		input_sockets={f"Monitor #{i}" for i in range(MAX_AMOUNT)},
+		props={"amount"},
+	)
+	def compute_monitors(self, input_sockets, props) -> sp.Expr:
+		return [
+			input_sockets[f"Monitor #{i}"]
+			for i in range(props["amount"])
+		]
+	
+	
+	####################
+	# - Input Socket Compilation
+	####################
+	@base.on_value_changed(
+		prop_name="active_socket_set",
+		props={"active_socket_set", "amount"},
+	)
+	def on_value_changed__active_socket_set(self, props):
+		if props["active_socket_set"] == "Maxwell Sources":
+			self.loose_input_sockets = {
+				f"Source #{i}": sockets.MaxwellSourceSocketDef()
+				for i in range(props["amount"])
+			}
+		elif props["active_socket_set"] == "Maxwell Structures":
+			self.loose_input_sockets = {
+				f"Structure #{i}": sockets.MaxwellStructureSocketDef()
+				for i in range(props["amount"])
+			}
+		elif props["active_socket_set"] == "Maxwell Monitors":
+			self.loose_input_sockets = {
+				f"Monitor #{i}": sockets.MaxwellMonitorSocketDef()
+				for i in range(props["amount"])
+			}
+		else:
+			self.loose_input_sockets = {}
+	
+	@base.on_value_changed(
+		prop_name="amount",
+	)
+	def on_value_changed__amount(self):
+		self.on_value_changed__active_socket_set()
 
+	@base.on_init()
+	def on_init(self):
+		self.on_value_changed__active_socket_set()
 
 
 ####################
@@ -108,7 +172,7 @@ BL_REGISTER = [
 	CombineNode,
 ]
 BL_NODES = {
-	contracts.NodeType.Combine: (
-		contracts.NodeCategory.MAXWELLSIM_UTILITIES
+	ct.NodeType.Combine: (
+		ct.NodeCategory.MAXWELLSIM_UTILITIES
 	)
 }

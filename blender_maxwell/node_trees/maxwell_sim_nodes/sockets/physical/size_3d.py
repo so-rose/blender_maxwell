@@ -49,9 +49,11 @@ class PhysicalSize3DBLSocket(base.MaxwellSimSocket):
 class PhysicalSize3DSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalSize3D
 	
+	default_value: SympyExpr = sp.Matrix([1, 1, 1]) * spu.um
 	default_unit: SympyExpr | None = None
 	
 	def init(self, bl_socket: PhysicalSize3DBLSocket) -> None:
+		bl_socket.value = self.default_value
 		if self.default_unit:
 			bl_socket.unit = self.default_unit
 

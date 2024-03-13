@@ -145,3 +145,8 @@ class NodeType(BlenderTypeEnum):
 	
 	## Utilities / Operations
 	ArrayOperation = enum.auto()
+	
+	
+	
+	# Viz
+	FDTDSimDataViz = enum.auto()

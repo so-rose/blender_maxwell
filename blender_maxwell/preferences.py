@@ -3,7 +3,7 @@ import bpy
 from .operators import types as operators_types
 
 class BlenderMaxwellAddonPreferences(bpy.types.AddonPreferences):
-	bl_idname = "blender_maxwell_preferences"
+	bl_idname = "blender_maxwell"
 	
 	def draw(self, context):
 		layout = self.layout

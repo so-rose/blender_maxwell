@@ -17,8 +17,10 @@ class MaxwellSourceBLSocket(base.MaxwellSimSocket):
 class MaxwellSourceSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSource
 	
+	is_list: bool = False
+	
 	def init(self, bl_socket: MaxwellSourceBLSocket) -> None:
-		pass
+		bl_socket.is_list = self.is_list
 
 ####################
 # - Blender Registration

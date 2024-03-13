@@ -53,6 +53,7 @@ class SocketType(BlenderTypeEnum):
 	MaxwellMonitor = enum.auto()
 
 	MaxwellFDTDSim = enum.auto()
+	MaxwellFDTDSimData = enum.auto()
 	MaxwellSimDomain = enum.auto()
 	MaxwellSimGrid = enum.auto()
 	MaxwellSimGridAxis = enum.auto()

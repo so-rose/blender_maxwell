@@ -32,7 +32,7 @@ class SimDomainNode(base.MaxwellSimNode):
 	managed_obj_defs = {
 		"domain_box": ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix="domain_box_",
+			name_prefix="",
 		)
 	}
 	

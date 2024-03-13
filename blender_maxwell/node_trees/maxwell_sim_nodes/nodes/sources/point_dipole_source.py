@@ -31,7 +31,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	managed_obj_defs = {
 		"sphere_empty": ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix="point_dipole_",
+			name_prefix="",
 		)
 	}
 	
@@ -47,14 +47,20 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			("EZ", "Ez", "Electric field in z-dir"),
 		],
 		default="EX",
-		update=(lambda self, context: self.sync_prop("pol_axis")),
+		update=(lambda self, context: self.sync_prop("pol_axis", context)),
 	)
 	
 	####################
 	# - UI
 	####################
 	def draw_props(self, context, layout):
-		layout.prop(self, "pol_axis", text="Pol Axis")
+		split = layout.split(factor=0.6)
+		
+		col = split.column()
+		col.label(text="Pol Axis")
+		
+		col = split.column()
+		col.prop(self, "pol_axis", text="")
 	
 	####################
 	# - Output Socket Computation
@@ -117,6 +123,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			"EMPTY",
 			empty_display_type="SPHERE",
 		)
+		managed_objs["sphere_empty"].bl_object("EMPTY").empty_display_size = 0.2
 
 
 

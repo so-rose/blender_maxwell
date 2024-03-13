@@ -51,6 +51,9 @@ class NodeCategory(BlenderTypeEnum):
 	MAXWELLSIM_UTILITIES_CONVERTERS = enum.auto()
 	MAXWELLSIM_UTILITIES_OPERATIONS = enum.auto()
 	
+	# Viz/
+	MAXWELLSIM_VIZ = enum.auto()
+	
 	@classmethod
 	def get_tree(cls):
 		## TODO: Refactor

@@ -35,7 +35,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	managed_obj_defs = {
 		"geometry": ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix="geonodes_",
+			name_prefix="",
 		)
 	}
 	

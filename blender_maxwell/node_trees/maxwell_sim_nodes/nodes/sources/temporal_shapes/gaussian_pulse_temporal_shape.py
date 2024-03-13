@@ -15,7 +15,6 @@ from ... import base
 
 class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.GaussianPulseTemporalShape
-	
 	bl_label = "Gaussian Pulse Temporal Shape"
 	#bl_icon = ...
 	

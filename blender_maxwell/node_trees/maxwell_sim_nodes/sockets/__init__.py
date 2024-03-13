@@ -52,6 +52,7 @@ MaxwellTemporalShapeSocketDef = maxwell.MaxwellTemporalShapeSocketDef
 MaxwellStructureSocketDef = maxwell.MaxwellStructureSocketDef
 MaxwellMonitorSocketDef = maxwell.MaxwellMonitorSocketDef
 MaxwellFDTDSimSocketDef = maxwell.MaxwellFDTDSimSocketDef
+MaxwellFDTDSimDataSocketDef = maxwell.MaxwellFDTDSimDataSocketDef
 MaxwellSimGridSocketDef = maxwell.MaxwellSimGridSocketDef
 MaxwellSimGridAxisSocketDef = maxwell.MaxwellSimGridAxisSocketDef
 MaxwellSimDomainSocketDef = maxwell.MaxwellSimDomainSocketDef

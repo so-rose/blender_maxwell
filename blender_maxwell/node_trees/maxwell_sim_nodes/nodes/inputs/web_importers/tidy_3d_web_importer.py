@@ -8,17 +8,14 @@ import bpy
 import sympy as sp
 import pydantic as pyd
 import tidy3d as td
-import tidy3d.web as _td_web
+import tidy3d.web as td_web
 
-from ......utils.auth_td_web import g_td_web, is_td_web_authed
+from ......utils import tdcloud
 from .... import contracts as ct
 from .... import sockets
 from ... import base
 
-@functools.cache
-def task_status(task_id: str):
-	task = _td_web.api.webapi.get_info(task_id)
-	return task.status
+CACHE = {}
 
 ####################
 # - Node
@@ -29,42 +26,78 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 	
 	input_sockets = {
 		"Cloud Task": sockets.Tidy3DCloudTaskSocketDef(
-			task_exists=True,
+			should_exist=True,
 		),
+		"Cache Path": sockets.FilePathSocketDef(
+			default_path=Path("loaded_simulation.hdf5")
+		)
 	}
-	output_sockets = {}
-	
-	####################
-	# - UI
-	####################
-	def draw_info(self, context, layout): pass
 	
 	####################
 	# - Output Methods
 	####################
 	@base.computes_output_socket(
+		"FDTD Sim Data",
+		input_sockets={"Cloud Task", "Cache Path"},
+	)
+	def compute_fdtd_sim_data(self, input_sockets: dict) -> str:
+		global CACHE
+		if not CACHE.get(self.instance_id):
+			CACHE[self.instance_id] = {"fdtd_sim_data": None}
+		
+		if CACHE[self.instance_id]["fdtd_sim_data"] is not None:
+			return CACHE[self.instance_id]["fdtd_sim_data"]
+		
+		if not (
+			(cloud_task := input_sockets["Cloud Task"]) is not None
+			and isinstance(cloud_task, tdcloud.CloudTask)
+			and cloud_task.status == "success"
+		):
+			msg ="Won't attempt getting SimData" 
+			raise RuntimeError(msg)
+		
+		# Load the Simulation
+		cache_path = input_sockets["Cache Path"]
+		if cache_path is None: 
+			print("CACHE PATH IS NONE WHY")
+			return ## I guess?
+		if cache_path.is_file():
+			sim_data = td.SimulationData.from_file(str(cache_path))
+		
+		else:
+			sim_data = td_web.api.webapi.load(
+				cloud_task.task_id,
+				path=str(cache_path),
+			)
+		
+		CACHE[self.instance_id]["fdtd_sim_data"] = sim_data
+		return sim_data
+	
+	@base.computes_output_socket(
 		"FDTD Sim",
 		input_sockets={"Cloud Task"},
 	)
-	def compute_cloud_task(self, input_sockets: dict) -> str:
-		if not isinstance(task_id := input_sockets["Cloud Task"], str):
-			msg ="Input task does not exist" 
-			raise ValueError(msg)
+	def compute_fdtd_sim(self, input_sockets: dict) -> str:
+		if not isinstance(
+			cloud_task := input_sockets["Cloud Task"],
+			tdcloud.CloudTask
+		):
+			msg ="Input cloud task does not exist" 
+			raise RuntimeError(msg)
 		
 		# Load the Simulation
-		td_web = g_td_web(None)  ## Presume already auth'ed
 		with tempfile.NamedTemporaryFile(delete=False) as f:
 			_path_tmp = Path(f.name)
 			_path_tmp.rename(f.name + ".json")
 			path_tmp = Path(f.name + ".json")
 		
-		cloud_sim = _td_web.api.webapi.load_simulation(
-			task_id,
+		sim = td_web.api.webapi.load_simulation(
+			cloud_task.task_id,
 			path=str(path_tmp),
-		)
+		)  ## TODO: Don't use td_web directly. Only through tdcloud
 		Path(path_tmp).unlink()
 		
-		return cloud_sim
+		return sim
 	
 	####################
 	# - Update
@@ -74,22 +107,22 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 		input_sockets={"Cloud Task"}
 	)
 	def on_value_changed__cloud_task(self, input_sockets: dict):
-		task_status.cache_clear()
 		if (
-			(task_id := input_sockets["Cloud Task"]) is None
-			or isinstance(task_id, dict)
-			or task_status(task_id) != "success"
-			or not is_td_web_authed
+			(cloud_task := input_sockets["Cloud Task"]) is not None
+			and isinstance(cloud_task, tdcloud.CloudTask)
+			and cloud_task.status == "success"
 		):
-			if self.loose_output_sockets: self.loose_output_sockets = {}
+			self.loose_output_sockets = {
+				"FDTD Sim Data": sockets.MaxwellFDTDSimDataSocketDef(),
+				"FDTD Sim": sockets.MaxwellFDTDSimSocketDef(),
+			}
 			return
-		
-		td_web = g_td_web(None)  ## Presume already auth'ed
-		
-		self.loose_output_sockets = {
-			"FDTD Sim": sockets.MaxwellFDTDSimSocketDef(),
-			"FDTD Sim Data": sockets.AnySocketDef(),
-		}
+			
+		self.loose_output_sockets = {}
+	
+	@base.on_init()
+	def on_init(self):
+		self.on_value_changed__cloud_task()
 
 
 ####################

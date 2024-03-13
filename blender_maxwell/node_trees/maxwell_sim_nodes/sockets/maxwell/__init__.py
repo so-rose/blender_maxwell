@@ -20,10 +20,12 @@ from . import monitor
 MaxwellMonitorSocketDef = monitor.MaxwellMonitorSocketDef
 
 from . import fdtd_sim
+from . import fdtd_sim_data
 from . import sim_grid
 from . import sim_grid_axis
 from . import sim_domain
 MaxwellFDTDSimSocketDef = fdtd_sim.MaxwellFDTDSimSocketDef
+MaxwellFDTDSimDataSocketDef = fdtd_sim_data.MaxwellFDTDSimDataSocketDef
 MaxwellSimGridSocketDef = sim_grid.MaxwellSimGridSocketDef
 MaxwellSimGridAxisSocketDef = sim_grid_axis.MaxwellSimGridAxisSocketDef
 MaxwellSimDomainSocketDef = sim_domain.MaxwellSimDomainSocketDef
@@ -39,6 +41,7 @@ BL_REGISTER = [
 	*structure.BL_REGISTER,
 	*monitor.BL_REGISTER,
 	*fdtd_sim.BL_REGISTER,
+	*fdtd_sim_data.BL_REGISTER,
 	*sim_grid.BL_REGISTER,
 	*sim_grid_axis.BL_REGISTER,
 	*sim_domain.BL_REGISTER,

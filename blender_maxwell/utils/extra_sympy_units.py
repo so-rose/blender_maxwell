@@ -1,3 +1,5 @@
+import functools
+
 import sympy as sp
 import sympy.physics.units as spu
 
@@ -67,11 +69,21 @@ exahertz.set_global_relative_scale_factor(spu.exa, spu.hertz)
 ####################
 # - Sympy Expression Typing
 ####################
-#ALL_UNIT_SYMBOLS = {
-#	unit
-#	for unit in spu.__dict__.values()
-#	if isinstance(unit, spu.Quantity)
-#}
+ALL_UNIT_SYMBOLS = {
+	unit.abbrev: unit
+	for unit in spu.__dict__.values()
+	if isinstance(unit, spu.Quantity)
+} | {
+	unit.abbrev: unit
+	for unit in globals().values()
+	if isinstance(unit, spu.Quantity)
+}
+
+@functools.lru_cache(maxsize=1024)
+def parse_abbrev_symbols_to_units(expr: sp.Basic) -> sp.Basic:
+	print("IN ABBREV", expr)
+	return expr.subs(ALL_UNIT_SYMBOLS)
+
 #def has_units(expr: sp.Expr):
 #	return any(
 #		symbol in ALL_UNIT_SYMBOLS

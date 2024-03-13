@@ -34,7 +34,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	managed_obj_defs = {
 		"nk_plot": ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLImage(name),
-			name_prefix="nkplot_",
+			name_prefix="",
 		)
 	}
 	

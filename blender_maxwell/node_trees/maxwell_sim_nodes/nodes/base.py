@@ -14,6 +14,12 @@ from .. import sockets
 CACHE: dict[str, typ.Any] = {}  ## By Instance UUID
 ## NOTE: CACHE does not persist between file loads.
 
+_DEFAULT_LOOSE_SOCKET_SER = json.dumps({
+	"socket_names": [],
+	"socket_def_names": [],
+	"models": [],
+})
+
 class MaxwellSimNode(bpy.types.Node):
 	# Fundamentals
 	node_type: ct.NodeType
@@ -115,6 +121,14 @@ class MaxwellSimNode(bpy.types.Node):
 				"_callback_type"
 			) and method._callback_type == "on_show_plot"
 		}
+		cls._on_init = {
+			method
+			for attr_name in dir(cls)
+			if hasattr(
+				method := getattr(cls, attr_name),
+				"_callback_type"
+			) and method._callback_type == "on_init"
+		}
 		
 		# Setup Socket Set Dropdown
 		if not len(cls.input_socket_sets) + len(cls.output_socket_sets) > 0:
@@ -151,7 +165,7 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 				],
 				default=socket_set_names[0],
-				update=(lambda self, _: self.sync_sockets()),
+				update=lambda self, context: self.sync_active_socket_set(context),
 			)
 		
 		# Setup Preset Dropdown
@@ -179,6 +193,10 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Generic Properties
 	####################
+	def sync_active_socket_set(self, context):
+		self.sync_sockets()
+		self.sync_prop("active_socket_set", context)
+	
 	def sync_sim_node_name(self, context):
 		if (mobjs := CACHE[self.instance_id].get("managed_objs")) is None:
 			return
@@ -276,11 +294,6 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Loose Sockets
 	####################
-	_DEFAULT_LOOSE_SOCKET_SER = json.dumps({
-		"socket_names": [],
-		"socket_def_names": [],
-		"models": [],
-	})
 	# Loose Sockets
 	## Only Blender props persist as instance data
 	ser_loose_input_sockets: bpy.props.StringProperty(
@@ -336,7 +349,8 @@ class MaxwellSimNode(bpy.types.Node):
 	def loose_input_sockets(
 		self, value: dict[str, ct.schemas.SocketDef],
 	) -> None:
-		self.ser_loose_input_sockets = self._ser_loose_sockets(value)
+		if not value: self.ser_loose_input_sockets = _DEFAULT_LOOSE_SOCKET_SER
+		else: self.ser_loose_input_sockets = self._ser_loose_sockets(value)
 		
 		# Synchronize Sockets
 		self.sync_sockets()
@@ -346,7 +360,8 @@ class MaxwellSimNode(bpy.types.Node):
 	def loose_output_sockets(
 		self, value: dict[str, ct.schemas.SocketDef],
 	) -> None:
-		self.ser_loose_output_sockets = self._ser_loose_sockets(value)
+		if not value: self.ser_loose_output_sockets = _DEFAULT_LOOSE_SOCKET_SER
+		else: self.ser_loose_output_sockets = self._ser_loose_sockets(value)
 		
 		# Synchronize Sockets
 		self.sync_sockets()
@@ -457,7 +472,7 @@ class MaxwellSimNode(bpy.types.Node):
 		col = layout.column(align=False)
 		if self.use_sim_node_name:
 			row = col.row(align=True)
-			row.label(text="", icon="EVENT_N")
+			row.label(text="", icon="FILE_TEXT")
 			row.prop(self, "sim_node_name", text="")
 		
 		# Draw Name
@@ -638,8 +653,11 @@ class MaxwellSimNode(bpy.types.Node):
 		self.sync_sockets()
 		
 		# Apply Default Preset
-		if self.active_preset:
-			self.sync_active_preset()
+		if self.active_preset: self.sync_active_preset()
+		
+		# Callbacks
+		for method in self._on_init:
+			method(self)
 	
 	def update(self) -> None:
 		pass
@@ -651,6 +669,18 @@ class MaxwellSimNode(bpy.types.Node):
 		if not CACHE.get(self.instance_id):
 			CACHE[self.instance_id] = {}
 		node_tree = self.id_data
+		
+		# Unlock
+		## This is one approach to the "deleted locked nodes" problem.
+		## Essentially, deleting a locked node will unlock along input chain.
+		## It also counts if any of the input sockets are linked and locked.
+		## Thus, we prevent "dangling locks".
+		## TODO: Don't even allow deleting a locked node.
+		if self.locked or any(
+			bl_socket.is_linked and bl_socket.locked
+			for bl_socket in self.inputs.values()
+		):
+			self.trigger_action("disable_lock")
 		
 		# Free Managed Objects
 		for managed_obj in self.managed_objs.values():
@@ -674,6 +704,7 @@ def chain_event_decorator(
 		"on_value_changed",
 		"on_show_preview",
 		"on_show_plot",
+		"on_init",
 	],
 	index_by: typ.Any | None = None,
 	extra_data: dict[str, typ.Any] | None = None,
@@ -931,6 +962,33 @@ def on_show_plot(
 		extra_data={
 			"stop_propagation": stop_propagation,
 		},
+		kind=kind,
+		input_sockets=input_sockets,
+		output_sockets=output_sockets,
+		props=props,
+		managed_objs=managed_objs,
+		req_params=req_params,
+	)
+
+def on_init(
+	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+	input_sockets: set[str] = set(),
+	output_sockets: set[str] = set(),
+	props: set[str] = set(),
+	managed_objs: set[str] = set(),
+):
+	req_params = {"self"} | (
+		{"input_sockets"} if input_sockets else set()
+	) | (
+		{"output_sockets"} if output_sockets else set()
+	) | (
+		{"props"} if props else set()
+	) | (
+		{"managed_objs"} if managed_objs else set()
+	)
+	
+	return chain_event_decorator(
+		callback_type="on_init",
 		kind=kind,
 		input_sockets=input_sockets,
 		output_sockets=output_sockets,

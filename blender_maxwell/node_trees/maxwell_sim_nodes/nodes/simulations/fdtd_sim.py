@@ -16,9 +16,15 @@ class FDTDSimNode(base.MaxwellSimNode):
 	input_sockets = {
 		"Domain": sockets.MaxwellSimDomainSocketDef(),
 		"BCs": sockets.MaxwellBoundCondsSocketDef(),
-		"Sources": sockets.MaxwellSourceSocketDef(),
-		"Structures": sockets.MaxwellStructureSocketDef(),
-		"Monitors": sockets.MaxwellMonitorSocketDef(),
+		"Sources": sockets.MaxwellSourceSocketDef(
+			is_list=True,
+		),
+		"Structures": sockets.MaxwellStructureSocketDef(
+			is_list=True,
+		),
+		"Monitors": sockets.MaxwellMonitorSocketDef(
+			is_list=True,
+		),
 	}
 	output_sockets = {
 		"FDTD Sim": sockets.MaxwellFDTDSimSocketDef(),
@@ -41,12 +47,12 @@ class FDTDSimNode(base.MaxwellSimNode):
 		bounds = input_sockets["BCs"]
 		monitors = input_sockets["Monitors"]
 		
-		if not isinstance(sources, list):
-			sources = [sources]
-		if not isinstance(structures, list):
-			structures = [structures]
-		if not isinstance(monitors, list):
-			monitors = [monitors]
+		#if not isinstance(sources, list):
+		#	sources = [sources]
+		#if not isinstance(structures, list):
+		#	structures = [structures]
+		#if not isinstance(monitors, list):
+		#	monitors = [monitors]
 		
 		return td.Simulation(
 			**sim_domain,  ## run_time=, size=, grid=, medium=

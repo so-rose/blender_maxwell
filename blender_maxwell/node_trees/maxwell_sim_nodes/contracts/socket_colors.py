@@ -62,6 +62,7 @@ SOCKET_COLORS = {
 	ST.MaxwellBoundCond: (0.8, 0.7, 0.45, 1.0),  # Medium Light Gold
 	ST.MaxwellMonitor: (0.7, 0.6, 0.4, 1.0),  # Medium Gold
 	ST.MaxwellFDTDSim: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
+	ST.MaxwellFDTDSimData: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
 	ST.MaxwellSimGrid: (0.5, 0.4, 0.3, 1.0),  # Dark Gold
 	ST.MaxwellSimGridAxis: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
 	ST.MaxwellSimDomain: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold

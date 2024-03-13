@@ -3,3 +3,5 @@ pydantic==2.6.0
 sympy==1.12
 scipy==1.12.0
 trimesh==4.1.4
+networkx==3.2.1 
+Rtree==1.2.0

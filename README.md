@@ -7,7 +7,7 @@
 
 ## Inputs
 [x] Wave Constant
-- [ ] Implement export of frequency / wavelength array/range.
+- [x] Implement export of frequency / wavelength array/range.
 [-] Unit System
 - [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
 
@@ -41,6 +41,9 @@
 [x] Web Export / Tidy3D Web Exporter
 - [ ] We need better ways of doing checks before uploading, like for monitor data size. Maybe a SimInfo node?
 - [ ] We need to be able to "delete and re-upload" (or maybe just delete from the interface).
+- [x] Implement estimation of monitor storage
+- [x] Implement cost estimation
+- [?] Merge with the Tidy3D File Import (since both are working with HDFs; the web one only really does downloading too).
 
 [x] File Export / JSON File Export
 [ ] File Import / Tidy3D File Export
@@ -51,11 +54,8 @@
 - [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
 
 ## Viz
-[ ] Sim Info
-- [ ] Implement estimation of monitor storage
-- [ ] Implement cost estimation
-[ ] Monitor Data Viz
-- [ ] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
+[x] Monitor Data Viz
+- [x] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
 - [ ] Project field values onto a plane object (managed)
 
 ## Sources
@@ -107,20 +107,20 @@
 - [x] Use the modifier itself as memory, via the ManagedObj
 - [?] When GeoNodes themselves declare panels, implement a grid-like tab system to select which sockets should be exposed in the node at a given point in time.
 
-[ ] Primitive Structures / Plane
-[ ] Primitive Structures / Box Structure
-[ ] Primitive Structures / Sphere
-[ ] Primitive Structures / Cylinder
-[ ] Primitive Structures / Ring
-[ ] Primitive Structures / Capsule
-[ ] Primitive Structures / Cone
+[ ] Primitive Structures / Plane Structure
+[x] Primitive Structures / Box Structure
+[x] Primitive Structures / Sphere Structure
+[ ] Primitive Structures / Cylinder Structure
+[ ] Primitive Structures / Ring Structure
+[ ] Primitive Structures / Capsule Structure
+[ ] Primitive Structures / Cone Structure
 
 ## Monitors
 - **ALL**: "Steady-State" / "Time Domain" (only if relevant).
 
-[ ] E/H Field Monitor
-- [ ] Monitor Domain as dropdown with Frequency or Time
-- [ ] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
+[x] E/H Field Monitor
+- [x] Monitor Domain as dropdown with Frequency or Time
+- [x] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
 [ ] Field Power Flux Monitor
 - [ ] Monitor Domain as dropdown with Frequency or Time
 - [ ] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
@@ -397,3 +397,10 @@
 [ ] Test on Windows
 
 ## Node Tree Cache Semantics
+
+
+
+
+
+# TIDY3D BUGS
+- Directly running `SimulationTask.get()` is bugged - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.

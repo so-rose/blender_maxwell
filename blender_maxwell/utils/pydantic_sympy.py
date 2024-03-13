@@ -6,12 +6,12 @@ from pydantic_core import core_schema as pyd_core_schema
 import sympy as sp
 import sympy.physics.units as spu
 
-from . import extra_sympy_units as spuex
+from . import extra_sympy_units as spux
 
 ####################
 # - Missing Basics
 ####################
-AllowedSympyExprs = sp.Expr | sp.MatrixBase
+AllowedSympyExprs = sp.Expr | sp.MatrixBase | sp.MutableDenseMatrix
 Complex = typx.Annotated[
 	complex,
 	pyd.GetPydanticSchema(
@@ -36,10 +36,12 @@ class _SympyExpr:
 				return value
 			
 			try:
-				return sp.sympify(value)
+				expr = sp.sympify(value)
 			except ValueError as ex:
 				msg = f"Value {value} is not a `sympify`able string"
 				raise ValueError(msg) from ex
+			
+			return expr.subs(spux.ALL_UNIT_SYMBOLS)
 		
 		def validate_from_expr(value: AllowedSympyExprs) -> AllowedSympyExprs:
 			if not (
@@ -108,7 +110,7 @@ def ConstrSympyExpr(
 		# Validate Feature Class
 		if (not allow_variables) and (len(expr.free_symbols) > 0):
 			msgs.add(f"allow_variables={allow_variables} does not match expression {expr}.")
-		if (not allow_units) and spuex.uses_units(expr):
+		if (not allow_units) and spux.uses_units(expr):
 			msgs.add(f"allow_units={allow_units} does not match expression {expr}.")
 		
 		# Validate Structure Class
@@ -134,7 +136,7 @@ def ConstrSympyExpr(
 		# Validate Element Class
 		if allowed_symbols and expr.free_symbols.issubset(allowed_symbols):
 			msgs.add(f"allowed_symbols={allowed_symbols} does not match expression {expr}")
-		if allowed_units and spuex.get_units(expr).issubset(allowed_units):
+		if allowed_units and spux.get_units(expr).issubset(allowed_units):
 			msgs.add(f"allowed_units={allowed_units} does not match expression {expr}")
 		
 		# Validate Shape Class

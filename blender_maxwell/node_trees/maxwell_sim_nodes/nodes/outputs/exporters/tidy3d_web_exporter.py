@@ -11,232 +11,185 @@ import pydantic as pyd
 import tidy3d as td
 import tidy3d.web as _td_web
 
-from ......utils.auth_td_web import g_td_web, is_td_web_authed
+from ......utils import tdcloud
 from .... import contracts as ct
 from .... import sockets
 from ... import base
 
 ####################
-# - Task Getters
-####################
-## TODO: We should probably refactor this setup.
-@functools.cache
-def estimated_task_cost(task_id: str):
-	return _td_web.api.webapi.estimate_cost(task_id)
-
-@functools.cache
-def billed_task_cost(task_id: str):
-	return _td_web.api.webapi.real_cost(task_id)
-
-@functools.cache
-def task_status(task_id: str):
-	task = _td_web.api.webapi.get_info(task_id)
-	return task.status
-
-####################
-# - Progress Timer
-####################
-## TODO: We should probably refactor this too.
-class Tidy3DTaskStatusModalOperator(bpy.types.Operator):
-	bl_idname = "blender_maxwell.tidy_3d_task_status_modal_operator"
-	bl_label = "Tidy3D Task Status Modal Operator"
-
-	_timer = None
-	_task_id = None
-	_node = None
-	_status = None
-	_reported_done = False
-
-	def modal(self, context, event):
-		# Retrieve New Status
-		task_status.cache_clear()
-		new_status = task_status(self._task_id)
-		if new_status != self._status:
-			task_status.cache_clear()
-			self._status = new_status
-			
-		# Check Done Status
-		if self._status in {"success", "error"}:
-			# Report Done
-			if not self._reported_done:
-				self._node.trigger_action("value_changed")
-				self._reported_done = True
-			
-			# Finish when Billing is Known
-			if not billed_task_cost(self._task_id):
-				billed_task_cost.cache_clear()
-			else:
-				return {'FINISHED'}
-		
-		return {'PASS_THROUGH'}
-
-	def execute(self, context):
-		node = context.node
-		wm = context.window_manager
-		
-		self._timer = wm.event_timer_add(2.0, window=context.window)
-		self._task_id = node.uploaded_task_id
-		self._node = node
-		self._status = task_status(self._task_id)
-		
-		wm.modal_handler_add(self)
-		return {'RUNNING_MODAL'}
-
-####################
 # - Web Uploader / Loader / Runner / Releaser
 ####################
-## TODO: We should probably refactor this too.
-class Tidy3DWebUploadOperator(bpy.types.Operator):
-	bl_idname = "blender_maxwell.tidy_3d_web_upload_operator"
-	bl_label = "Tidy3D Web Upload Operator"
+class UploadSimulation(bpy.types.Operator):
+	bl_idname = "blender_maxwell.nodes__upload_simulation"
+	bl_label = "Upload Tidy3D Simulation"
 	bl_description = "Upload the attached (locked) simulation, such that it is ready to run on the Tidy3D cloud"
 
 	@classmethod
 	def poll(cls, context):
-		space = context.space_data
 		return (
-			space.type == 'NODE_EDITOR'
-			and space.node_tree is not None
-			and space.node_tree.bl_idname == "MaxwellSimTreeType"
-			and is_td_web_authed()
-			and hasattr(context, "node")
+			hasattr(context, "node")
+			and hasattr(context.node, "node_type")
+			and context.node.node_type == ct.NodeType.Tidy3DWebExporter
+			
 			and context.node.lock_tree
+			and tdcloud.IS_AUTHENTICATED
+			and not context.node.tracked_task_id
+			and context.node.inputs["FDTD Sim"].is_linked
 		)
 
 	def execute(self, context):
 		node = context.node
-		node.web_upload()
+		node.upload_sim()
 		return {'FINISHED'}
 
-class Tidy3DLoadUploadedOperator(bpy.types.Operator):
-	bl_idname = "blender_maxwell.tidy_3d_load_uploaded_operator"
-	bl_label = "Tidy3D Load Uploaded Operator"
-	bl_description = "Load an already-uploaded simulation, as selected in the dropdown of the 'Cloud Task' socket"
+class RunSimulation(bpy.types.Operator):
+	bl_idname = "blender_maxwell.nodes__run_simulation"
+	bl_label = "Run Tracked Tidy3D Sim"
+	bl_description = "Run the currently tracked simulation task"
 
 	@classmethod
 	def poll(cls, context):
-		space = context.space_data
 		return (
-			space.type == 'NODE_EDITOR'
-			and space.node_tree is not None
-			and space.node_tree.bl_idname == "MaxwellSimTreeType"
-			and is_td_web_authed()
-			and hasattr(context, "node")
-			and context.node.lock_tree
+			hasattr(context, "node")
+			and hasattr(context.node, "node_type")
+			and context.node.node_type == ct.NodeType.Tidy3DWebExporter
+			
+			and tdcloud.IS_AUTHENTICATED
+			and context.node.tracked_task_id
+			and (task_info := tdcloud.TidyCloudTasks.task_info(
+				context.node.tracked_task_id
+			)) is not None
+			and task_info.status == "draft"
 		)
 
 	def execute(self, context):
 		node = context.node
-		node.load_uploaded_task()
-		
-		# Load Simulation to Compare
-		## Load Local Sim
-		local_sim = node._compute_input("FDTD Sim")
-		
-		## Load Cloud Sim
-		task_id = node.compute_output("Cloud Task")
-		with tempfile.NamedTemporaryFile(delete=False) as f:
-			_path_tmp = Path(f.name)
-			_path_tmp.rename(f.name + ".json")
-			path_tmp = Path(f.name + ".json")
-		cloud_sim = _td_web.api.webapi.load_simulation(task_id, path=str(path_tmp))
-		
-		Path(path_tmp).unlink()
-		
-		## Compare
-		if local_sim != cloud_sim:
-			node.release_uploaded_task()
-			msg = "Loaded simulation doesn't match input simulation"
-			raise ValueError(msg)
-		
+		node.run_tracked_task()
 		return {'FINISHED'}
 
-class RunUploadedTidy3DSim(bpy.types.Operator):
-	bl_idname = "blender_maxwell.run_uploaded_tidy_3d_sim"
-	bl_label = "Run Uploaded Tidy3D Sim"
-	bl_description = "Run the currently uploaded (and loaded) simulation"
+class ReloadTrackedTask(bpy.types.Operator):
+	bl_idname = "blender_maxwell.nodes__reload_tracked_task"
+	bl_label = "Reload Tracked Tidy3D Cloud Task"
+	bl_description = "Reload the currently tracked simulation task"
 
 	@classmethod
 	def poll(cls, context):
-		space = context.space_data
 		return (
-			space.type == 'NODE_EDITOR'
-			and space.node_tree is not None
-			and space.node_tree.bl_idname == "MaxwellSimTreeType"
-			and is_td_web_authed()
-			and hasattr(context, "node")
-			and context.node.lock_tree
-			and context.node.uploaded_task_id
-			and task_status(context.node.uploaded_task_id) == "draft"
+			hasattr(context, "node")
+			and hasattr(context.node, "node_type")
+			and context.node.node_type == ct.NodeType.Tidy3DWebExporter
+			
+			and tdcloud.IS_AUTHENTICATED
+			and context.node.tracked_task_id
 		)
 
 	def execute(self, context):
 		node = context.node
-		node.run_uploaded_task()
-		bpy.ops.blender_maxwell.tidy_3d_task_status_modal_operator()
+		if (
+			cloud_task := tdcloud.TidyCloudTasks.task(node.tracked_task_id)
+		) is None:
+			msg = "Tried to reload tracked task, but it doesn't exist"
+			raise RuntimeError(msg)
+		
+		cloud_task = tdcloud.TidyCloudTasks.update_task(cloud_task)
 		return {'FINISHED'}
 
-class ReleaseTidy3DExportOperator(bpy.types.Operator):
-	bl_idname = "blender_maxwell.release_tidy_3d_export_operator"
-	bl_label = "Release Tidy3D Export Operator"
+class EstCostTrackedTask(bpy.types.Operator):
+	bl_idname = "blender_maxwell.nodes__est_cost_tracked_task"
+	bl_label = "Est Cost of Tracked Tidy3D Cloud Task"
+	bl_description = "Reload the currently tracked simulation task"
 
 	@classmethod
 	def poll(cls, context):
-		space = context.space_data
 		return (
-			space.type == 'NODE_EDITOR'
-			and space.node_tree is not None
-			and space.node_tree.bl_idname == "MaxwellSimTreeType"
-			and is_td_web_authed()
-			and hasattr(context, "node")
-			and context.node.lock_tree
-			and context.node.uploaded_task_id
+			hasattr(context, "node")
+			and hasattr(context.node, "node_type")
+			and context.node.node_type == ct.NodeType.Tidy3DWebExporter
+			
+			and tdcloud.IS_AUTHENTICATED
+			and context.node.tracked_task_id
 		)
 
 	def execute(self, context):
 		node = context.node
-		node.release_uploaded_task()
+		if (
+			task_info := tdcloud.TidyCloudTasks.task_info(context.node.tracked_task_id)
+		) is None:
+			msg = "Tried to estimate cost of tracked task, but it doesn't exist"
+			raise RuntimeError(msg)
+		
+		node.cache_est_cost = task_info.cost_est()
+		return {'FINISHED'}
+
+class ReleaseTrackedTask(bpy.types.Operator):
+	bl_idname = "blender_maxwell.nodes__release_tracked_task"
+	bl_label = "Release Tracked Tidy3D Cloud Task"
+	bl_description = "Release the currently tracked simulation task"
+
+	@classmethod
+	def poll(cls, context):
+		return (
+			hasattr(context, "node")
+			and hasattr(context.node, "node_type")
+			and context.node.node_type == ct.NodeType.Tidy3DWebExporter
+			
+			#and tdcloud.IS_AUTHENTICATED
+			and context.node.tracked_task_id
+		)
+
+	def execute(self, context):
+		node = context.node
+		node.tracked_task_id = ""
 		return {'FINISHED'}
 
 
 
 ####################
-# - Web Exporter Node
+# - Node
 ####################
 class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.Tidy3DWebExporter
-	bl_label = "Tidy3DWebExporter"
+	bl_label = "Tidy3D Web Exporter"
 	
 	input_sockets = {
 		"FDTD Sim": sockets.MaxwellFDTDSimSocketDef(),
 		"Cloud Task": sockets.Tidy3DCloudTaskSocketDef(
-			task_exists=False,
-		),
-	}
-	output_sockets = {
-		"Cloud Task": sockets.Tidy3DCloudTaskSocketDef(
-			task_exists=True,
+			should_exist=False,
 		),
 	}
 	
+	####################
+	# - Properties
+	####################
 	lock_tree: bpy.props.BoolProperty(
 		name="Whether to lock the attached tree",
 		description="Whether or not to lock the attached tree",
 		default=False,
-		update=(lambda self, context: self.sync_lock_tree(context)),
+		update=lambda self, context: self.sync_lock_tree(context),
 	)
-	uploaded_task_id: bpy.props.StringProperty(
-		name="Uploaded Task ID",
-		description="The uploaded task ID",
+	tracked_task_id: bpy.props.StringProperty(
+		name="Tracked Task ID",
+		description="The currently tracked task ID",
 		default="",
+		update=lambda self, context: self.sync_tracked_task_id(context),
+	)
+	
+	# Cache
+	cache_total_monitor_data: bpy.props.FloatProperty(
+		name="(Cached) Total Monitor Data",
+		description="Required storage space by all monitors",
+		default=0.0,
+	)
+	cache_est_cost: bpy.props.FloatProperty(
+		name="(Cached) Estimated Total Cost",
+		description="Est. Cost in FlexCompute units",
+		default=-1.0,
 	)
 	
 	####################
 	# - Sync Methods
 	####################
 	def sync_lock_tree(self, context):
-		node_tree = self.id_data
-		
 		if self.lock_tree:
 			self.trigger_action("enable_lock")
 			self.locked = False
@@ -246,107 +199,201 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		
 		else:
 			self.trigger_action("disable_lock")
+		
+		self.sync_prop("lock_tree", context)
+
+	def sync_tracked_task_id(self, context):
+		# Select Tracked Task
+		if self.tracked_task_id:
+			cloud_task = tdcloud.TidyCloudTasks.task(self.tracked_task_id)
+			task_info = tdcloud.TidyCloudTasks.task_info(self.tracked_task_id)
+			
+			self.loose_output_sockets = {
+				"Cloud Task": sockets.Tidy3DCloudTaskSocketDef(
+					should_exist=True,
+				),
+			}
+			self.inputs["Cloud Task"].locked = True
+		
+		# Release Tracked Task
+		else:
+			self.cache_est_cost = -1.0
+			self.loose_output_sockets = {}
+			self.inputs["Cloud Task"].sync_prepare_new_task()
+			self.inputs["Cloud Task"].locked = False
+		
+		self.sync_prop("tracked_task_id", context)
 	
 	####################
 	# - Output Socket Callbacks
 	####################
-	def web_upload(self):
-		if not (sim := self._compute_input("FDTD Sim")):
-			raise ValueError("Must attach simulation")
+	def validate_sim(self):
+		if (sim := self._compute_input("FDTD Sim")) is None:
+			msg = "Tried to validate simulation, but none is attached"
+			raise ValueError(msg)
 		
-		if not (new_task_dict := self._compute_input("Cloud Task")):
-			raise ValueError("No valid cloud task defined")
+		sim.validate_pre_upload(source_required = True)
 		
-		td_web = g_td_web(None)  ## Presume already auth'ed
+	def upload_sim(self):
+		if (sim := self._compute_input("FDTD Sim")) is None:
+			msg = "Tried to upload simulation, but none is attached"
+			raise ValueError(msg)
 		
-		self.uploaded_task_id = td_web.api.webapi.upload(
-			sim,
-			**new_task_dict,
+		if (
+			(new_task := self._compute_input("Cloud Task")) is None
+			or isinstance(
+				new_task,
+				tdcloud.CloudTask,
+			)
+		):
+			msg = "Tried to upload simulation to new task, but existing task was selected"
+			raise ValueError(msg)
+		
+		# Create Cloud Task
+		cloud_task = tdcloud.TidyCloudTasks.mk_task(
+			task_name=new_task[0],
+			cloud_folder=new_task[1],
+			sim=sim,
+			upload_progress_cb=lambda uploaded_bytes: None,  ## TODO: Use!
 			verbose=True,
 		)
 		
-		self.inputs["Cloud Task"].sync_task_loaded(self.uploaded_task_id)
-	
-	def load_uploaded_task(self):
-		self.inputs["Cloud Task"].sync_task_loaded(None)
-		self.uploaded_task_id = self._compute_input("Cloud Task")
+		# Declare to Cloud Task that it Exists Now
+		## This will change the UI to not allow free-text input.
+		## If the socket is linked, this errors.
+		self.inputs["Cloud Task"].sync_created_new_task(cloud_task)
 		
-		self.trigger_action("value_changed")
+		# Track the Newly Uploaded Task ID
+		self.tracked_task_id = cloud_task.task_id
 	
-	def run_uploaded_task(self):
-		td_web = g_td_web(None)  ## Presume already auth'ed
-		td_web.api.webapi.start(self.uploaded_task_id)
+	def run_tracked_task(self):
+		if (
+			cloud_task := tdcloud.TidyCloudTasks.task(self.tracked_task_id)
+		) is None:
+			msg = "Tried to run tracked task, but it doesn't exist"
+			raise RuntimeError(msg)
 		
-		self.trigger_action("value_changed")
-	
-	def release_uploaded_task(self):
-		self.uploaded_task_id = ""
-		self.inputs["Cloud Task"].sync_task_released(specify_new_task=True)
-		
-		self.trigger_action("value_changed")
+		cloud_task.submit()
+		tdcloud.TidyCloudTasks.update_task(cloud_task)  ## TODO: Check that status is actually immediately updated.
 	
 	####################
 	# - UI
 	####################
 	def draw_operators(self, context, layout):
-		is_authed = is_td_web_authed()
-		has_uploaded_task_id = bool(self.uploaded_task_id)
-		
-		# Row: Run Simulation
+		# Row: Upload Sim Buttons
 		row = layout.row(align=True)
-		if has_uploaded_task_id: row.enabled = False
 		row.operator(
-			Tidy3DWebUploadOperator.bl_idname,
-			text="Upload Sim",
+			UploadSimulation.bl_idname,
+			text="Upload",
 		)
 		tree_lock_icon = "LOCKED" if self.lock_tree else "UNLOCKED"
 		row.prop(self, "lock_tree", toggle=True, icon=tree_lock_icon, text="")
 		
-		# Row: Run Simulation
+		# Row: Run Sim Buttons
 		row = layout.row(align=True)
-		if is_authed and has_uploaded_task_id:
-			run_sim_text = f"Run Sim (~{estimated_task_cost(self.uploaded_task_id):.3f} credits)"
-		else:
-			run_sim_text = f"Run Sim"
-		
 		row.operator(
-			RunUploadedTidy3DSim.bl_idname,
-			text=run_sim_text,
+			RunSimulation.bl_idname,
+			text="Run",
 		)
-		if has_uploaded_task_id:
+		if self.tracked_task_id:
 			tree_lock_icon = "LOOP_BACK"
 			row.operator(
-				ReleaseTidy3DExportOperator.bl_idname,
+				ReleaseTrackedTask.bl_idname,
 				icon="LOOP_BACK",
 				text="",
 			)
-		else:
-			row.operator(
-				Tidy3DLoadUploadedOperator.bl_idname,
-				icon="TRIA_UP_BAR",
-				text="",
-			)
+	
+	def draw_info(self, context, layout):
+		# Connection Info
+		auth_icon = "CHECKBOX_HLT" if tdcloud.IS_AUTHENTICATED else "CHECKBOX_DEHLT"
+		conn_icon = "CHECKBOX_HLT" if tdcloud.IS_ONLINE else "CHECKBOX_DEHLT"
 		
-		# Row: Simulation Progress
-		if is_authed and has_uploaded_task_id:
-			progress = {
-				"draft": (0.0, "Waiting to Run..."),
-				"initialized": (0.0, "Initializing..."),
-				"queued": (0.0, "Queued..."),
-				"preprocessing": (0.05, "Pre-processing..."),
-				"running": (0.2, "Running..."),
-				"postprocess": (0.85, "Post-processing..."),
-				"success": (1.0, f"Success (={billed_task_cost(self.uploaded_task_id)} credits)"),
-				"error": (1.0, f"Error (={billed_task_cost(self.uploaded_task_id)} credits)"),
-			}[task_status(self.uploaded_task_id)]
+		row = layout.row()
+		row.alignment = "CENTER"
+		row.label(text="Cloud Status")
+		box = layout.box()
+		split = box.split(factor=0.85)
+		
+		## Split: Left Column
+		col = split.column(align=False)
+		col.label(text="Authed")
+		col.label(text="Connected")
+		
+		## Split: Right Column
+		col = split.column(align=False)
+		col.label(icon=auth_icon)
+		col.label(icon=conn_icon)
+		
+		
+		# Simulation Info
+		if self.inputs["FDTD Sim"].is_linked:
+			row = layout.row()
+			row.alignment = "CENTER"
+			row.label(text="Sim Info")
+			box = layout.box()
+			split = box.split(factor=0.4)
 			
-			layout.separator()
+			## Split: Left Column
+			col = split.column(align=False)
+			col.label(text="𝝨 Output")
+			
+			## Split: Right Column
+			col = split.column(align=False)
+			col.alignment = "RIGHT"
+			col.label(text=f"{self.cache_total_monitor_data / 1_000_000:.2f}MB")
+		
+		
+		# Cloud Task Info
+		if self.tracked_task_id and tdcloud.IS_AUTHENTICATED:
+			task_info = tdcloud.TidyCloudTasks.task_info(
+				self.tracked_task_id
+			)
+			if task_info is None: return
+			
+			## Header
+			row = layout.row()
+			row.alignment = "CENTER"
+			row.label(text="Task Info")
+			
+			## Progress Bar
 			row = layout.row(align=True)
 			row.progress(
-				factor=progress[0],
+				factor=0.0,
 				type="BAR",
-				text=progress[1],
+				text=f"Status: {task_info.status.capitalize()}",
 			)
+			row.operator(
+				ReloadTrackedTask.bl_idname,
+				text="",
+				icon="FILE_REFRESH",
+			)
+			row.operator(
+				EstCostTrackedTask.bl_idname,
+				text="",
+				icon="SORTTIME",
+			)
+			
+			## Information
+			box = layout.box()
+			split = box.split(factor=0.4)
+			
+			## Split: Left Column
+			col = split.column(align=False)
+			col.label(text="Status")
+			col.label(text="Est. Cost")
+			col.label(text="Real Cost")
+			
+			## Split: Right Column
+			cost_est = f"{self.cache_est_cost:.2f}" if self.cache_est_cost >= 0 else "TBD"
+			cost_real = f"{task_info.cost_real:.2f}" if task_info.cost_real is not None else "TBD"
+			
+			col = split.column(align=False)
+			col.alignment = "RIGHT"
+			col.label(text=task_info.status.capitalize())
+			col.label(text=f"{cost_est} creds")
+			col.label(text=f"{cost_real} creds")
+		
+		# Connection Information
 	
 	####################
 	# - Output Methods
@@ -355,35 +402,40 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		"Cloud Task",
 		input_sockets={"Cloud Task"},
 	)
-	def compute_cloud_task(self, input_sockets: dict) -> str | None:
-		if self.uploaded_task_id: return self.uploaded_task_id
+	def compute_cloud_task(self, input_sockets: dict) -> tdcloud.CloudTask | None:
+		if isinstance(
+			cloud_task := input_sockets["Cloud Task"],
+			tdcloud.CloudTask
+		):
+			return cloud_task
+		
 		return None
 	
 	####################
-	# - Update
+	# - Output Methods
 	####################
-	@base.on_value_changed(socket_name="FDTD Sim")
-	def on_value_changed__fdtd_sim(self):
-		estimated_task_cost.cache_clear()
-		task_status.cache_clear()
-		billed_task_cost.cache_clear()
-	
-	@base.on_value_changed(socket_name="Cloud Task")
-	def on_value_changed__cloud_task(self):
-		estimated_task_cost.cache_clear()
-		task_status.cache_clear()
-		billed_task_cost.cache_clear()
+	@base.on_value_changed(
+		socket_name="FDTD Sim",
+		input_sockets={"FDTD Sim"},
+	)
+	def on_value_changed__fdtd_sim(self, input_sockets):
+		if (sim := self._compute_input("FDTD Sim")) is None:
+			self.cache_total_monitor_data = 0
+			return
+		
+		sim.validate_pre_upload(source_required = True)
+		self.cache_total_monitor_data = sum(sim.monitors_data_size.values())
 
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	Tidy3DWebUploadOperator,
-	Tidy3DTaskStatusModalOperator,
-	RunUploadedTidy3DSim,
-	Tidy3DLoadUploadedOperator,
-	ReleaseTidy3DExportOperator,
+	UploadSimulation,
+	RunSimulation,
+	ReloadTrackedTask,
+	EstCostTrackedTask,
+	ReleaseTrackedTask,
 	Tidy3DWebExporterNode,
 ]
 BL_NODES = {

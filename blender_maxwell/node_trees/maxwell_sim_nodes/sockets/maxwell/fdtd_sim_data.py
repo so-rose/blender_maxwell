@@ -7,26 +7,26 @@ import tidy3d as td
 from .. import base
 from ... import contracts as ct
 
-class MaxwellFDTDSimBLSocket(base.MaxwellSimSocket):
-	socket_type = ct.SocketType.MaxwellFDTDSim
+class MaxwellFDTDSimDataBLSocket(base.MaxwellSimSocket):
+	socket_type = ct.SocketType.MaxwellFDTDSimData
 	bl_label = "Maxwell FDTD Simulation"
 	
 	@property
-	def value(self) -> None:
+	def value(self):
 		return None
 
 ####################
 # - Socket Configuration
 ####################
-class MaxwellFDTDSimSocketDef(pyd.BaseModel):
-	socket_type: ct.SocketType = ct.SocketType.MaxwellFDTDSim
+class MaxwellFDTDSimDataSocketDef(pyd.BaseModel):
+	socket_type: ct.SocketType = ct.SocketType.MaxwellFDTDSimData
 	
-	def init(self, bl_socket: MaxwellFDTDSimBLSocket) -> None:
+	def init(self, bl_socket: MaxwellFDTDSimDataBLSocket) -> None:
 		pass
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	MaxwellFDTDSimBLSocket,
+	MaxwellFDTDSimDataBLSocket,
 ]
