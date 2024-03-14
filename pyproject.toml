@@ -1,0 +1,111 @@
+[project]
+name = "blender_maxwell"
+version = "0.0.1"
+description = "Real-time design and visualization of Maxwell simulations in Blender 3D, with deep Tidy3D integration. "
+authors = [
+    { name = "Sofus Albert Høgsbro Rose", email = "blender-maxwell@sofusrose.com" }
+]
+dependencies = [
+    "tidy3d>=2.6.1",
+    "pydantic>=2.6.4",
+    "sympy>=1.12",
+    "scipy>=1.12.0",
+    "trimesh>=4.2.0",
+    "networkx>=3.2.1",
+    "rtree>=1.2.0",
+]
+readme = "README.md"
+requires-python = "~= 3.10"
+license = { text = "AGPL-3.0-or-later" }
+
+####################
+# - Tooling: Rye
+####################
+[tool.rye]
+managed = true
+virtual = true
+dev-dependencies = [
+    "ruff>=0.3.2",
+]
+
+####################
+# - Tooling: Ruff
+####################
+[tool.ruff]
+target-version = "py312"
+line-length = 79
+
+[tool.ruff.lint]
+task-tags = ["TODO"]
+select = [
+	"E",   # pycodestyle  ## General Purpose
+	"F",   # pyflakes  ## General Purpose
+	"PL",  # Pylint  ## General Purpose
+	
+	## Code Quality
+	"TCH", # flake8-type-checking  ## Type Checking Block Validator
+	"C90", # mccabe  ## Avoid Too-Complex Functions
+	"ERA", # eradicate  ## Ban Commented Code
+	"TRY", # tryceratops  ## Exception Handling Style
+	"B",   # flake8-bugbear  ## Opinionated, Probable-Bug Patterns
+	#"N",   # pep8-naming  ## TODO: Force Good Naming Conventions
+	#"D",   # pydocstyle  ## TODO: Force docstrings
+	"SIM", # flake8-simplify  ## Sanity-Check for Code Simplification
+	"SLF", # flake8-self  ## Ban Private Member Access
+	"RUF", # Ruff-specific rules  ## Extra Good-To-Have Rules
+	
+	## Style
+	"I",   # isort  ## Force import Sorting
+	"UP",  # pyupgrade  ## Enforce Upgrade to Newer Python Syntaxes
+	"COM", # flake8-commas  ## Enforce Trailing Commas
+	"Q",   # flake8-quotes  ## Finally - Quoting Style!
+	"PTH", # flake8-use-pathlib  ## Enforce pathlib usage
+	"A",   # flake8-builtins  ## Prevent Builtin Shadowing
+	"C4",  # flake9-comprehensions  ## Check Compehension Appropriateness
+	"DTZ", # flake8-datetimez  ## Ban naive Datetime Creation
+	"EM",  # flake8-errmsg  ## Check Exception String Formatting
+	"ISC", # flake8-implicit-str-concat  ## Enforce Good String Literal Concat
+	"G",   # flake8-logging-format  ## Enforce Good Logging Practices
+	"INP", # flake8-no-pep420  ## Ban PEP420; Enforce __init__.py.
+	"PIE", # flake8-pie  ## Misc Opinionated Checks
+	"T20", # flake8-print  ## Ban print()
+	"RSE", # flake8-raise  ## Check Niche Exception Raising Pattern
+	"RET", # flake8-return  ## Enforce Good Returning
+	"ARG", # flake8-unused-arguments  ## Ban Unused Arguments
+	
+	# Specific 
+	"PT", # flake8-pytest-style  ## pytest-Specific Checks
+]
+ignore = [
+	"B008", # FastAPI uses this for Depends(), Security(), etc. .
+	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
+	"COM812",  # Conflicts w/Formatter
+	"ISC001",  # Conflicts w/Formatter
+	"Q000",  # Conflicts w/Formatter
+	"Q001",  # Conflicts w/Formatter
+	"Q002",  # Conflicts w/Formatter
+	"Q003",  # Conflicts w/Formatter
+]
+
+####################
+# - Tooling: Ruff Sublinters
+####################
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = []
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+####################
+# - Tooling: Ruff Formatter
+####################
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "tab"
+docstring-code-format = true
