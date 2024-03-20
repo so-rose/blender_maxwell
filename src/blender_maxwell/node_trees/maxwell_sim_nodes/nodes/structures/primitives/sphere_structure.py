@@ -10,48 +10,49 @@ from .... import sockets
 from .... import managed_objs
 from ... import base
 
-GEONODES_STRUCTURE_SPHERE = "structure_sphere"
+GEONODES_STRUCTURE_SPHERE = 'structure_sphere'
+
 
 class SphereStructureNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.SphereStructure
-	bl_label = "Sphere Structure"
-	
+	bl_label = 'Sphere Structure'
+
 	####################
 	# - Sockets
 	####################
 	input_sockets = {
-		"Center": sockets.PhysicalPoint3DSocketDef(),
-		"Radius": sockets.PhysicalLengthSocketDef(
-			default_value=150*spu.nm,
+		'Center': sockets.PhysicalPoint3DSocketDef(),
+		'Radius': sockets.PhysicalLengthSocketDef(
+			default_value=150 * spu.nm,
 		),
-		"Medium": sockets.MaxwellMediumSocketDef(),
+		'Medium': sockets.MaxwellMediumSocketDef(),
 	}
 	output_sockets = {
-		"Structure": sockets.MaxwellStructureSocketDef(),
+		'Structure': sockets.MaxwellStructureSocketDef(),
 	}
-	
+
 	managed_obj_defs = {
-		"structure_sphere": ct.schemas.ManagedObjDef(
+		'structure_sphere': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix="",
+			name_prefix='',
 		)
 	}
-	
+
 	####################
 	# - Output Socket Computation
 	####################
 	@base.computes_output_socket(
-		"Structure",
-		input_sockets={"Center", "Radius", "Medium"},
+		'Structure',
+		input_sockets={'Center', 'Radius', 'Medium'},
 	)
 	def compute_structure(self, input_sockets: dict) -> td.Box:
-		medium = input_sockets["Medium"]
-		_center = input_sockets["Center"]
-		_radius = input_sockets["Radius"]
-		
+		medium = input_sockets['Medium']
+		_center = input_sockets['Center']
+		_radius = input_sockets['Radius']
+
 		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
 		radius = spu.convert_to(_radius, spu.um) / spu.um
-		
+
 		return td.Structure(
 			geometry=td.Sphere(
 				radius=radius,
@@ -59,64 +60,62 @@ class SphereStructureNode(base.MaxwellSimNode):
 			),
 			medium=medium,
 		)
-	
+
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
 	@base.on_value_changed(
-		socket_name={"Center", "Radius"},
-		input_sockets={"Center", "Radius"},
-		managed_objs={"structure_sphere"},
+		socket_name={'Center', 'Radius'},
+		input_sockets={'Center', 'Radius'},
+		managed_objs={'structure_sphere'},
 	)
 	def on_value_changed__center_radius(
 		self,
 		input_sockets: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
-		_center = input_sockets["Center"]
-		center = tuple([
-			float(el)
-			for el in spu.convert_to(_center, spu.um) / spu.um
-		])
-		
-		_radius = input_sockets["Radius"]
+		_center = input_sockets['Center']
+		center = tuple(
+			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
+		)
+
+		_radius = input_sockets['Radius']
 		radius = float(spu.convert_to(_radius, spu.um) / spu.um)
 		## TODO: Preview unit system?? Presume um for now
-		
+
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_STRUCTURE_SPHERE]
 		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc="INPUT"
+			geo_nodes, direc='INPUT'
 		)
-		
+
 		# Sync Modifier Inputs
-		managed_objs["structure_sphere"].sync_geonodes_modifier(
+		managed_objs['structure_sphere'].sync_geonodes_modifier(
 			geonodes_node_group=geo_nodes,
 			geonodes_identifier_to_value={
-				geonodes_interface["Radius"].identifier: radius,
+				geonodes_interface['Radius'].identifier: radius,
 				## TODO: Use 'bl_socket_map.value_to_bl`!
 				## - This accounts for auto-conversion, unit systems, etc. .
 				## - We could keep it in the node base class...
 				## - ...But it needs aligning with Blender, too. Hmm.
-			}
+			},
 		)
-		
+
 		# Sync Object Position
-		managed_objs["structure_sphere"].bl_object("MESH").location = center
-	
+		managed_objs['structure_sphere'].bl_object('MESH').location = center
+
 	####################
 	# - Preview - Show Preview
 	####################
 	@base.on_show_preview(
-		managed_objs={"structure_sphere"},
+		managed_objs={'structure_sphere'},
 	)
 	def on_show_preview(
 		self,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
-		managed_objs["structure_sphere"].show_preview("MESH")
+		managed_objs['structure_sphere'].show_preview('MESH')
 		self.on_value_changed__center_radius()
-
 
 
 ####################

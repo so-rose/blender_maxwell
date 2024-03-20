@@ -83,18 +83,22 @@ def _check_pydeps(
 	}
 
 	# Assemble and Return Issues
-	return [
-		f'{name}: Have {inst_ver}, Need {req_ver}'
-		for name, (req_ver, inst_ver) in conflicts.items()
-	] + [
-		f'Missing {deplock}'
-		for deplock in req_not_inst
-		if deplock.split('==')[0] not in conflicts
-	] + [
-		f'Superfluous {deplock}'
-		for deplock in inst_not_req
-		if deplock.split('==')[0] not in conflicts
-	]
+	return (
+		[
+			f'{name}: Have {inst_ver}, Need {req_ver}'
+			for name, (req_ver, inst_ver) in conflicts.items()
+		]
+		+ [
+			f'Missing {deplock}'
+			for deplock in req_not_inst
+			if deplock.split('==')[0] not in conflicts
+		]
+		+ [
+			f'Superfluous {deplock}'
+			for deplock in inst_not_req
+			if deplock.split('==')[0] not in conflicts
+		]
+	)
 
 
 ####################
@@ -105,8 +109,8 @@ def check_pydeps(path_deps: Path):
 	global DEPS_ISSUES  # noqa: PLW0603
 
 	if len(_issues := _check_pydeps(PATH_REQS, path_deps)) > 0:
-		#log.debug('Package Check Failed:', end='\n\t')
-		#log.debug(*_issues, sep='\n\t')
+		# log.debug('Package Check Failed:', end='\n\t')
+		# log.debug(*_issues, sep='\n\t')
 
 		DEPS_OK = False
 		DEPS_ISSUES = _issues

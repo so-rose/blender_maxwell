@@ -1,18 +1,21 @@
 from . import base
 
 from . import basic
+
 AnySocketDef = basic.AnySocketDef
 BoolSocketDef = basic.BoolSocketDef
 StringSocketDef = basic.StringSocketDef
 FilePathSocketDef = basic.FilePathSocketDef
 
 from . import number
+
 IntegerNumberSocketDef = number.IntegerNumberSocketDef
 RationalNumberSocketDef = number.RationalNumberSocketDef
 RealNumberSocketDef = number.RealNumberSocketDef
 ComplexNumberSocketDef = number.ComplexNumberSocketDef
 
 from . import vector
+
 Real2DVectorSocketDef = vector.Real2DVectorSocketDef
 Complex2DVectorSocketDef = vector.Complex2DVectorSocketDef
 Integer3DVectorSocketDef = vector.Integer3DVectorSocketDef
@@ -20,6 +23,7 @@ Real3DVectorSocketDef = vector.Real3DVectorSocketDef
 Complex3DVectorSocketDef = vector.Complex3DVectorSocketDef
 
 from . import physical
+
 PhysicalUnitSystemSocketDef = physical.PhysicalUnitSystemSocketDef
 PhysicalTimeSocketDef = physical.PhysicalTimeSocketDef
 PhysicalAngleSocketDef = physical.PhysicalAngleSocketDef
@@ -36,6 +40,7 @@ PhysicalPolSocketDef = physical.PhysicalPolSocketDef
 PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
 
 from . import blender
+
 BlenderObjectSocketDef = blender.BlenderObjectSocketDef
 BlenderCollectionSocketDef = blender.BlenderCollectionSocketDef
 BlenderImageSocketDef = blender.BlenderImageSocketDef
@@ -43,6 +48,7 @@ BlenderGeoNodesSocketDef = blender.BlenderGeoNodesSocketDef
 BlenderTextSocketDef = blender.BlenderTextSocketDef
 
 from . import maxwell
+
 MaxwellBoundCondSocketDef = maxwell.MaxwellBoundCondSocketDef
 MaxwellBoundCondsSocketDef = maxwell.MaxwellBoundCondsSocketDef
 MaxwellMediumSocketDef = maxwell.MaxwellMediumSocketDef
@@ -58,6 +64,7 @@ MaxwellSimGridAxisSocketDef = maxwell.MaxwellSimGridAxisSocketDef
 MaxwellSimDomainSocketDef = maxwell.MaxwellSimDomainSocketDef
 
 from . import tidy3d
+
 Tidy3DCloudTaskSocketDef = tidy3d.Tidy3DCloudTaskSocketDef
 
 BL_REGISTER = [

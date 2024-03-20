@@ -1,8 +1,7 @@
 import enum
 
-from ....utils.blender_type_enum import (
-	BlenderTypeEnum
-)
+from ....utils.blender_type_enum import BlenderTypeEnum
+
 
 class ManagedObjType(BlenderTypeEnum):
 	ManagedBLObject = enum.auto()

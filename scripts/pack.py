@@ -47,7 +47,10 @@ def zipped_addon(
 					tempfile.NamedTemporaryFile(mode='w') as f_tmp,
 				):
 					initpy = f_init.read()
-					for to_replace, replacement in BL_INFO_REPLACEMENTS.items():
+					for (
+						to_replace,
+						replacement,
+					) in BL_INFO_REPLACEMENTS.items():
 						initpy = initpy.replace(to_replace, replacement)
 					f_tmp.write(initpy)
 
@@ -67,10 +70,7 @@ def zipped_addon(
 		f_zip.write(
 			path_pyproject_toml,
 			str(
-				(
-					Path(path_addon_pkg.name)
-					/ Path(path_pyproject_toml.name)
-				)
+				(Path(path_addon_pkg.name) / Path(path_pyproject_toml.name))
 				.with_suffix('')
 				.with_suffix('.toml')
 			),

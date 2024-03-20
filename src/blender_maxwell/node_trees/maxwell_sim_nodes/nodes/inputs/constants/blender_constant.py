@@ -4,39 +4,36 @@ from .... import contracts as ct
 from .... import sockets
 from ... import base
 
+
 class BlenderConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.BlenderConstant
-	bl_label = "Blender Constant"
-	
+	bl_label = 'Blender Constant'
+
 	input_socket_sets = {
-		"Object": {
-			"Value": sockets.BlenderObjectSocketDef(),
+		'Object': {
+			'Value': sockets.BlenderObjectSocketDef(),
 		},
-		"Collection": {
-			"Value": sockets.BlenderCollectionSocketDef(),
+		'Collection': {
+			'Value': sockets.BlenderCollectionSocketDef(),
 		},
-		"Text": {
-			"Value": sockets.BlenderTextSocketDef(),
+		'Text': {
+			'Value': sockets.BlenderTextSocketDef(),
 		},
-		"Image": {
-			"Value": sockets.BlenderImageSocketDef(),
+		'Image': {
+			'Value': sockets.BlenderImageSocketDef(),
 		},
-		"GeoNode Tree": {
-			"Value": sockets.BlenderGeoNodesSocketDef(),
+		'GeoNode Tree': {
+			'Value': sockets.BlenderGeoNodesSocketDef(),
 		},
 	}
 	output_socket_sets = input_socket_sets
-	
+
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket(
-		"Value",
-		input_sockets={"Value"}
-	)
+	@base.computes_output_socket('Value', input_sockets={'Value'})
 	def compute_value(self, input_sockets) -> typ.Any:
-		return input_sockets["Value"]
-
+		return input_sockets['Value']
 
 
 ####################
@@ -46,7 +43,5 @@ BL_REGISTER = [
 	BlenderConstantNode,
 ]
 BL_NODES = {
-	ct.NodeType.BlenderConstant: (
-		ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS
-	)
+	ct.NodeType.BlenderConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS)
 }

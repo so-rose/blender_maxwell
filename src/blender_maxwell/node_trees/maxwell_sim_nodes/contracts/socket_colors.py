@@ -10,13 +10,11 @@ SOCKET_COLORS = {
 	ST.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.String: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
-
 	# Number
 	ST.IntegerNumber: (0.5, 0.5, 1.0, 1.0),  # Light Blue
 	ST.RationalNumber: (0.4, 0.4, 0.9, 1.0),  # Medium Light Blue
 	ST.RealNumber: (0.3, 0.3, 0.8, 1.0),  # Medium Blue
 	ST.ComplexNumber: (0.2, 0.2, 0.7, 1.0),  # Dark Blue
-
 	# Vector
 	ST.Integer2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
 	ST.Real2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
@@ -24,7 +22,6 @@ SOCKET_COLORS = {
 	ST.Integer3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
 	ST.Real3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
 	ST.Complex3DVector: (0.2, 0.7, 0.2, 1.0),  # Dark Green
-	
 	# Physical
 	ST.PhysicalUnitSystem: (1.0, 0.5, 0.5, 1.0),  # Light Red
 	ST.PhysicalTime: (1.0, 0.5, 0.5, 1.0),  # Light Red
@@ -44,14 +41,12 @@ SOCKET_COLORS = {
 	ST.PhysicalForce3D: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
 	ST.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
 	ST.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
-
 	# Blender
 	ST.BlenderObject: (0.7, 0.5, 1.0, 1.0),  # Light Purple
 	ST.BlenderCollection: (0.6, 0.45, 0.9, 1.0),  # Medium Light Purple
 	ST.BlenderImage: (0.5, 0.4, 0.8, 1.0),  # Medium Purple
 	ST.BlenderGeoNodes: (0.3, 0.3, 0.6, 1.0),  # Dark Purple
 	ST.BlenderText: (0.5, 0.5, 0.75, 1.0),  # Light Lavender
-
 	# Maxwell
 	ST.MaxwellSource: (1.0, 1.0, 0.5, 1.0),  # Light Yellow
 	ST.MaxwellTemporalShape: (0.9, 0.9, 0.45, 1.0),  # Medium Light Yellow
@@ -66,8 +61,6 @@ SOCKET_COLORS = {
 	ST.MaxwellSimGrid: (0.5, 0.4, 0.3, 1.0),  # Dark Gold
 	ST.MaxwellSimGridAxis: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
 	ST.MaxwellSimDomain: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
-	
 	# Tidy3D
 	ST.Tidy3DCloudTask: (0.4, 0.3, 0.25, 1.0),  # Darkest Gold
 }
-

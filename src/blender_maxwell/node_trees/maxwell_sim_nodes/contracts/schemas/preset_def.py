@@ -4,6 +4,7 @@ import pydantic as pyd
 
 from ..bl import PresetName, SocketName, BLEnumID
 
+
 class PresetDef(pyd.BaseModel):
 	label: PresetName
 	description: str

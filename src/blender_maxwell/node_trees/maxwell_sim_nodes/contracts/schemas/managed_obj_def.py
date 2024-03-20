@@ -6,6 +6,7 @@ import pydantic as pyd
 from ..bl import PresetName, SocketName, BLEnumID
 from .managed_obj import ManagedObj
 
+
 class ManagedObjDef(pyd.BaseModel):
 	mk: typ.Callable[[str], ManagedObj]
-	name_prefix: str = ""
+	name_prefix: str = ''

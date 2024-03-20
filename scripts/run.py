@@ -11,7 +11,7 @@ import info
 def run_blender(py_script: Path, print_live: bool = False):
 	process = subprocess.Popen(
 		['blender', '--python', str(py_script)],
-		env = os.environ | {'PYTHONUNBUFFERED': '1'},
+		env=os.environ | {'PYTHONUNBUFFERED': '1'},
 		stdout=subprocess.PIPE,
 		stderr=subprocess.STDOUT,
 		text=True,
@@ -28,7 +28,7 @@ def run_blender(py_script: Path, print_live: bool = False):
 			print(line, end='')  # noqa: T201
 		elif (
 			info.SIGNAL_START_CLEAN_BLENDER in line
-			#or 'Traceback (most recent call last)' in line
+			# or 'Traceback (most recent call last)' in line
 		):
 			printing_live = True
 			print(''.join(output))  # noqa: T201

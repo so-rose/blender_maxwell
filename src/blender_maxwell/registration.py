@@ -71,7 +71,6 @@ def register_keymap_items(keymap_item_defs: list[dict]):
 			alt=keymap_item_def['alt'],
 		)
 		REG__KEYMAP_ITEMS.append(keymap_item)
-	
 
 
 def unregister_keymap_items():

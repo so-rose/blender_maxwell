@@ -41,7 +41,7 @@ PATH_ADDON_ZIP = (
 
 PATH_ADDON_BLEND_STARTER = PATH_ADDON_PKG / 'blenders' / 'starter.blend'
 
-		# Install the ZIPped Addon
+# Install the ZIPped Addon
 ####################
 # - Development Information
 ####################
@@ -49,4 +49,3 @@ PATH_ADDON_DEV_BLEND = PATH_DEV / 'demo.blend'
 
 PATH_ADDON_DEV_DEPS = PATH_DEV / '.cached-dev-dependencies'
 PATH_ADDON_DEV_DEPS.mkdir(exist_ok=True)
-
