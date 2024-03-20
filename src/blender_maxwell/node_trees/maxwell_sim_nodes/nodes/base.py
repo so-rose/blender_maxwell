@@ -1,12 +1,11 @@
-import uuid
-
-import typing as typ
-import typing_extensions as typx
-import json
 import inspect
+import json
+import typing as typ
+import uuid
 
 import bpy
 import pydantic as pyd
+import typing_extensions as typx
 
 from .. import contracts as ct
 from .. import sockets

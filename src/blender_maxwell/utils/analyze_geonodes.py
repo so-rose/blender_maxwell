@@ -1,7 +1,5 @@
 import typing_extensions as typx
 
-import bpy
-
 INVALID_BL_SOCKET_TYPES = {
 	"NodeSocketGeometry",
 }

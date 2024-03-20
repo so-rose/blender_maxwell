@@ -1,12 +1,8 @@
 import typing as typ
-import typing as typx
 
-import pydantic as pyd
-
-import bpy
-
-from ..bl import ManagedObjName, SocketName
+from ..bl import ManagedObjName
 from ..managed_obj_type import ManagedObjType
+
 
 class ManagedObj(typ.Protocol):
 	managed_obj_type: ManagedObjType
@@ -30,4 +26,3 @@ class ManagedObj(typ.Protocol):
 
 		Else, do nothing.
 		"""
-		pass

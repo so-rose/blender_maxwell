@@ -2,10 +2,10 @@
 - SimulationTask: <https://github.com/flexcompute/tidy3d/blob/453055e89dcff6d619597120b47817e996f1c198/tidy3d/web/core/task_core.py>
 - Tidy3D Stub: <https://github.com/flexcompute/tidy3d/blob/453055e89dcff6d619597120b47817e996f1c198/tidy3d/web/api/tidy3d_stub.py>
 """
-from dataclasses import dataclass
-import typing as typ
-import functools
 import datetime as dt
+import functools
+import typing as typ
+from dataclasses import dataclass
 
 import tidy3d as td
 import tidy3d.web as td_web
@@ -284,7 +284,7 @@ class TidyCloudTasks:
 			raise RuntimeError(msg)
 		
 		# Upload Simulation to Cloud Task
-		if not upload_progress_cb is None:
+		if upload_progress_cb is not None:
 			upload_progress_cb = lambda uploaded_bytes: None
 		try:
 			cloud_task.upload_simulation(

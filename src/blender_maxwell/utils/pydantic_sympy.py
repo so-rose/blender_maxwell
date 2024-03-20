@@ -1,10 +1,8 @@
-import typing as typ
-import typing_extensions as typx
-
 import pydantic as pyd
-from pydantic_core import core_schema as pyd_core_schema
 import sympy as sp
 import sympy.physics.units as spu
+import typing_extensions as typx
+from pydantic_core import core_schema as pyd_core_schema
 
 from . import extra_sympy_units as spux
 
@@ -45,8 +43,7 @@ class _SympyExpr:
 		
 		def validate_from_expr(value: AllowedSympyExprs) -> AllowedSympyExprs:
 			if not (
-				isinstance(value, sp.Expr)
-				or isinstance(value, sp.MatrixBase)
+				isinstance(value, sp.Expr | sp.MatrixBase)
 			):
 				msg = f"Value {value} is not a `sympy` expression"
 				raise ValueError(msg)
@@ -98,8 +95,7 @@ def ConstrSympyExpr(
 	## - <https://docs.sympy.org/latest/guides/assumptions.html#predicates>
 	def validate_expr(expr: AllowedSympyExprs):
 		if not (
-			isinstance(expr, sp.Expr)
-			or isinstance(expr, sp.MatrixBase),
+			isinstance(expr, sp.Expr | sp.MatrixBase),
 		):
 			## NOTE: Must match AllowedSympyExprs union elements.
 			msg = f"expr '{expr}' is not an allowed Sympy expression ({AllowedSympyExprs})"
@@ -143,7 +139,7 @@ def ConstrSympyExpr(
 		if (
 			allowed_matrix_shapes
 			and isinstance(expr, sp.MatrixBase)
-		) and not (expr.shape in allowed_matrix_shapes):
+		) and expr.shape not in allowed_matrix_shapes:
 			msgs.add(f"allowed_matrix_shapes={allowed_matrix_shapes} does not match expression {expr} with shape {expr.shape}")
 		
 		# Error or Return

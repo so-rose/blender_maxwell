@@ -6,16 +6,25 @@ authors = [
     { name = "Sofus Albert Høgsbro Rose", email = "blender-maxwell@sofusrose.com" }
 ]
 dependencies = [
-    "tidy3d>=2.6.1",
-    "pydantic>=2.6.4",
-    "sympy>=1.12",
-    "scipy>=1.12.0",
-    "trimesh>=4.2.0",
-    "networkx>=3.2.1",
-    "rtree>=1.2.0",
+	"tidy3d~=2.6.1",
+	"pydantic~=2.6.4",
+	"sympy~=1.12",
+	"scipy~=1.12.0",
+	"trimesh~=4.2.0",
+	"networkx~=3.2.1",
+	"rtree~=1.2.0",
+
+	# Pin Blender 4.1.0-Compatible Versions
+	## The dependency resolver will report if anything is wonky.
+	"urllib3==1.26.8",
+	"requests==2.27.1",
+	"numpy==1.24.3",
+	"idna==3.3",
+	"charset-normalizer==2.0.10",
+	"certifi==2021.10.8",
 ]
 readme = "README.md"
-requires-python = "~= 3.10"
+requires-python = "~= 3.11"
 license = { text = "AGPL-3.0-or-later" }
 
 ####################
@@ -26,13 +35,18 @@ managed = true
 virtual = true
 dev-dependencies = [
     "ruff>=0.3.2",
+    "fake-bpy-module-4-0>=20231118",  ## TODO: Update to Blender 4.1.0
 ]
+
+[tool.rye.scripts]
+dev = "python ./scripts/run.py"
+
 
 ####################
 # - Tooling: Ruff
 ####################
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 79
 
 [tool.ruff.lint]
@@ -77,14 +91,15 @@ select = [
 	"PT", # flake8-pytest-style  ## pytest-Specific Checks
 ]
 ignore = [
-	"B008", # FastAPI uses this for Depends(), Security(), etc. .
-	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
 	"COM812",  # Conflicts w/Formatter
 	"ISC001",  # Conflicts w/Formatter
 	"Q000",  # Conflicts w/Formatter
 	"Q001",  # Conflicts w/Formatter
 	"Q002",  # Conflicts w/Formatter
 	"Q003",  # Conflicts w/Formatter
+	"B008", # FastAPI uses this for Depends(), Security(), etc. .
+	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
+	"ERA001", # 'Commented-out code' seems to be just about anything to ruff
 ]
 
 ####################

@@ -3,6 +3,7 @@ import functools
 import sympy as sp
 import sympy.physics.units as spu
 
+
 ####################
 # - Useful Methods
 ####################
