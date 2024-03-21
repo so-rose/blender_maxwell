@@ -1,7 +1,7 @@
 # Blender Maxwell
 *A tool for fast, intuitive, and real-time design and visualization of Maxwell PDE Simulations in Blender 3D*.
 
-**WARNING: This is alpha software. Expect bugs, lacking documentation, and jankiness. Expect breaking changes without warning. Here be dragons, growl growl...**
+**WARNING: This is very alpha software. It says "version 0.0.1" for a reason: Expect janky untest installation; expect obvious bugs, lacking documentation, and jankiness; expect breaking changes without warning. Here be dragons, growl growl...**
 
 Blender Maxwell is a tool for creating and analyzing electromagnetic PDE simulations, with a particular focus on nano-/micro-scale phenomena.
 In particular, this tool seeks to make working with FDTD ("Finite-Difference Time-Domain") intuitive and fun:
