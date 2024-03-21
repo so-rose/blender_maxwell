@@ -16,7 +16,3 @@ BL_REGISTER = [
 	*nodes.BL_REGISTER,
 	*categories.BL_REGISTER,
 ]
-
-BL_NODE_CATEGORIES = [
-	*categories.BL_NODE_CATEGORIES,
-]

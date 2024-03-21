@@ -1,8 +1,5 @@
-import typing as typ
 import pydantic as pyd
 import typing_extensions as pytypes_ext
-
-import bpy
 
 ####################
 # - Pure BL Types

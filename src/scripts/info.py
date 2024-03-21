@@ -1,9 +1,9 @@
 import tomllib
 from pathlib import Path
 
-PATH_ROOT = Path(__file__).resolve().parent.parent
-PATH_RUN = PATH_ROOT / 'scripts' / 'run.py'
-PATH_BL_RUN = PATH_ROOT / 'scripts' / 'bl_run.py'
+PATH_ROOT = Path(__file__).resolve().parent.parent.parent
+PATH_SRC = PATH_ROOT / 'src'
+PATH_BL_RUN = PATH_SRC / 'scripts' / 'bl_run.py'
 
 PATH_BUILD = PATH_ROOT / 'build'
 PATH_BUILD.mkdir(exist_ok=True)
@@ -40,6 +40,8 @@ PATH_ADDON_ZIP = (
 )
 
 PATH_ADDON_BLEND_STARTER = PATH_ADDON_PKG / 'blenders' / 'starter.blend'
+
+BOOTSTRAP_LOG_LEVEL_FILENAME = '.bootstrap_log_level'
 
 # Install the ZIPped Addon
 ####################

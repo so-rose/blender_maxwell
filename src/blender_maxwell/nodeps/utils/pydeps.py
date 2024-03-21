@@ -4,17 +4,10 @@ import os
 import sys
 from pathlib import Path
 
-from . import logger as _logger
+from ... import info
+from . import simple_logger
 
-log = _logger.get()
-
-####################
-# - Constants
-####################
-PATH_ADDON_ROOT = Path(__file__).resolve().parent.parent
-PATH_REQS = PATH_ADDON_ROOT / 'requirements.txt'
-DEFAULT_PATH_DEPS = PATH_ADDON_ROOT / '.addon_dependencies'
-DEFAULT_PATH_DEPS.mkdir(exist_ok=True)
+log = simple_logger.get(__name__)
 
 ####################
 # - Globals
@@ -29,21 +22,39 @@ DEPS_ISSUES: list[str] | None = None
 @contextlib.contextmanager
 def importable_addon_deps(path_deps: Path):
 	os_path = os.fspath(path_deps)
+
+	log.info('Adding Path to sys.path: %s', str(os_path))
 	sys.path.insert(0, os_path)
 	try:
 		yield
 	finally:
+		log.info('Removing Path from sys.path: %s', str(os_path))
 		sys.path.remove(os_path)
+
+
+@contextlib.contextmanager
+def syspath_from_bpy_prefs() -> bool:
+	import bpy
+
+	addon_prefs = bpy.context.preferences.addons[info.ADDON_NAME].preferences
+	if hasattr(addon_prefs, 'path_addon_pydeps'):
+		log.info('Retrieved PyDeps Path from Addon Prefs')
+		path_pydeps = addon_prefs.path_addon_pydeps
+		with importable_addon_deps(path_pydeps):
+			yield True
+	else:
+		log.info("Couldn't PyDeps Path from Addon Prefs")
+		yield False
 
 
 ####################
 # - Check PyDeps
 ####################
 def _check_pydeps(
-	path_requirementstxt: Path,
+	path_requirementslock: Path,
 	path_deps: Path,
 ) -> dict[str, tuple[str, str]]:
-	"""Check if packages defined in a 'requirements.txt' file are currently installed.
+	"""Check if packages defined in a 'requirements.lock' file are currently installed.
 
 	Returns a list of any issues (if empty, then all dependencies are correctly satisfied).
 	"""
@@ -54,7 +65,7 @@ def _check_pydeps(
 		See <https://peps.python.org/pep-0426/#name>"""
 		return deplock.lower().replace('_', '-')
 
-	with path_requirementstxt.open('r') as file:
+	with path_requirementslock.open('r') as file:
 		required_depslock = {
 			conform_pypi_package_deplock(line)
 			for raw_line in file.readlines()
@@ -108,14 +119,15 @@ def check_pydeps(path_deps: Path):
 	global DEPS_OK  # noqa: PLW0603
 	global DEPS_ISSUES  # noqa: PLW0603
 
-	if len(_issues := _check_pydeps(PATH_REQS, path_deps)) > 0:
-		# log.debug('Package Check Failed:', end='\n\t')
-		# log.debug(*_issues, sep='\n\t')
+	if len(issues := _check_pydeps(info.PATH_REQS, path_deps)) > 0:
+		log.info('PyDeps Check Failed')
+		log.debug('%s', ', '.join(issues))
 
 		DEPS_OK = False
-		DEPS_ISSUES = _issues
+		DEPS_ISSUES = issues
 	else:
+		log.info('PyDeps Check Succeeded')
 		DEPS_OK = True
-		DEPS_ISSUES = _issues
+		DEPS_ISSUES = []
 
 	return DEPS_OK

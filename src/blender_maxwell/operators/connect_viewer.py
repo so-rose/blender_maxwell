@@ -1,5 +1,9 @@
 import bpy
 
+from ..utils import logger as logger
+
+log = logger.get(__name__)
+
 
 class ConnectViewerNode(bpy.types.Operator):
 	bl_idname = 'blender_maxwell.connect_viewer_node'
@@ -55,7 +59,7 @@ BL_REGISTER = [
 	ConnectViewerNode,
 ]
 
-BL_KMI_REGISTER = [
+BL_KEYMAP_ITEM_DEFS = [
 	{
 		'_': (
 			ConnectViewerNode.bl_idname,

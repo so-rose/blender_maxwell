@@ -1,10 +1,15 @@
+# noqa: INP001
+
 import contextlib
+import logging
 import tempfile
 import typing as typ
 import zipfile
 from pathlib import Path
 
 import info
+
+LogLevel: typ.TypeAlias = int
 
 _PROJ_VERSION_STR = str(
 	tuple(int(el) for el in info.PROJ_SPEC['project']['version'].split('.'))
@@ -18,12 +23,14 @@ BL_INFO_REPLACEMENTS = {
 
 
 @contextlib.contextmanager
-def zipped_addon(
+def zipped_addon(  # noqa: PLR0913
 	path_addon_pkg: Path,
 	path_addon_zip: Path,
 	path_pyproject_toml: Path,
 	path_requirements_lock: Path,
+	initial_log_level: LogLevel = logging.INFO,
 	replace_if_exists: bool = False,
+	remove_after_close: bool = True,
 ) -> typ.Iterator[Path]:
 	"""Context manager exposing a folder as a (temporary) zip file.
 	The .zip file is deleted afterwards.
@@ -69,25 +76,43 @@ def zipped_addon(
 		# Install pyproject.toml @ /pyproject.toml of Addon
 		f_zip.write(
 			path_pyproject_toml,
-			str(
-				(Path(path_addon_pkg.name) / Path(path_pyproject_toml.name))
-				.with_suffix('')
-				.with_suffix('.toml')
-			),
+			str(Path(path_addon_pkg.name) / Path(path_pyproject_toml.name)),
 		)
 
 		# Install requirements.lock @ /requirements.txt of Addon
 		f_zip.write(
 			path_requirements_lock,
-			str(
-				(Path(path_addon_pkg.name) / Path(path_requirements_lock.name))
-				.with_suffix('')
-				.with_suffix('.txt')
-			),
+			str(Path(path_addon_pkg.name) / Path(path_requirements_lock.name)),
+		)
+
+		# Set Initial Log-Level
+		f_zip.writestr(
+			str(Path(path_addon_pkg.name) / info.BOOTSTRAP_LOG_LEVEL_FILENAME),
+			str(initial_log_level),
 		)
 
 	# Delete the ZIP
 	try:
 		yield path_addon_zip
 	finally:
-		path_addon_zip.unlink()
+		if remove_after_close:
+			path_addon_zip.unlink()
+
+
+####################
+# - Run Blender w/Clean Addon Reinstall
+####################
+def main():
+	with zipped_addon(
+		path_addon_pkg=info.PATH_ADDON_PKG,
+		path_addon_zip=info.PATH_ADDON_ZIP,
+		path_pyproject_toml=info.PATH_ROOT / 'pyproject.toml',
+		path_requirements_lock=info.PATH_ROOT / 'requirements.lock',
+		replace_if_exists=True,
+		remove_after_close=False,
+	):
+		# TODO: GPG signature for distribution
+		pass
+
+if __name__ == "__main__":
+	main()

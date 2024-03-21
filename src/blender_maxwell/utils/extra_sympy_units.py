@@ -1,7 +1,10 @@
 import functools
 
-import sympy as sp
-import sympy.physics.units as spu
+from . import pydeps
+
+with pydeps.syspath_from_bpy_prefs():
+	import sympy as sp
+	import sympy.physics.units as spu
 
 
 ####################

@@ -1,14 +1,9 @@
-import typing as typ
-import tempfile
-
 import bpy
 import pydantic as pyd
-import tidy3d as td
-import tidy3d.web as _td_web
 
-from .....utils import tdcloud
-from .. import base
+from .....services import tdcloud
 from ... import contracts as ct
+from .. import base
 
 
 ####################
@@ -21,7 +16,6 @@ class ReloadFolderList(bpy.types.Operator):
 
 	@classmethod
 	def poll(cls, context):
-		space = context.space_data
 		return (
 			tdcloud.IS_AUTHENTICATED
 			and hasattr(context, 'socket')
@@ -94,7 +88,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	existing_folder_id: bpy.props.EnumProperty(
 		name='Folder of Cloud Tasks',
 		description='An existing folder on the Tidy3D Cloud',
-		items=lambda self, context: self.retrieve_folders(context),
+		items=lambda self, _: self.retrieve_folders(),
 		update=(
 			lambda self, context: self.sync_prop('existing_folder_id', context)
 		),
@@ -102,7 +96,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	existing_task_id: bpy.props.EnumProperty(
 		name='Existing Cloud Task',
 		description='An existing task on the Tidy3D Cloud, within the given folder',
-		items=lambda self, context: self.retrieve_tasks(context),
+		items=lambda self, _: self.retrieve_tasks(),
 		update=(
 			lambda self, context: self.sync_prop('existing_task_id', context)
 		),
@@ -122,14 +116,14 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	# - Property Methods
 	####################
 	def sync_existing_folder_id(self, context):
-		folder_task_ids = self.retrieve_tasks(context)
+		folder_task_ids = self.retrieve_tasks()
 
 		self.existing_task_id = folder_task_ids[0][0]
 		## There's guaranteed to at least be one element, even if it's "NONE".
 
 		self.sync_prop('existing_folder_id', context)
 
-	def retrieve_folders(self, context) -> list[tuple]:
+	def retrieve_folders(self) -> list[tuple]:
 		folders = tdcloud.TidyCloudFolders.folders()
 		if not folders:
 			return [('NONE', 'None', 'No folders')]
@@ -143,7 +137,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 			for folder_id, cloud_folder in folders.items()
 		]
 
-	def retrieve_tasks(self, context) -> list[tuple]:
+	def retrieve_tasks(self) -> list[tuple]:
 		if (
 			cloud_folder := tdcloud.TidyCloudFolders.folders().get(
 				self.existing_folder_id
@@ -212,7 +206,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		# Propagate along Link
 		if self.is_linked:
 			msg = (
-				f'Cannot sync newly created task to linked Cloud Task socket.'
+				'Cannot sync newly created task to linked Cloud Task socket.'
 			)
 			raise ValueError(msg)
 			## TODO: A little aggressive. Is there a good use case?
@@ -230,7 +224,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		# Propagate along Link
 		if self.is_linked:
 			msg = (
-				f'Cannot sync newly created task to linked Cloud Task socket.'
+				'Cannot sync newly created task to linked Cloud Task socket.'
 			)
 			raise ValueError(msg)
 			## TODO: A little aggressive. Is there a good use case?

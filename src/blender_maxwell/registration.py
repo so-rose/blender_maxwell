@@ -3,9 +3,9 @@ from pathlib import Path
 
 import bpy
 
-from .utils import logger as _logger
+from .nodeps.utils import simple_logger
 
-log = _logger.get()
+log = simple_logger.get(__name__)
 
 # TODO: More types for these things!
 DelayedRegKey: typ.TypeAlias = str
@@ -33,18 +33,28 @@ EVENT__DEPS_SATISFIED: str = 'on_deps_satisfied'
 # - Class Registration
 ####################
 def register_classes(bl_register: list):
+	log.info('Registering %s Classes', len(bl_register))
 	for cls in bl_register:
 		if cls.bl_idname in REG__CLASSES:
 			msg = f'Skipping register of {cls.bl_idname}'
 			log.info(msg)
 			continue
 
+		log.debug(
+			'Registering Class %s',
+			repr(cls),
+		)
 		bpy.utils.register_class(cls)
 		REG__CLASSES.append(cls)
 
 
 def unregister_classes():
+	log.info('Unregistering %s Classes', len(REG__CLASSES))
 	for cls in reversed(REG__CLASSES):
+		log.debug(
+			'Unregistering Class %s',
+			repr(cls),
+		)
 		bpy.utils.unregister_class(cls)
 
 	REG__CLASSES.clear()
@@ -61,14 +71,24 @@ def register_keymap_items(keymap_item_defs: list[dict]):
 			name='Node Editor',
 			space_type='NODE_EDITOR',
 		)
+		log.info(
+			'Registered Keymap %s',
+			str(BL_KEYMAP),
+		)
 
 	# Register Keymaps
+	log.info('Registering %s Keymap Items', len(keymap_item_defs))
 	for keymap_item_def in keymap_item_defs:
 		keymap_item = BL_KEYMAP.keymap_items.new(
 			*keymap_item_def['_'],
 			ctrl=keymap_item_def['ctrl'],
 			shift=keymap_item_def['shift'],
 			alt=keymap_item_def['alt'],
+		)
+		log.debug(
+			'Registered Keymap Item %s with spec %s',
+			repr(keymap_item),
+			keymap_item_def,
 		)
 		REG__KEYMAP_ITEMS.append(keymap_item)
 
@@ -77,11 +97,20 @@ def unregister_keymap_items():
 	global BL_KEYMAP  # noqa: PLW0603
 
 	# Unregister Keymaps
+	log.info('Unregistering %s Keymap Items', len(REG__KEYMAP_ITEMS))
 	for keymap_item in reversed(REG__KEYMAP_ITEMS):
+		log.debug(
+			'Unregistered Keymap Item %s',
+			repr(keymap_item),
+		)
 		BL_KEYMAP.keymap_items.remove(keymap_item)
 
 	# Lazy-Unload BL_NODE_KEYMAP
 	if BL_KEYMAP is not None:
+		log.info(
+			'Unregistered Keymap %s',
+			repr(BL_KEYMAP),
+		)
 		REG__KEYMAP_ITEMS.clear()
 		BL_KEYMAP = None
 
@@ -99,6 +128,11 @@ def delay_registration(
 		raise ValueError(msg)
 
 	def register_cb(path_deps: Path):
+		log.info(
+			'Running Delayed Registration (key %s) with PyDeps: %s',
+			delayed_reg_key,
+			path_deps,
+		)
 		register_classes(classes_cb(path_deps))
 		register_keymap_items(keymap_item_defs_cb(path_deps))
 

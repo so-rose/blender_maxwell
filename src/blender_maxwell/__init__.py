@@ -1,16 +1,16 @@
-import tomllib
 from pathlib import Path
 
-import bpy
+from . import info
+from .nodeps.utils import simple_logger
 
-from . import operators_nodeps, preferences, registration
-from .utils import pydeps
-from .utils import logger as _logger
+simple_logger.sync_bootstrap_logging(
+	console_level=info.BOOTSTRAP_LOG_LEVEL,
+)
 
-log = _logger.get()
-PATH_ADDON_ROOT = Path(__file__).resolve().parent
-with (PATH_ADDON_ROOT / 'pyproject.toml').open('rb') as f:
-	PROJ_SPEC = tomllib.load(f)
+from . import nodeps, preferences, registration  # noqa: E402
+from .nodeps.utils import pydeps  # noqa: E402
+
+log = simple_logger.get(__name__)
 
 ####################
 # - Addon Information
@@ -33,22 +33,18 @@ bl_info = {
 ## The mechanism is a 'dumb' - output of 'ruff fmt' MUST be basis for replacing
 
 
-def ADDON_PREFS():
-	return bpy.context.preferences.addons[
-		PROJ_SPEC['project']['name']
-	].preferences
-
-
 ####################
 # - Load and Register Addon
 ####################
+log.info('Loading Before-Deps BL_REGISTER')
 BL_REGISTER__BEFORE_DEPS = [
-	*operators_nodeps.BL_REGISTER,
+	*nodeps.operators.BL_REGISTER,
 	*preferences.BL_REGISTER,
 ]
 
 
 def BL_REGISTER__AFTER_DEPS(path_deps: Path):
+	log.info('Loading After-Deps BL_REGISTER')
 	with pydeps.importable_addon_deps(path_deps):
 		from . import node_trees, operators
 	return [
@@ -57,11 +53,18 @@ def BL_REGISTER__AFTER_DEPS(path_deps: Path):
 	]
 
 
-def BL_KEYMAP_ITEM_DEFS(path_deps: Path):
+log.info('Loading Before-Deps BL_KEYMAP_ITEM_DEFS')
+BL_KEYMAP_ITEM_DEFS__BEFORE_DEPS = [
+	*nodeps.operators.BL_KEYMAP_ITEM_DEFS,
+]
+
+
+def BL_KEYMAP_ITEM_DEFS__AFTER_DEPS(path_deps: Path):
+	log.info('Loading After-Deps BL_KEYMAP_ITEM_DEFS')
 	with pydeps.importable_addon_deps(path_deps):
 		from . import operators
 	return [
-		*operators.BL_KMI_REGISTER,
+		*operators.BL_KEYMAP_ITEM_DEFS,
 	]
 
 
@@ -69,29 +72,44 @@ def BL_KEYMAP_ITEM_DEFS(path_deps: Path):
 # - Registration
 ####################
 def register():
+	"""Register the Blender addon."""
+	log.info('Starting %s Registration', info.ADDON_NAME)
+
 	# Register Barebones Addon for Dependency Installation
 	registration.register_classes(BL_REGISTER__BEFORE_DEPS)
+	registration.register_keymap_items(BL_KEYMAP_ITEM_DEFS__BEFORE_DEPS)
 
 	# Retrieve PyDeps Path from Addon Preferences
-	addon_prefs = ADDON_PREFS()
-	path_pydeps = addon_prefs.path_addon_pydeps
+	if (addon_prefs := info.addon_prefs()) is None:
+		unregister()
+		msg = f'Addon preferences not found; aborting registration of {info.ADDON_NAME}'
+		raise RuntimeError(msg)
+	log.debug('Found Addon Preferences')
 
-	# If Dependencies are Satisfied, Register Everything
+	# Retrieve PyDeps Path
+	path_pydeps = addon_prefs.pydeps_path
+	log.info('Loaded PyDeps Path from Addon Prefs: %s', path_pydeps)
+
 	if pydeps.check_pydeps(path_pydeps):
-		registration.register_classes(BL_REGISTER__AFTER_DEPS())
-		registration.register_keymap_items(BL_KEYMAP_ITEM_DEFS())
+		log.info('PyDeps Satisfied: Loading Addon %s', info.ADDON_NAME)
+		registration.register_classes(BL_REGISTER__AFTER_DEPS(path_pydeps))
+		registration.register_keymap_items(BL_KEYMAP_ITEM_DEFS__AFTER_DEPS(path_pydeps))
 	else:
-		# Delay Registration
+		log.info(
+			'PyDeps Invalid: Delaying Addon Registration of %s',
+			info.ADDON_NAME,
+		)
 		registration.delay_registration(
 			registration.EVENT__DEPS_SATISFIED,
 			classes_cb=BL_REGISTER__AFTER_DEPS,
-			keymap_item_defs_cb=BL_KEYMAP_ITEM_DEFS,
+			keymap_item_defs_cb=BL_KEYMAP_ITEM_DEFS__AFTER_DEPS,
 		)
-
-		# TODO: A popup before the addon fully loads or something like that?
-		## TODO: Communicate that deps must be installed and all that?
+		## TODO: bpy Popup to Deal w/Dependency Errors
 
 
 def unregister():
+	"""Unregister the Blender addon."""
+	log.info('Starting %s Unregister', info.ADDON_NAME)
 	registration.unregister_classes()
 	registration.unregister_keymap_items()
+	log.info('Finished %s Unregister', info.ADDON_NAME)

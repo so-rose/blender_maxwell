@@ -6,7 +6,7 @@ INVALID_BL_SOCKET_TYPES = {
 
 
 def interface(
-	geo_nodes,
+	geo_nodes,  ## TODO: bpy type
 	direc: typx.Literal['INPUT', 'OUTPUT'],
 ):
 	"""Returns 'valid' GeoNodes interface sockets, meaning that:

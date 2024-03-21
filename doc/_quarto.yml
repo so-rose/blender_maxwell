@@ -1,0 +1,29 @@
+project:
+  type: website
+
+metadata-files:
+  - _sidebar.yml
+
+
+quartodoc:
+  # Python Package
+  source_dir: ../src
+  package: blender_maxwell
+  parser: google
+
+  # Style
+  style: pkgdown
+  title: Package Reference
+
+  # Write Sidebar Data to Dedicated Metadata File
+  sidebar: _sidebar.yml
+
+  sections:
+    - title: Blender Maxwell API
+      desc: Root package for the Blender Maxwell addon
+      contents:
+        - register
+        - unregister
+
+        - name: preferences
+          children: embedded

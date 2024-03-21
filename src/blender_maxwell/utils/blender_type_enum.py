@@ -2,7 +2,7 @@ import enum
 
 
 class BlenderTypeEnum(str, enum.Enum):
-	def _generate_next_value_(name, start, count, last_values):
+	def _generate_next_value_(name, *_):
 		return name
 
 

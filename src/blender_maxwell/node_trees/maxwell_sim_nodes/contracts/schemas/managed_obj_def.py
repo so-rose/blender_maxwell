@@ -1,9 +1,7 @@
 import typing as typ
-from dataclasses import dataclass
 
 import pydantic as pyd
 
-from ..bl import PresetName, SocketName, BLEnumID
 from .managed_obj import ManagedObj
 
 

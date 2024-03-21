@@ -2,7 +2,7 @@ import typing as typ
 
 import pydantic as pyd
 
-from ..bl import PresetName, SocketName, BLEnumID
+from ..bl import PresetName, SocketName
 
 
 class PresetDef(pyd.BaseModel):

@@ -1,9 +1,9 @@
 import shutil
+from pathlib import Path
 
 import bpy
 
 from ..utils import pydeps
-from .. import registration
 
 
 class UninstallPyDeps(bpy.types.Operator):
@@ -14,7 +14,12 @@ class UninstallPyDeps(bpy.types.Operator):
 		name='Path to Addon Python Dependencies'
 	)
 
+	@classmethod
+	def poll(cls, _: bpy.types.Context):
+		return pydeps.DEPS_OK
+
 	def execute(self, _: bpy.types.Context):
+		path_addon_pydeps = Path(self.path_addon_pydeps)
 		if (
 			pydeps.check_pydeps()
 			and self.path_addon_pydeps.exists()
@@ -35,3 +40,4 @@ class UninstallPyDeps(bpy.types.Operator):
 BL_REGISTER = [
 	UninstallPyDeps,
 ]
+BL_KEYMAP_ITEM_DEFS = []

@@ -30,17 +30,16 @@ IS_AUTHENTICATED = False
 
 
 def is_online():
-	global IS_ONLINE
 	return IS_ONLINE
 
 
 def set_online():
-	global IS_ONLINE
+	global IS_ONLINE  # noqa: PLW0603
 	IS_ONLINE = True
 
 
 def set_offline():
-	global IS_ONLINE
+	global IS_ONLINE  # noqa: PLW0603
 	IS_ONLINE = False
 
 
@@ -48,8 +47,7 @@ def set_offline():
 # - Cloud Authentication
 ####################
 def check_authentication() -> bool:
-	global IS_AUTHENTICATED
-	global IS_ONLINE
+	global IS_AUTHENTICATED  # noqa: PLW0603
 
 	# Check Previous Authentication
 	## If we authenticated once, we presume that it'll work again.
@@ -95,10 +93,10 @@ class TidyCloudFolders:
 		try:
 			cloud_folders = td_web.core.task_core.Folder.list()
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = 'Tried to get cloud folders, but cannot connect to cloud'
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		folders = {
 			cloud_folder.folder_id: cloud_folder
@@ -117,12 +115,12 @@ class TidyCloudFolders:
 			try:
 				cloud_folder = td_web.core.task_core.Folder.create(folder_name)
 				set_online()
-			except td.exceptions.WebError:
+			except td.exceptions.WebError as ex:
 				set_offline()
 				msg = (
 					'Tried to create cloud folder, but cannot connect to cloud'
 				)
-				raise RuntimeError(msg)
+				raise RuntimeError(msg) from ex
 
 			if cls.cache_folders is None:
 				cls.cache_folders = {}
@@ -185,9 +183,11 @@ class TidyCloudTasks:
 	- `cloud_task.get_log(path)`: GET the run log. Remember to use `NamedTemporaryFile` if a stringified log is desired.
 	"""
 
-	cache_tasks: dict[CloudTaskID, CloudTask] = {}
-	cache_folder_tasks: dict[CloudFolderID, set[CloudTaskID]] = {}
-	cache_task_info: dict[CloudTaskID, CloudTaskInfo] = {}
+	cache_tasks: typ.ClassVar[dict[CloudTaskID, CloudTask]] = {}
+	cache_folder_tasks: typ.ClassVar[
+		dict[CloudFolderID, set[CloudTaskID]]
+	] = {}
+	cache_task_info: typ.ClassVar[dict[CloudTaskID, CloudTaskInfo]] = {}
 
 	@classmethod
 	def clear_cache(cls):
@@ -217,12 +217,12 @@ class TidyCloudTasks:
 		try:
 			folder_tasks = cloud_folder.list_tasks()
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = (
 				'Tried to get tasks of a cloud folder, but cannot access cloud'
 			)
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		# No Tasks: Empty Set
 		if folder_tasks is None:
@@ -250,9 +250,7 @@ class TidyCloudTasks:
 			)
 
 		## Task by-Folder Cache
-		cls.cache_folder_tasks[cloud_folder.folder_id] = {
-			task_id for task_id in cloud_tasks
-		}
+		cls.cache_folder_tasks[cloud_folder.folder_id] = set(cloud_tasks)
 
 		return cloud_tasks
 
@@ -287,14 +285,14 @@ class TidyCloudTasks:
 				folder_name=cloud_folder.folder_name,
 			)
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = 'Tried to create cloud task, but cannot access cloud'
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		# Upload Simulation to Cloud Task
 		if upload_progress_cb is not None:
-			upload_progress_cb = lambda uploaded_bytes: None
+			raise NotImplementedError
 		try:
 			cloud_task.upload_simulation(
 				stub,
@@ -302,10 +300,10 @@ class TidyCloudTasks:
 				# progress_callback=upload_progress_cb,
 			)
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = 'Tried to upload simulation to cloud task, but cannot access cloud'
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		# Populate Caches
 		## Direct Task Cache
@@ -348,10 +346,10 @@ class TidyCloudTasks:
 		try:
 			cloud_task.delete()
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = 'Tried to delete cloud task, but cannot access cloud'
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		# Populate Caches
 		## Direct Task Cache
@@ -377,7 +375,6 @@ class TidyCloudTasks:
 		# Repopulate All Caches
 		## By deleting the folder ID, all tasks within will be reloaded
 		del cls.cache_folder_tasks[folder_id]
-		folder_tasks = cls.tasks(cloud_folder)
 
 		return cls.tasks(cloud_folder)[task_id]
 
@@ -395,10 +392,9 @@ class TidyCloudTasks:
 		# Repopulate All Caches
 		## By deleting the folder ID, all tasks within will be reloaded
 		del cls.cache_folder_tasks[folder_id]
-		folder_tasks = cls.tasks(cloud_folder)
 
 		return {
-			task_id: cls.cache_tasks[task_id]
+			task_id: cls.tasks(cloud_folder)[task_id]
 			for task_id in cls.cache_folder_tasks[folder_id]
 		}
 
@@ -410,9 +406,9 @@ class TidyCloudTasks:
 		try:
 			new_cloud_task.abort()
 			set_online()
-		except td.exceptions.WebError:
+		except td.exceptions.WebError as ex:
 			set_offline()
 			msg = 'Tried to abort cloud task, but cannot access cloud'
-			raise RuntimeError(msg)
+			raise RuntimeError(msg) from ex
 
 		return cls.update_task(cloud_task)

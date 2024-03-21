@@ -7,8 +7,11 @@ import bpy
 import pydantic as pyd
 import typing_extensions as typx
 
+from ....utils import logger
 from .. import contracts as ct
 from .. import sockets
+
+log = logger.get(__name__)
 
 CACHE: dict[str, typ.Any] = {}  ## By Instance UUID
 ## NOTE: CACHE does not persist between file loads.
@@ -56,6 +59,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	def __init_subclass__(cls, **kwargs: typ.Any):
 		super().__init_subclass__(**kwargs)
+		log.debug('Initializing Node: %s', cls.node_type)
 
 		# Setup Blender ID for Node
 		if not hasattr(cls, 'node_type'):

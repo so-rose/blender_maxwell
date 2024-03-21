@@ -4,7 +4,10 @@ from pathlib import Path
 
 import bpy
 
-from .. import registration
+from ... import registration
+from ..utils import pydeps, simple_logger
+
+log = simple_logger.get(__name__)
 
 
 class InstallPyDeps(bpy.types.Operator):
@@ -12,15 +15,30 @@ class InstallPyDeps(bpy.types.Operator):
 	bl_label = 'Install BLMaxwell Python Deps'
 
 	path_addon_pydeps: bpy.props.StringProperty(
-		name='Path to Addon Python Dependencies'
+		name='Path to Addon Python Dependencies',
+		default='',
 	)
 	path_addon_reqs: bpy.props.StringProperty(
-		name='Path to Addon Python Dependencies'
+		name='Path to Addon Python Dependencies',
+		default='',
 	)
 
+	@classmethod
+	def poll(cls, _: bpy.types.Context):
+		return not pydeps.DEPS_OK
+
 	def execute(self, _: bpy.types.Context):
+		if self.path_addon_pydeps == '' or self.path_addon_reqs == '':
+			msg = f"A path for operator {self.bl_idname} isn't set"
+			raise ValueError(msg)
+
 		path_addon_pydeps = Path(self.path_addon_pydeps)
 		path_addon_reqs = Path(self.path_addon_reqs)
+		log.info(
+			'Running Install PyDeps w/requirements.txt (%s) to path: %s',
+			path_addon_reqs,
+			path_addon_pydeps,
+		)
 
 		# Create the Addon-Specific Folder (if Needed)
 		## It MUST, however, have a parent already
@@ -34,21 +52,23 @@ class InstallPyDeps(bpy.types.Operator):
 
 		# Install Deps w/Bundled pip
 		try:
-			subprocess.check_call(
-				[
-					str(python_exec),
-					'-m',
-					'pip',
-					'install',
-					'-r',
-					str(path_addon_reqs),
-					'--target',
-					str(path_addon_pydeps),
-				]
+			cmdline = [
+				str(python_exec),
+				'-m',
+				'pip',
+				'install',
+				'-r',
+				str(path_addon_reqs),
+				'--target',
+				str(path_addon_pydeps),
+			]
+			log.info(
+				'Running pip w/cmdline: %s',
+				' '.join(cmdline),
 			)
-		except subprocess.CalledProcessError as e:
-			msg = f'Failed to install dependencies: {str(e)}'
-			self.report({'ERROR'}, msg)
+			subprocess.check_call(cmdline)
+		except subprocess.CalledProcessError:
+			log.exception('Failed to install PyDeps')
 			return {'CANCELLED'}
 
 		registration.run_delayed_registration(
@@ -64,3 +84,4 @@ class InstallPyDeps(bpy.types.Operator):
 BL_REGISTER = [
 	InstallPyDeps,
 ]
+BL_KEYMAP_ITEM_DEFS = []

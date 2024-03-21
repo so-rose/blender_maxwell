@@ -6,22 +6,23 @@ authors = [
     { name = "Sofus Albert Høgsbro Rose", email = "blender-maxwell@sofusrose.com" }
 ]
 dependencies = [
-	"tidy3d~=2.6.1",
-	"pydantic~=2.6.4",
-	"sympy~=1.12",
-	"scipy~=1.12.0",
-	"trimesh~=4.2.0",
-	"networkx~=3.2.1",
-	"rtree~=1.2.0",
+    "tidy3d==2.6.*",
+    "pydantic==2.6.*",
+    "sympy==1.12",
+    "scipy==1.12.*",
+    "trimesh==4.2.*",
+    "networkx==3.2.*",
+    "rich==12.5.*",
+    "rtree==1.2.*",
 
-	# Pin Blender 4.1.0-Compatible Versions
-	## The dependency resolver will report if anything is wonky.
-	"urllib3==1.26.8",
-	"requests==2.27.1",
-	"numpy==1.24.3",
-	"idna==3.3",
-	"charset-normalizer==2.0.10",
-	"certifi==2021.10.8",
+    # Pin Blender 4.1.0-Compatible Versions
+    ## The dependency resolver will report if anything is wonky.
+    "urllib3==1.26.8",
+    "requests==2.27.1",
+    "numpy==1.24.3",
+    "idna==3.3",
+    "charset-normalizer==2.0.10",
+    "certifi==2021.10.8",
 ]
 readme = "README.md"
 requires-python = "~= 3.11"
@@ -39,7 +40,8 @@ dev-dependencies = [
 ]
 
 [tool.rye.scripts]
-dev = "python ./scripts/run.py"
+dev = "python ./src/scripts/dev.py"
+pack = "python ./src/scripts/pack.py"
 
 
 ####################
@@ -47,7 +49,8 @@ dev = "python ./scripts/run.py"
 ####################
 [tool.ruff]
 target-version = "py311"
-line-length = 79
+line-length = 88
+pycodestyle.max-doc-length = 120
 
 [tool.ruff.lint]
 task-tags = ["TODO"]
@@ -62,8 +65,8 @@ select = [
 	"ERA", # eradicate  ## Ban Commented Code
 	"TRY", # tryceratops  ## Exception Handling Style
 	"B",   # flake8-bugbear  ## Opinionated, Probable-Bug Patterns
-	#"N",   # pep8-naming  ## TODO: Force Good Naming Conventions
-	#"D",   # pydocstyle  ## TODO: Force docstrings
+	"N",   # pep8-naming
+	"D",   # pydocstyle
 	"SIM", # flake8-simplify  ## Sanity-Check for Code Simplification
 	"SLF", # flake8-self  ## Ban Private Member Access
 	"RUF", # Ruff-specific rules  ## Extra Good-To-Have Rules
@@ -100,6 +103,15 @@ ignore = [
 	"B008", # FastAPI uses this for Depends(), Security(), etc. .
 	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
 	"ERA001", # 'Commented-out code' seems to be just about anything to ruff
+
+	# Line Length - Controversy Incoming
+	## Hot Take: Let the Formatter Worry about Line Length
+	## - Yes dear reader, I'm with you. Soft wrap can go too far.
+	## - ...but also, sometimes there are real good reasons not to split.
+	## - Ex. I think 'one sentence per line' docstrings are a valid thing.
+	## - Overlong lines tend to be be a code smell anyway
+	## - We'll see if my hot takes survive the week :)
+	"E501",  # Let Formatter Worry about Line Length
 ]
 
 ####################

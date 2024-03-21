@@ -1,3 +1,4 @@
+# noqa: INP001
 import os
 import subprocess
 from pathlib import Path
@@ -43,7 +44,7 @@ def run_blender(py_script: Path, print_live: bool = False):
 ####################
 # - Run Blender w/Clean Addon Reinstall
 ####################
-if __name__ == '__main__':
+def main():
 	return_code, output = run_blender(info.PATH_BL_RUN, print_live=False)
 	if return_code == info.STATUS_UNINSTALLED_ADDON:
 		return_code, output = run_blender(info.PATH_BL_RUN, print_live=True)
@@ -52,3 +53,6 @@ if __name__ == '__main__':
 			raise ValueError(msg)
 	elif return_code != 0:
 		print(''.join(output))  # noqa: T201
+
+if __name__ == "__main__":
+	main()

@@ -3,6 +3,7 @@
 See <https://github.com/dfelinto/blender/blob/master/release/scripts/modules/addon_utils.py>
 """
 
+import logging
 import shutil
 import sys
 import traceback
@@ -10,9 +11,17 @@ from pathlib import Path
 
 import bpy
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import info
-import pack
+PATH_SCRIPT = str(Path(__file__).resolve().parent)
+sys.path.insert(0, str(PATH_SCRIPT))
+import info  # noqa: E402
+import pack  # noqa: E402
+
+sys.path.remove(str(PATH_SCRIPT))
+
+# Set Bootstrap Log Level
+## This will be the log-level of both console and file logs, at first...
+## ...until the addon preferences have been loaded.
+BOOTSTRAP_LOG_LEVEL = logging.DEBUG
 
 ## TODO: Preferences item that allows using BLMaxwell 'starter.blend' as Blender's default starter blendfile.
 
@@ -113,19 +122,22 @@ def install_addon(addon_name: str, addon_zip: Path) -> None:
 		msg = f"Couldn't enable addon {addon_name}"
 		raise RuntimeError(msg)
 
-	# Set Dev Path for Addon Dependencies
-	addon_prefs = bpy.context.preferences.addons[addon_name].preferences
-	addon_prefs.use_default_path_addon_pydeps = False
-	addon_prefs.path_addon_pydeps = info.PATH_ADDON_DEV_DEPS
-
 	# Save User Preferences
 	bpy.ops.wm.save_userpref()
+
+
+def setup_for_development(addon_name: str, path_addon_dev_deps: Path) -> None:
+	addon_prefs = bpy.context.preferences.addons[addon_name].preferences
+
+	# PyDeps Path
+	addon_prefs.use_default_pydeps_path = False
+	addon_prefs.pydeps_path = path_addon_dev_deps
 
 
 ####################
 # - Entrypoint
 ####################
-if __name__ == '__main__':
+def main():
 	# Delete Addon (maybe; possibly restart)
 	delete_addon_if_loaded(info.ADDON_NAME)
 
@@ -139,6 +151,7 @@ if __name__ == '__main__':
 		info.PATH_ADDON_ZIP,
 		info.PATH_ROOT / 'pyproject.toml',
 		info.PATH_ROOT / 'requirements.lock',
+		initial_log_level=BOOTSTRAP_LOG_LEVEL,
 	) as path_zipped:
 		try:
 			install_addon(info.ADDON_NAME, path_zipped)
@@ -146,6 +159,9 @@ if __name__ == '__main__':
 			traceback.print_exc()
 			install_failed = True
 
+	# Setup Addon for Development Use
+	setup_for_development(info.ADDON_NAME, info.PATH_ADDON_DEV_DEPS)
+	
 	# Load Development .blend
 	## TODO: We need a better (also final-deployed-compatible) solution for what happens when a user opened a .blend file without installing dependencies!
 	if not install_failed:
@@ -153,3 +169,7 @@ if __name__ == '__main__':
 	else:
 		bpy.ops.wm.quit_blender()
 		sys.exit(info.STATUS_NOINSTALL_ADDON)
+
+
+if __name__ == '__main__':
+	main()

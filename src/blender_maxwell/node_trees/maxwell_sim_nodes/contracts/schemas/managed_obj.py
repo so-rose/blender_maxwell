@@ -19,8 +19,4 @@ class ManagedObj(typ.Protocol):
 
 	def free(self): ...
 
-	def bl_select(self):
-		"""If this is a managed Blender object, and the operation "select this in Blender" makes sense, then do so.
-
-		Else, do nothing.
-		"""
+	def bl_select(self): ...

@@ -1,16 +1,16 @@
 import typing as typ
-import typing_extensions as typx
-
-import pydantic as pyd
-import sympy as sp
-import sympy.physics.units as spu
 
 import bpy
+import sympy as sp
+import sympy.physics.units as spu
+import typing_extensions as typx
 
-from ...utils import extra_sympy_units as spuex
+from ...utils import logger as _logger
 from . import contracts as ct
-from .contracts import SocketType as ST
 from . import sockets as sck
+from .contracts import SocketType as ST
+
+log = _logger.get(__name__)
 
 # TODO: Caching?
 # TODO: Move the manual labor stuff to contracts
@@ -38,7 +38,7 @@ for socket_type in ST:
 		sck,
 		socket_type.value.removesuffix('SocketType') + 'SocketDef',
 	):
-		print('Missing SocketDef for', socket_type.value)
+		log.warning('Missing SocketDef for %s', socket_type.value)
 
 
 ####################
