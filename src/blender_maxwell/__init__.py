@@ -75,7 +75,7 @@ def register():
 	"""Register the Blender addon."""
 	log.info('Starting %s Registration', info.ADDON_NAME)
 
-	# Register Barebones Addon for Dependency Installation
+	# Register Barebones Addon (enough for PyDeps Installability)
 	registration.register_classes(BL_REGISTER__BEFORE_DEPS)
 	registration.register_keymap_items(BL_KEYMAP_ITEM_DEFS__BEFORE_DEPS)
 
@@ -84,7 +84,6 @@ def register():
 		unregister()
 		msg = f'Addon preferences not found; aborting registration of {info.ADDON_NAME}'
 		raise RuntimeError(msg)
-	log.debug('Found Addon Preferences')
 
 	# Retrieve PyDeps Path
 	path_pydeps = addon_prefs.pydeps_path

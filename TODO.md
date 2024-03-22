@@ -162,9 +162,11 @@
 [ ] Math
 - [ ] Implement common operations w/secondary choice of socket type based on a custom internal data structure
 - [ ] Implement angfreq/frequency/vacwl conversion.
+- [ ] Implement spectral math on SDs
+- [ ] Implement easy derivation of ex. transmission and reflection.
 [ ] Separate
-[ ] Combine
-- [ ] Implement concatenation of sim-critical socket types into their multi-type
+[x] Combine
+- [x] Implement concatenation of sim-critical socket types into their multi-type
 
 
 
@@ -329,15 +331,23 @@
 
 
 # Style
-[ ] Rethink the meaning of color and shapes in node sockets, including whether dynamic functionality is needed when it comes to socket shape (ex. it might be nice to know whether a socket is array-like or uses units).
-[ ] Rethink the meaning of color and shapes in node sockets, including whether dynamic functionality is needed when it comes to socket shape.
+[x] Rethink the meaning of color and shapes in node sockets, including whether dynamic functionality is needed when it comes to socket shape (ex. it might be nice to know whether a socket is array-like or uses units).
 
 
 
 # Architecture
+## CRITICAL
+With these things in place
+[ ] Linkability / Appendability of library GeoNodes groups, including being able to semantically ask for a particular GeoNodes tree without 'magic strings' that are entirely end-user-file dependent, is completely critical. especially
+[ ] Ship the addon with libraries of GeoNodes groups (with NO dependency on the addon), which are linked (internal use) or appended (end-user-selected structures) when needed for previewing.
+- I don't know that library overrides are the correct approach when it comes to structures used by the end-user. It's extremely easy to make a change to a library structure (or have one made for us by a Blender update!) that completely wrecks all end-user simulations that use it, or override it. By appending, the structure becomes 'part of' the user's simulation, which also makes it quite a bit easier for the user to alter (even drastically) for their own needs.
+[ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
+[ ] Simplify the boilerplate needed to add a particular 3D preview driven by the input sockets of a particular GeoNodes group. It's currently hard for all the wrong reasons, and greatly halts our velocity in developing useful 3D previews of any/everything.
+
 ## Registration and Contracts
 [x] Finish the contract code converting from Blender sockets to our sockets based on dimensionality and the property description.
 [ ] Refactor the node category code; it's ugly.
+- It's maybe not that easy. And it seems to work with surprising reliability. Leave it alone for now!
 [?] Would be nice with some kind of indicator somewhere to help set good socket descriptions when using geonodes and wanting units.
 
 ## Managed Objects
@@ -349,11 +359,11 @@
 [ ] Implement jax-driven linear interpolation of volume voxels to an image texture, whose pixels are sized according to the dimensions of another managed plane object (perhaps a uniquely described Managed BL object itself).
 
 ## Utils or Services
-[ ] Dedicated module for managing the interaction with the tidy3d cloud, to help nuke all the random caches out of existance.
+[x] Dedicated module for managing the interaction with the tidy3d cloud, to help nuke all the random caches out of existance.
 
 ## Node Base Class
 [ ] Dedicated `draw_preview`-type draw functions for plot customizations.
-- [ ] For now, previewing isn't something I think should be part of the node
+- [ ] For now, previewing isn't something I think should always be part of the node - perhaps we can use panels to keep settings, but also allow preview options to toggleably add a loose socket for driven input.
 [ ] Custom `@cache`/`@lru_cache`/`@cached_property` which caches by instance ID (possibly based on `beartype` or `pydantic`).
 [ ] When presets are used, if a preset is selected and the user alters a preset setting, then dynamically switch the preset indicator back to "Custom"  to indicate that there is no active preset
 [ ] It seems that `node.inputs` and `node.outputs` allows the use of a `move` method, which may allow reordering sockets dynamically, which we should expose to the user as user-configurable ordering rules (maybe resolved with a constraint solver).
@@ -363,9 +373,11 @@
 [ ] Custom callbacks when deleting a node (in `free()`), to ex. delete all previews with the viewer node.
 
 ## Socket Base Class
-[ ] A feature `use_array` which allows a socket to declare that it can be both a single value and array-like (possibly constrained to a given shape). This should also allow the SocketDef to request that the input socket be initialised as a multi-input socket, once Blender updates to support those.
-- [ ] Implement a shape-selector, with a dropdown for dimensionality and an appropriate `IntegerVectorProperty` for each kind of shape (supporting also straight-up inf), which is declared to the node that supports array-likeness so it can decide how exactly to expose properties in the array-like context of things.
+[x] A feature `use_array` which allows a socket to declare that it can be both a single value and array-like (possibly constrained to a given shape). This should also allow the SocketDef to request that the input socket be initialised as a multi-input socket, once Blender updates to support those.
+- [-] Implement a shape-selector, with a dropdown for dimensionality and an appropriate `IntegerVectorProperty` for each kind of shape (supporting also straight-up inf), which is declared to the node that supports array-likeness so it can decide how exactly to expose properties in the array-like context of things.
+	- So far, the 'method of generation' seems pretty unique to each kind of socket. It's fully manual right now, but we could let the user select from standard UIs ex. 'generate with linspace', 'generate with logspace', etc. .
 [ ] Make `to_socket`s no-consent to new links from `from_socket`s of differing type (we'll see if this controls the typing story enough for now, and how much we'll need capabilities in the long run)
+- [?] Alternatively, do exactly this, but have it be the default behavior of the capability system, to preserve the ability to extend it to more exotic capability needs.
 - [?] Alternatively, reject non matching link types, and red-mark non matching capabilities?
 
 ## Many Nodes
@@ -379,20 +391,22 @@
 - [ ] ModeSpec, for use by ModeSource, ModeMonitor, ModeSolverMonitor. Data includes ModeSolverData, ModeData, ScalarModeFieldDataArray, ModeAmpsDataArray, ModeIndexDataArray, ModeSolver.
 
 ## Development Tooling
-[ ] Implement `rye` support
-[ ] Setup neovim to be an ideal editor
+[x] Implement `rye` support
+[x] Setup neovim to be an ideal editor
 
 ## Version Churn
 [ ] Implement real StrEnum sockets, since they appear in py3.11
-[ ] Think about implementing new panels where appropriate (<https://developer.blender.org/docs/release_notes/4.1/python_api/>)
+[x] Think about implementing new panels where appropriate (<https://developer.blender.org/docs/release_notes/4.1/python_api/>)
 [ ] Think about using the new bl4.1 file handler API to enable drag and drop creation of appropriate nodes (for importing files without hassle).
 [ ] Keep an eye on our manual `__annotations__` hacking; python 3.13 is apparently fucking with it.
-[ ] Plan for multi-input sockets <https://projects.blender.org/blender/blender/commit/14106150797a6ce35e006ffde18e78ea7ae67598> (for now, just use the "Combine" node and have seperate socket types for both).
+[x] Plan for multi-input sockets <https://projects.blender.org/blender/blender/commit/14106150797a6ce35e006ffde18e78ea7ae67598> (for now, just use the "Combine" node and have seperate socket types for both).
+- There are big benefits with respect to previewability to using combine nodes; we shouldn't play the multi-input game for now.
 [ ] Keep an eye out for volume geonodes in 4.2 (July 16, 2024), which will better allow for more complicated volume processing (we might still want/need the jax based stuff after, but let's keep it minimal just in case)
 
 ## Packaging
-[ ] Allow specifying custom dir for keeping pip dependencies, so we can unify prod and dev (currently we hard-code a dev dependency path).
-[ ] Refactor top-level `__init__.py` to check dependencies first. If not everything is available, it should only register a minimal addon; specifically, a message telling the user that the addon requires additional dependencies (list which), and the button to install them. When the installation is done, re-check deps and register the rest of the addon.
+[x] Allow specifying custom dir for keeping pip dependencies, so we can unify prod and dev (currently we hard-code a dev dependency path).
+[x] Refactor top-level `__init__.py` to check dependencies first. If not everything is available, it should only register a minimal addon; specifically, a message telling the user that the addon requires additional dependencies (list which), and the button to install them. When the installation is done, re-check deps and register the rest of the addon.
+[ ] Popup to install dependencies after UI is available (possibly with the help of the `draw()` function of the `InstallPyDeps` operator)
 [ ] Use a Modal and multiline-text-like construction to print `pip install` as we install dependencies, so that the user has an idea that something is happening.
 [ ] Test on Windows
 
