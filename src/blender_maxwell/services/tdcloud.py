@@ -29,10 +29,6 @@ IS_ONLINE = False
 IS_AUTHENTICATED = False
 
 
-def is_online():
-	return IS_ONLINE
-
-
 def set_online():
 	global IS_ONLINE  # noqa: PLW0603
 	IS_ONLINE = True
@@ -99,8 +95,7 @@ class TidyCloudFolders:
 			raise RuntimeError(msg) from ex
 
 		folders = {
-			cloud_folder.folder_id: cloud_folder
-			for cloud_folder in cloud_folders
+			cloud_folder.folder_id: cloud_folder for cloud_folder in cloud_folders
 		}
 		cls.cache_folders = folders
 		return folders
@@ -117,9 +112,7 @@ class TidyCloudFolders:
 				set_online()
 			except td.exceptions.WebError as ex:
 				set_offline()
-				msg = (
-					'Tried to create cloud folder, but cannot connect to cloud'
-				)
+				msg = 'Tried to create cloud folder, but cannot connect to cloud'
 				raise RuntimeError(msg) from ex
 
 			if cls.cache_folders is None:
@@ -184,9 +177,7 @@ class TidyCloudTasks:
 	"""
 
 	cache_tasks: typ.ClassVar[dict[CloudTaskID, CloudTask]] = {}
-	cache_folder_tasks: typ.ClassVar[
-		dict[CloudFolderID, set[CloudTaskID]]
-	] = {}
+	cache_folder_tasks: typ.ClassVar[dict[CloudFolderID, set[CloudTaskID]]] = {}
 	cache_task_info: typ.ClassVar[dict[CloudTaskID, CloudTaskInfo]] = {}
 
 	@classmethod
@@ -208,9 +199,7 @@ class TidyCloudTasks:
 	def tasks(cls, cloud_folder: CloudFolder) -> dict[CloudTaskID, CloudTask]:
 		"""Get all cloud tasks within a particular cloud folder as a set."""
 		# Retrieve Cached Tasks
-		if (
-			task_ids := cls.cache_folder_tasks.get(cloud_folder.folder_id)
-		) is not None:
+		if (task_ids := cls.cache_folder_tasks.get(cloud_folder.folder_id)) is not None:
 			return {task_id: cls.cache_tasks[task_id] for task_id in task_ids}
 
 		# Retrieve Tasks by-Folder
@@ -219,9 +208,7 @@ class TidyCloudTasks:
 			set_online()
 		except td.exceptions.WebError as ex:
 			set_offline()
-			msg = (
-				'Tried to get tasks of a cloud folder, but cannot access cloud'
-			)
+			msg = 'Tried to get tasks of a cloud folder, but cannot access cloud'
 			raise RuntimeError(msg) from ex
 
 		# No Tasks: Empty Set
@@ -231,9 +218,7 @@ class TidyCloudTasks:
 
 		# Populate Caches
 		## Direct Task Cache
-		cloud_tasks = {
-			cloud_task.task_id: cloud_task for cloud_task in folder_tasks
-		}
+		cloud_tasks = {cloud_task.task_id: cloud_task for cloud_task in folder_tasks}
 		cls.cache_tasks |= cloud_tasks
 
 		## Task Info Cache
@@ -242,9 +227,7 @@ class TidyCloudTasks:
 				task_name=cloud_task.taskName,
 				status=cloud_task.status,
 				created_at=cloud_task.created_at,
-				cost_est=functools.partial(
-					td_web.estimate_cost, cloud_task.task_id
-				),
+				cost_est=functools.partial(td_web.estimate_cost, cloud_task.task_id),
 				run_info=cloud_task.get_running_info,
 				callback_url=cloud_task.callback_url,
 			)
@@ -314,18 +297,14 @@ class TidyCloudTasks:
 			task_name=cloud_task.taskName,
 			status=cloud_task.status,
 			created_at=cloud_task.created_at,
-			cost_est=functools.partial(
-				td_web.estimate_cost, cloud_task.task_id
-			),
+			cost_est=functools.partial(td_web.estimate_cost, cloud_task.task_id),
 			run_info=cloud_task.get_running_info,
 			callback_url=cloud_task.callback_url,
 		)
 
 		## Task by-Folder Cache
 		if cls.cache_folder_tasks.get(cloud_task.folder_id):
-			cls.cache_folder_tasks[cloud_task.folder_id].add(
-				cloud_task.task_id
-			)
+			cls.cache_folder_tasks[cloud_task.folder_id].add(cloud_task.task_id)
 		else:
 			cls.cache_folder_tasks[cloud_task.folder_id] = {cloud_task.task_id}
 
@@ -379,9 +358,7 @@ class TidyCloudTasks:
 		return cls.tasks(cloud_folder)[task_id]
 
 	@classmethod
-	def update_tasks(
-		cls, folder_id: CloudFolderID
-	) -> dict[CloudTaskID, CloudTask]:
+	def update_tasks(cls, folder_id: CloudFolderID) -> dict[CloudTaskID, CloudTask]:
 		"""Updates the CloudTask to the latest ex. status attributes."""
 		# BUG: td_web.core.task_core.SimulationTask.get(task_id) doesn't return the `created_at` field.
 		## Therefore, we unfortunately need to get all tasks for the folder ID just to update one.

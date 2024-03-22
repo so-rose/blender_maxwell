@@ -1,16 +1,14 @@
-import typing as typ
 
 import bpy
-import sympy as sp
-import sympy.physics.units as spu
 import pydantic as pyd
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 ST = ct.SocketType
-SU = lambda socket_type: ct.SOCKET_UNITS[socket_type]['values']
+def SU(socket_type):  # noqa: N802, D103
+	return ct.SOCKET_UNITS[socket_type]['values']
 
 
 ####################
@@ -195,58 +193,69 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		if self.show_definition:
-			# TODO: We need panels instead of rows!!
-			col_row = col.row(align=False)
-			col_row.alignment = 'EXPAND'
-			col_row.prop(self, 'unit_time', text='')
-			col_row.prop(self, 'unit_angle', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Time | Angle')
+			col.prop(self, 'unit_time', text='t')
+			col.prop(self, 'unit_angle', text='θ')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=False)
-			col_row.alignment = 'EXPAND'
-			col_row.prop(self, 'unit_length', text='')
-			col_row.prop(self, 'unit_area', text='')
-			col_row.prop(self, 'unit_volume', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Len | Area | Vol')
+			col.prop(self, 'unit_length', text='l')
+			col.prop(self, 'unit_area', text='l²')
+			col.prop(self, 'unit_volume', text='l³')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.alignment = 'EXPAND'
-			col_row.label(text='Point')
-			col_row.prop(self, 'unit_point_2d', text='')
-			col_row.prop(self, 'unit_point_3d', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Point')
+			col.prop(self, 'unit_point_2d', text='P₂')
+			col.prop(self, 'unit_point_3d', text='P₃')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.alignment = 'EXPAND'
-			col_row.label(text='Size')
-			col_row.prop(self, 'unit_size_2d', text='')
-			col_row.prop(self, 'unit_size_3d', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Size')
+			col.prop(self, 'unit_size_2d', text='S₂')
+			col.prop(self, 'unit_size_3d', text='S₃')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.alignment = 'EXPAND'
-			col_row.label(text='Mass')
-			col_row.prop(self, 'unit_mass', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Mass')
+			col.prop(self, 'unit_mass', text='M')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.alignment = 'EXPAND'
-			col_row.label(text='Vel')
-			col_row.prop(self, 'unit_speed', text='')
-			# col_row.prop(self, "unit_vel_2d_vector", text="")
-			# col_row.prop(self, "unit_vel_3d_vector", text="")
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Vel')
+			col.prop(self, 'unit_speed', text='|v|')
+			# col.prop(self, "unit_vel_2d_vector", text="")
+			# col.prop(self, "unit_vel_3d_vector", text="")
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.label(text='Accel')
-			col_row.prop(self, 'unit_accel_scalar', text='')
-			# col_row.prop(self, "unit_accel_2d_vector", text="")
-			col_row.prop(self, 'unit_accel_3d', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Accel')
+			col.prop(self, 'unit_accel_scalar', text='|a|')
+			# col.prop(self, "unit_accel_2d_vector", text="")
+			col.prop(self, 'unit_accel_3d', text='a₃')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.label(text='Force')
-			col_row.prop(self, 'unit_force_scalar', text='')
-			# col_row.prop(self, "unit_force_2d_vector", text="")
-			col_row.prop(self, 'unit_force_3d', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Force')
+			col.prop(self, 'unit_force_scalar', text='|F|')
+			# col.prop(self, "unit_force_2d_vector", text="")
+			col.prop(self, 'unit_force_3d', text='F₃')
+			col.separator(factor=1.0)
 
-			col_row = col.row(align=True)
-			col_row.alignment = 'EXPAND'
-			col_row.label(text='Freq')
-			col_row.prop(self, 'unit_freq', text='')
+			row = col.row()
+			row.alignment = 'CENTER'
+			row.label(text='Freq')
+			col.prop(self, 'unit_freq', text='t⁽⁻¹⁾')
 
 	####################
 	# - Default Value

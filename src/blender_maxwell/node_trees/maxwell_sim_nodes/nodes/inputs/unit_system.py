@@ -1,10 +1,6 @@
-import bpy
-import sympy as sp
-
 from ... import contracts as ct
 from ... import sockets
 from .. import base
-
 
 class PhysicalUnitSystemNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.UnitSystem
@@ -26,7 +22,7 @@ class PhysicalUnitSystemNode(base.MaxwellSimNode):
 		'Unit System',
 		input_sockets={'Unit System'},
 	)
-	def compute_value(self, input_sockets) -> dict:
+	def compute_unit_system(self, input_sockets) -> dict:
 		return input_sockets['Unit System']
 
 

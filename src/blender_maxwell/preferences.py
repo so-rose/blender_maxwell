@@ -17,8 +17,8 @@ log = simple_logger.get(__name__)
 # - Preferences
 ####################
 class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
-	"""Manages user preferences and settings for the Blender Maxwell addon.
-	"""
+	"""Manages user preferences and settings for the Blender Maxwell addon."""
+
 	bl_idname = info.ADDON_NAME  ## MUST match addon package name
 
 	####################
