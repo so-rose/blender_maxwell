@@ -90,27 +90,6 @@ def import_geonodes(
 
 
 ####################
-# - GeoNodes Asset Shelf
-####################
-# class GeoNodesAssetShelf(bpy.types.AssetShelf):
-# bl_space_type = 'NODE_EDITOR'
-# bl_idname = 'blender_maxwell.asset_shelf__geonodes'
-# bl_options = {'NO_ASSET_DRAG'}
-#
-# @classmethod
-# def poll(cls, context):
-# return (
-# (space := context.get('space_data'))
-# and (node_tree := space.get('node_tree'))
-# and (node_tree.bl_idname == 'MaxwellSimTreeType')
-# )
-#
-# @classmethod
-# def asset_poll(cls, asset: bpy.types.AssetRepresentation):
-# return asset.id_type == 'NODETREE'
-
-
-####################
 # - GeoNodes Asset Shelf Panel for MaxwellSimTree
 ####################
 class NodeAssetPanel(bpy.types.Panel):

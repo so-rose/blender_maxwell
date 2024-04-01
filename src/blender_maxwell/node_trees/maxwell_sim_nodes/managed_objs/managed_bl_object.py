@@ -7,6 +7,7 @@ import typing_extensions as typx
 
 from ....utils import logger
 from .. import contracts as ct
+from .managed_bl_collection import managed_collection, preview_collection
 
 log = logger.get(__name__)
 
@@ -15,33 +16,6 @@ MODIFIER_NAMES = {
 	'NODES': 'BLMaxwell_GeoNodes',
 	'ARRAY': 'BLMaxwell_Array',
 }
-MANAGED_COLLECTION_NAME = 'BLMaxwell'
-PREVIEW_COLLECTION_NAME = 'BLMaxwell Visible'
-
-
-####################
-# - BLCollection
-####################
-def bl_collection(
-	collection_name: str, view_layer_exclude: bool
-) -> bpy.types.Collection:
-	# Init the "Managed Collection"
-	# Ensure Collection exists (and is in the Scene collection)
-	if collection_name not in bpy.data.collections:
-		collection = bpy.data.collections.new(collection_name)
-		bpy.context.scene.collection.children.link(collection)
-	else:
-		collection = bpy.data.collections[collection_name]
-
-	## Ensure synced View Layer exclusion
-	if (
-		layer_collection := bpy.context.view_layer.layer_collection.children[
-			collection_name
-		]
-	).exclude != view_layer_exclude:
-		layer_collection.exclude = view_layer_exclude
-
-	return collection
 
 
 ####################
@@ -151,16 +125,9 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		If it's already included, do nothing.
 		"""
 		bl_object = self.bl_object(kind)
-		if (
-			bl_object.name
-			not in (
-				preview_collection := bl_collection(
-					PREVIEW_COLLECTION_NAME, view_layer_exclude=False
-				)
-			).objects
-		):
+		if bl_object.name not in preview_collection().objects:
 			log.info('Moving "%s" to Preview Collection', bl_object.name)
-			preview_collection.objects.link(bl_object)
+			preview_collection().objects.link(bl_object)
 
 		# Display Parameters
 		if kind == 'EMPTY' and empty_display_type is not None:
@@ -180,14 +147,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		If it's already removed, do nothing.
 		"""
 		bl_object = self.bl_object(kind)
-		if (
-			bl_object.name
-			not in (
-				preview_collection := bl_collection(
-					PREVIEW_COLLECTION_NAME, view_layer_exclude=False
-				)
-			).objects
-		):
+		if bl_object.name not in preview_collection().objects:
 			log.info('Removing "%s" from Preview Collection', bl_object.name)
 			preview_collection.objects.unlink(bl_object)
 
@@ -228,7 +188,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		if not (bl_object := bpy.data.objects.get(self.name)):
 			log.info(
 				'Creating "%s" with kind "%s"',
-				bl_object.name,
+				self.name,
 				kind,
 			)
 			if kind == 'MESH':
@@ -246,9 +206,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 				'Linking "%s" to Base Collection',
 				bl_object.name,
 			)
-			bl_collection(
-				MANAGED_COLLECTION_NAME, view_layer_exclude=True
-			).objects.link(bl_object)
+			managed_collection().objects.link(bl_object)
 
 		return bl_object
 

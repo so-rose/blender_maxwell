@@ -4,5 +4,10 @@ from ....utils.blender_type_enum import BlenderTypeEnum
 
 
 class ManagedObjType(BlenderTypeEnum):
-	ManagedBLObject = enum.auto()
 	ManagedBLImage = enum.auto()
+
+	ManagedBLCollection = enum.auto()
+	ManagedBLEmpty = enum.auto()
+	ManagedBLMesh = enum.auto()
+	ManagedBLVolume = enum.auto()
+	ManagedBLModifier = enum.auto()
