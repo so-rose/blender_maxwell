@@ -1,39 +1,31 @@
 import typing as typ
 
 import tidy3d as td
-import numpy as np
-import sympy as sp
-import sympy.physics.units as spu
-
-import bpy
-from bpy_types import bpy_types
-import bmesh
 
 from .....utils import analyze_geonodes
-from ... import bl_socket_map
+from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
-from ... import sockets
 from .. import base
-from ... import managed_objs
 
 
 class GeoNodesStructureNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.GeoNodesStructure
 	bl_label = 'GeoNodes Structure'
+	use_sim_node_name = True
 
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Unit System': sockets.PhysicalUnitSystemSocketDef(),
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 	}
-	output_sockets = {
+	output_sockets: typ.ClassVar = {
 		'Structure': sockets.MaxwellStructureSocketDef(),
 	}
 
-	managed_obj_defs = {
+	managed_obj_defs: typ.ClassVar = {
 		'geometry': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
 			name_prefix='',
@@ -92,9 +84,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 
 		# Analyze GeoNodes
 		## Extract Valid Inputs (via GeoNodes Tree "Interface")
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Set Loose Input Sockets
 		## Retrieve the appropriate SocketDef for the Blender Interface Socket
@@ -138,9 +128,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 
 		# Analyze GeoNodes Interface (input direction)
 		## This retrieves NodeTreeSocketInterface elements
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		## TODO: Check that Loose Sockets matches the Interface
 		## - If the user deletes an interface socket, bad things will happen.
@@ -156,9 +144,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 					loose_input_sockets[socket_name],
 					unit_system,
 				)
-				for socket_name, bl_interface_socket in (
-					geonodes_interface.items()
-				)
+				for socket_name, bl_interface_socket in (geonodes_interface.items())
 			},
 		)
 
@@ -185,6 +171,4 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	GeoNodesStructureNode,
 ]
-BL_NODES = {
-	ct.NodeType.GeoNodesStructure: (ct.NodeCategory.MAXWELLSIM_STRUCTURES)
-}
+BL_NODES = {ct.NodeType.GeoNodesStructure: (ct.NodeCategory.MAXWELLSIM_STRUCTURES)}

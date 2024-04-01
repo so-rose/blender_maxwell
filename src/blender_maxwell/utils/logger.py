@@ -3,6 +3,7 @@ from pathlib import Path
 
 import rich.console
 import rich.logging
+import rich.traceback
 
 from .. import info
 from ..nodeps.utils import simple_logger
@@ -15,6 +16,16 @@ from ..nodeps.utils.simple_logger import (
 	sync_loggers,  # noqa: F401
 )
 
+OUTPUT_CONSOLE = rich.console.Console(
+	color_system='truecolor',
+	## TODO: color_system should be 'auto'; bl_run.py hijinks are interfering
+)
+ERROR_CONSOLE = rich.console.Console(
+	color_system='truecolor', stderr=True
+	## TODO: color_system should be 'auto'; bl_run.py hijinks are interfering
+)
+rich.traceback.install(show_locals=True, console=ERROR_CONSOLE)
+
 
 ####################
 # - Logging Handlers
@@ -26,19 +37,14 @@ def console_handler(level: LogLevel) -> rich.logging.RichHandler:
 	)
 	rich_handler = rich.logging.RichHandler(
 		level=level,
-		console=rich.console.Console(
-			color_system='truecolor', stderr=True
-		),  ## TODO: Should be 'auto'; bl_run.py hijinks are interfering
-		# console=rich.console.Console(stderr=True),
+		console=ERROR_CONSOLE,
 		rich_tracebacks=True,
 	)
 	rich_handler.setFormatter(rich_formatter)
 	return rich_handler
 
 
-def file_handler(
-	path_log_file: Path, level: LogLevel
-) -> rich.logging.RichHandler:
+def file_handler(path_log_file: Path, level: LogLevel) -> rich.logging.RichHandler:
 	return simple_logger.file_handler(path_log_file, level)
 
 
@@ -60,7 +66,7 @@ def get(module_name):
 ####################
 # - Logger Sync
 ####################
-#def upgrade_simple_loggers():
-#	"""Upgrades simple loggers to rich-enabled loggers."""
-#	for logger in simple_loggers():
-#		setup_logger(console_handler, file_handler, logger)
+# def upgrade_simple_loggers():
+# """Upgrades simple loggers to rich-enabled loggers."""
+# for logger in simple_loggers():
+# setup_logger(console_handler, file_handler, logger)

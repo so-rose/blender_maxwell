@@ -1,11 +1,17 @@
 from .socket_types import SocketType as ST
 
 BL_SOCKET_DIRECT_TYPE_MAP = {
-	('NodeSocketString', 1): ST.String,
-	('NodeSocketBool', 1): ST.Bool,
+	# Blender
 	('NodeSocketCollection', 1): ST.BlenderCollection,
 	('NodeSocketImage', 1): ST.BlenderImage,
 	('NodeSocketObject', 1): ST.BlenderObject,
+	('NodeSocketMaterial', 1): ST.BlenderMaterial,
+
+	# Basic
+	('NodeSocketString', 1): ST.String,
+	('NodeSocketBool', 1): ST.Bool,
+
+	# Float
 	('NodeSocketFloat', 1): ST.RealNumber,
 	# ("NodeSocketFloatAngle", 1): ST.PhysicalAngle,
 	# ("NodeSocketFloatDistance", 1): ST.PhysicalLength,
@@ -13,12 +19,17 @@ BL_SOCKET_DIRECT_TYPE_MAP = {
 	('NodeSocketFloatPercentage', 1): ST.RealNumber,
 	# ("NodeSocketFloatTime", 1): ST.PhysicalTime,
 	# ("NodeSocketFloatTimeAbsolute", 1): ST.PhysicalTime,
+
+	# Int
 	('NodeSocketInt', 1): ST.IntegerNumber,
 	('NodeSocketIntFactor', 1): ST.IntegerNumber,
 	('NodeSocketIntPercentage', 1): ST.IntegerNumber,
 	('NodeSocketIntUnsigned', 1): ST.IntegerNumber,
-	('NodeSocketRotation', 2): ST.PhysicalRot2D,
+
+	# Array-Like
 	('NodeSocketColor', 3): ST.Color,
+	('NodeSocketRotation', 2): ST.PhysicalRot2D,
+
 	('NodeSocketVector', 2): ST.Real2DVector,
 	('NodeSocketVector', 3): ST.Real3DVector,
 	# ("NodeSocketVectorAcceleration", 2): ST.PhysicalAccel2D,

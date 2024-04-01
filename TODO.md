@@ -33,6 +33,7 @@
 ## Outputs
 [x] Viewer
 - [ ] **BIG ONE**: Remove image preview when disabling plots.
+- [ ] Declare Preview unit system on the viewer node.
 - [ ] Either enforce singleton, or find a way to have several viewers at the same time.
 - [ ] A setting that live-previews just a value.
 - [ ] Pop-up multiline string print as alternative to console print.
@@ -174,13 +175,24 @@
 [ ] Tests / Monkey (suzanne deserves to be simulated, she may need manifolding up though :))
 [ ] Tests / Wood Pile
 
-[ ] Primitives / Plane
-[ ] Primitives / Box
-[ ] Primitives / Sphere
-[ ] Primitives / Cylinder
-[ ] Primitives / Ring
-[ ] Primitives / Capsule
-[ ] Primitives / Cone
+[ ] Structures / Primitives / Plane
+[x] Structures / Primitives / Box
+[x] Structures / Primitives / Sphere
+[ ] Structures / Primitives / Cylinder
+[x] Structures / Primitives / Ring
+[ ] Structures / Primitives / Capsule
+[ ] Structures / Primitives / Cone
+
+[ ] Structures / Arrays / Square
+[ ] Structures / Arrays / Square-Hole
+[ ] Structures / Arrays / Cyl
+[ ] Structures / Arrays / Cyl-Hole
+[x] Structures / Arrays / Box
+[x] Structures / Arrays / Sphere
+[ ] Structures / Arrays / Cylinder
+[-] Structures / Arrays / Ring
+[ ] Structures / Arrays / Capsule
+[ ] Structures / Arrays / Cone
 
 [ ] Array / Square Array **NOTE: Ring and cylinder**
 [ ] Array / Hex Array **NOTE: Ring and cylinder**
@@ -337,12 +349,15 @@
 
 # Architecture
 ## CRITICAL
-With these things in place
+With these things in place, we're in tip top shape:
 [ ] Linkability / Appendability of library GeoNodes groups, including being able to semantically ask for a particular GeoNodes tree without 'magic strings' that are entirely end-user-file dependent, is completely critical. especially
+[ ] Simplify the boilerplate needed to add a particular 3D preview driven by the input sockets of a particular GeoNodes group. It's currently hard for all the wrong reasons, and greatly halts our velocity in developing useful 3D previews of any/everything.
+	[ ] Finalize Viewer node unit systems.
+	[ ] Introduce a simplified (maybe caching) method of translating sympy-enabled values, ex. 'Center', into values for external use (ex. in a Tidy3D object or in a Blender preview) based on
+	[ ] Abstract the actual unit system dict-like data structure out from the UnitSystem socket.
 [ ] Ship the addon with libraries of GeoNodes groups (with NO dependency on the addon), which are linked (internal use) or appended (end-user-selected structures) when needed for previewing.
 - I don't know that library overrides are the correct approach when it comes to structures used by the end-user. It's extremely easy to make a change to a library structure (or have one made for us by a Blender update!) that completely wrecks all end-user simulations that use it, or override it. By appending, the structure becomes 'part of' the user's simulation, which also makes it quite a bit easier for the user to alter (even drastically) for their own needs.
 [ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
-[ ] Simplify the boilerplate needed to add a particular 3D preview driven by the input sockets of a particular GeoNodes group. It's currently hard for all the wrong reasons, and greatly halts our velocity in developing useful 3D previews of any/everything.
 
 ## Registration and Contracts
 [x] Finish the contract code converting from Blender sockets to our sockets based on dimensionality and the property description.

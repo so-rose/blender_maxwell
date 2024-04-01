@@ -14,7 +14,6 @@ dependencies = [
     "networkx==3.2.*",
     "rich==12.5.*",
     "rtree==1.2.*",
-
     # Pin Blender 4.1.0-Compatible Versions
     ## The dependency resolver will report if anything is wonky.
     "urllib3==1.26.8",
@@ -100,6 +99,7 @@ ignore = [
 	"Q001",  # Conflicts w/Formatter
 	"Q002",  # Conflicts w/Formatter
 	"Q003",  # Conflicts w/Formatter
+	"D206", # Conflicts w/Formatter
 	"B008", # FastAPI uses this for Depends(), Security(), etc. .
 	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
 	"ERA001", # 'Commented-out code' seems to be just about anything to ruff

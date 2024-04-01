@@ -1,24 +1,22 @@
-import typing as typ
-import functools
-
 import bpy
-import tidy3d as td
 import sympy as sp
 import sympy.physics.units as spu
-import numpy as np
-import scipy as sc
+import tidy3d as td
 
-from .....utils import analyze_geonodes
+from .....utils import analyze_geonodes, logger
 from .....utils import extra_sympy_units as spux
 from ... import contracts as ct
-from ... import sockets
-from ... import managed_objs
+from ... import managed_objs, sockets
 from .. import base
+
+log = logger.get(__name__)
 
 GEONODES_MONITOR_BOX = 'monitor_box'
 
 
 class EHFieldMonitorNode(base.MaxwellSimNode):
+	"""Node providing for the monitoring of electromagnetic fields within a given planar region or volume."""
+
 	node_type = ct.NodeType.EHFieldMonitor
 	bl_label = 'E/H Field Monitor'
 	use_sim_node_name = True
@@ -41,9 +39,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		},
 		'Time Domain': {
 			'Rec Start': sockets.PhysicalTimeSocketDef(),
-			'Rec Stop': sockets.PhysicalTimeSocketDef(
-				default_value=200 * spux.fs
-			),
+			'Rec Stop': sockets.PhysicalTimeSocketDef(default_value=200 * spux.fs),
 			'Samples/Time': sockets.IntegerNumberSocketDef(
 				default_value=100,
 			),
@@ -59,19 +55,6 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			name_prefix='',
 		)
 	}
-
-	####################
-	# - Properties
-	####################
-
-	####################
-	# - UI
-	####################
-	def draw_props(self, context, layout):
-		pass
-
-	def draw_info(self, context, col):
-		pass
 
 	####################
 	# - Output Sockets
@@ -91,7 +74,8 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	)
 	def compute_monitor(
 		self, input_sockets: dict, props: dict
-	) -> td.FieldTimeMonitor:
+	) -> td.FieldMonitor | td.FieldTimeMonitor:
+		"""Computes the value of the 'Monitor' output socket, which the user can select as being either a `td.FieldMonitor` or `td.FieldTimeMonitor`."""
 		_center = input_sockets['Center']
 		_size = input_sockets['Size']
 		_samples_space = input_sockets['Samples/Space']
@@ -103,33 +87,44 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		if props['active_socket_set'] == 'Freq Domain':
 			freqs = input_sockets['Freqs']
 
+			log.info(
+				'Computing FieldMonitor (name=%s) with center=%s, size=%s',
+				props['sim_node_name'],
+				center,
+				size,
+			)
 			return td.FieldMonitor(
 				center=center,
 				size=size,
 				name=props['sim_node_name'],
 				interval_space=samples_space,
 				freqs=[
-					float(spu.convert_to(freq, spu.hertz) / spu.hertz)
-					for freq in freqs
+					float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
 				],
 			)
-		else:  ## Time Domain
-			_rec_start = input_sockets['Rec Start']
-			_rec_stop = input_sockets['Rec Stop']
-			samples_time = input_sockets['Samples/Time']
+		## Time Domain
+		_rec_start = input_sockets['Rec Start']
+		_rec_stop = input_sockets['Rec Stop']
+		samples_time = input_sockets['Samples/Time']
 
-			rec_start = spu.convert_to(_rec_start, spu.second) / spu.second
-			rec_stop = spu.convert_to(_rec_stop, spu.second) / spu.second
+		rec_start = spu.convert_to(_rec_start, spu.second) / spu.second
+		rec_stop = spu.convert_to(_rec_stop, spu.second) / spu.second
 
-			return td.FieldTimeMonitor(
-				center=center,
-				size=size,
-				name=props['sim_node_name'],
-				start=rec_start,
-				stop=rec_stop,
-				interval=samples_time,
-				interval_space=samples_space,
-			)
+		log.info(
+			'Computing FieldTimeMonitor (name=%s) with center=%s, size=%s',
+			props['sim_node_name'],
+			center,
+			size,
+		)
+		return td.FieldTimeMonitor(
+			center=center,
+			size=size,
+			name=props['sim_node_name'],
+			start=rec_start,
+			stop=rec_stop,
+			interval=samples_time,
+			interval_space=samples_space,
+		)
 
 	####################
 	# - Preview - Changes to Input Sockets
@@ -144,32 +139,22 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		input_sockets: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
+		"""Alters the managed 3D preview objects whenever the center or size input sockets are changed."""
 		_center = input_sockets['Center']
-		center = tuple(
-			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
-		)
+		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
 		_size = input_sockets['Size']
-		size = tuple(
-			[float(el) for el in spu.convert_to(_size, spu.um) / spu.um]
-		)
-		## TODO: Preview unit system?? Presume um for now
+		size = tuple([float(el) for el in spu.convert_to(_size, spu.um) / spu.um])
 
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_MONITOR_BOX]
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Sync Modifier Inputs
 		managed_objs['monitor_box'].sync_geonodes_modifier(
 			geonodes_node_group=geo_nodes,
 			geonodes_identifier_to_value={
 				geonodes_interface['Size'].identifier: size,
-				## TODO: Use 'bl_socket_map.value_to_bl`!
-				## - This accounts for auto-conversion, unit systems, etc. .
-				## - We could keep it in the node base class...
-				## - ...But it needs aligning with Blender, too. Hmm.
 			},
 		)
 
@@ -186,6 +171,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		self,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
+		"""Requests that the managed object be previewed in response to a user request to show the preview."""
 		managed_objs['monitor_box'].show_preview('MESH')
 		self.on_value_changed__center_size()
 

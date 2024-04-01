@@ -1,17 +1,14 @@
-import functools
-import typing as typ
-import json
-from pathlib import Path
-
 import bpy
 import sympy as sp
-import pydantic as pyd
-import tidy3d as td
 
+from .....utils import logger
 from ... import contracts as ct
 from ... import sockets
-from .. import base
 from ...managed_objs import managed_bl_object
+from .. import base
+
+log = logger.get(__name__)
+console = logger.OUTPUT_CONSOLE
 
 
 class ConsoleViewOperator(bpy.types.Operator):
@@ -67,9 +64,7 @@ class ViewerNode(base.MaxwellSimNode):
 		name='Auto 3D Preview',
 		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
 		default=False,
-		update=lambda self, context: self.sync_prop(
-			'auto_3d_preview', context
-		),
+		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
 	)
 
 	####################
@@ -111,9 +106,9 @@ class ViewerNode(base.MaxwellSimNode):
 			return
 
 		if isinstance(data, sp.Basic):
-			sp.pprint(data, use_unicode=True)
-
-		print(str(data))
+			console.print(sp.pretty(data, use_unicode=True))
+		else:
+			console.print(data)
 
 	####################
 	# - Updates

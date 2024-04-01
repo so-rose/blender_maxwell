@@ -41,6 +41,7 @@ PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
 
 from . import blender
 
+BlenderMaterialSocketDef = blender.BlenderMaterialSocketDef
 BlenderObjectSocketDef = blender.BlenderObjectSocketDef
 BlenderCollectionSocketDef = blender.BlenderCollectionSocketDef
 BlenderImageSocketDef = blender.BlenderImageSocketDef

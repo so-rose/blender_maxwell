@@ -34,6 +34,7 @@ class SocketType(BlenderTypeEnum):
 	Complex3DVector = enum.auto()
 
 	# Blender
+	BlenderMaterial = enum.auto()
 	BlenderObject = enum.auto()
 	BlenderCollection = enum.auto()
 

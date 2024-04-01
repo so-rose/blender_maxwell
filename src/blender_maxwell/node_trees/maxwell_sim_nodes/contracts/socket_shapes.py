@@ -38,6 +38,7 @@ SOCKET_SHAPES = {
 	ST.PhysicalPol: 'CIRCLE',
 	ST.PhysicalFreq: 'CIRCLE',
 	# Blender
+	ST.BlenderMaterial: 'DIAMOND',
 	ST.BlenderObject: 'DIAMOND',
 	ST.BlenderCollection: 'DIAMOND',
 	ST.BlenderImage: 'DIAMOND',

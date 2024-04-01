@@ -125,9 +125,7 @@ class MaxwellSimTree(bpy.types.NodeTree):
 			'to_add': [],
 		}
 		for link_ptr in delta_links['removed']:
-			from_socket = self._node_link_cache.link_ptrs_from_sockets[
-				link_ptr
-			]
+			from_socket = self._node_link_cache.link_ptrs_from_sockets[link_ptr]
 			to_socket = self._node_link_cache.link_ptrs_to_sockets[link_ptr]
 
 			# Update Socket Caches
@@ -136,9 +134,7 @@ class MaxwellSimTree(bpy.types.NodeTree):
 
 			# Trigger Report Chain on Socket that Just Lost a Link
 			## Aka. Forward-Refresh Caches Relying on Linkage
-			if not (
-				consent_removal := to_socket.sync_link_removed(from_socket)
-			):
+			if not (consent_removal := to_socket.sync_link_removed(from_socket)):
 				# Did Not Consent to Removal: Queue Add Link
 				link_alterations['to_add'].append((from_socket, to_socket))
 

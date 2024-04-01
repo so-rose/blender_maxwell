@@ -46,9 +46,10 @@ BL_REGISTER__BEFORE_DEPS = [
 def BL_REGISTER__AFTER_DEPS(path_deps: Path):
 	log.info('Loading After-Deps BL_REGISTER')
 	with pydeps.importable_addon_deps(path_deps):
-		from . import node_trees, operators
+		from . import assets, node_trees, operators
 	return [
 		*operators.BL_REGISTER,
+		*assets.BL_REGISTER,
 		*node_trees.BL_REGISTER,
 	]
 
@@ -62,9 +63,10 @@ BL_KEYMAP_ITEM_DEFS__BEFORE_DEPS = [
 def BL_KEYMAP_ITEM_DEFS__AFTER_DEPS(path_deps: Path):
 	log.info('Loading After-Deps BL_KEYMAP_ITEM_DEFS')
 	with pydeps.importable_addon_deps(path_deps):
-		from . import operators
+		from . import assets, operators
 	return [
 		*operators.BL_KEYMAP_ITEM_DEFS,
+		*assets.BL_KEYMAP_ITEM_DEFS,
 	]
 
 

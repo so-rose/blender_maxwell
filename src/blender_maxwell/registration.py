@@ -139,8 +139,6 @@ def delay_registration(
 	DELAYED_REGISTRATIONS[delayed_reg_key] = register_cb
 
 
-def run_delayed_registration(
-	delayed_reg_key: DelayedRegKey, path_deps: Path
-) -> None:
+def run_delayed_registration(delayed_reg_key: DelayedRegKey, path_deps: Path) -> None:
 	register_cb = DELAYED_REGISTRATIONS.pop(delayed_reg_key)
 	register_cb(path_deps)

@@ -42,6 +42,7 @@ SOCKET_COLORS = {
 	ST.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
 	ST.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
 	# Blender
+	ST.BlenderMaterial: (0.8, 0.6, 1.0, 1.0),  # Lighter Purple
 	ST.BlenderObject: (0.7, 0.5, 1.0, 1.0),  # Light Purple
 	ST.BlenderCollection: (0.6, 0.45, 0.9, 1.0),  # Medium Light Purple
 	ST.BlenderImage: (0.5, 0.4, 0.8, 1.0),  # Medium Purple

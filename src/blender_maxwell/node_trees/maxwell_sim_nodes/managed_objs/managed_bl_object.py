@@ -1,17 +1,14 @@
-import typing as typ
-import typing_extensions as typx
-import functools
 import contextlib
-import io
 
-import numpy as np
-import pydantic as pyd
-import matplotlib.axis as mpl_ax
-
-import bpy
 import bmesh
+import bpy
+import numpy as np
+import typing_extensions as typx
 
+from ....utils import logger
 from .. import contracts as ct
+
+log = logger.get(__name__)
 
 ModifierType = typx.Literal['NODES', 'ARRAY']
 MODIFIER_NAMES = {
@@ -22,6 +19,9 @@ MANAGED_COLLECTION_NAME = 'BLMaxwell'
 PREVIEW_COLLECTION_NAME = 'BLMaxwell Visible'
 
 
+####################
+# - BLCollection
+####################
 def bl_collection(
 	collection_name: str, view_layer_exclude: bool
 ) -> bpy.types.Collection:
@@ -44,63 +44,89 @@ def bl_collection(
 	return collection
 
 
+####################
+# - BLObject
+####################
 class ManagedBLObject(ct.schemas.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLObject
-	_bl_object_name: str
+	_bl_object_name: str | None = None
 
-	def __init__(self, name: str):
-		self._bl_object_name = name
-
-	# Object Name
+	####################
+	# - BL Object Name
+	####################
 	@property
 	def name(self):
 		return self._bl_object_name
 
 	@name.setter
-	def set_name(self, value: str) -> None:
-		# Object Doesn't Exist
-		if not (bl_object := bpy.data.objects.get(self._bl_object_name)):
-			# ...AND Desired Object Name is Not Taken
-			if not bpy.data.objects.get(value):
-				self._bl_object_name = value
-				return
+	def name(self, value: str) -> None:
+		log.info(
+			'Changing BLObject w/Name "%s" to Name "%s"', self._bl_object_name, value
+		)
 
-			# ...AND Desired Object Name is Taken
+		if not bpy.data.objects.get(value):
+			log.info(
+				'Desired BLObject Name "%s" Not Taken',
+				value,
+			)
+
+			if self._bl_object_name is None:
+				log.info(
+					'Set New BLObject Name to "%s"',
+					value,
+				)
+			elif bl_object := bpy.data.objects.get(self._bl_object_name):
+				log.info(
+					'Changed BLObject Name to "%s"',
+					value,
+				)
+				bl_object.name = value
 			else:
-				msg = f'Desired name {value} for BL object is taken'
-				raise ValueError(msg)
+				msg = f'ManagedBLObject with name "{self._bl_object_name}" was deleted'
+				raise RuntimeError(msg)
 
-		# Object DOES Exist
-		bl_object.name = value
-		self._bl_object_name = bl_object.name
-		## - When name exists, Blender adds .### to prevent overlap.
-		## - `set_name` is allowed to change the name; nodes account for this.
+			# Set Internal Name
+			self._bl_object_name = value
+		else:
+			log.info(
+				'Desired BLObject Name "%s" is Taken. Using Blender Rename',
+				value,
+			)
 
-	# Object Datablock Name
-	@property
-	def bl_mesh_name(self):
-		return self.name
+			# Set Name Anyway, but Respect Blender's Renaming
+			## When a name already exists, Blender adds .### to prevent overlap.
+			## `set_name` is allowed to change the name; nodes account for this.
+			bl_object.name = value
+			self._bl_object_name = bl_object.name
 
-	@property
-	def bl_volume_name(self):
-		return self.name
+			log.info(
+				'Changed BLObject Name to "%s"',
+				bl_object.name,
+			)
 
-	# Deallocation
+	####################
+	# - Allocation
+	####################
+	def __init__(self, name: str):
+		self.name = name
+
+	####################
+	# - Deallocation
+	####################
 	def free(self):
-		if not (bl_object := bpy.data.objects.get(self.name)):
-			return  ## Nothing to do
+		if (bl_object := bpy.data.objects.get(self.name)) is None:
+			return
 
 		# Delete the Underlying Datablock
 		## This automatically deletes the object too
-		if bl_object.type == 'MESH':
-			bpy.data.meshes.remove(bl_object.data)
-		elif bl_object.type == 'EMPTY':
+		log.info('Removing "%s" BLObject', bl_object.type)
+		if bl_object.type in {'MESH', 'EMPTY'}:
 			bpy.data.meshes.remove(bl_object.data)
 		elif bl_object.type == 'VOLUME':
 			bpy.data.volumes.remove(bl_object.data)
 		else:
-			msg = f'Type of to-delete `bl_object`, {bl_object.type}, is not valid'
-			raise ValueError(msg)
+			msg = f'BLObject "{bl_object.name}" has invalid kind "{bl_object.type}"'
+			raise RuntimeError(msg)
 
 	####################
 	# - Actions
@@ -133,9 +159,16 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 				)
 			).objects
 		):
+			log.info('Moving "%s" to Preview Collection', bl_object.name)
 			preview_collection.objects.link(bl_object)
 
+		# Display Parameters
 		if kind == 'EMPTY' and empty_display_type is not None:
+			log.info(
+				'Setting Empty Display Type "%s" for "%s"',
+				empty_display_type,
+				bl_object.name,
+			)
 			bl_object.empty_display_type = empty_display_type
 
 	def hide_preview(
@@ -155,21 +188,22 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 				)
 			).objects
 		):
+			log.info('Removing "%s" from Preview Collection', bl_object.name)
 			preview_collection.objects.unlink(bl_object)
 
 	def bl_select(self) -> None:
 		"""Selects the managed Blender object globally, causing it to be ex.
 		outlined in the 3D viewport.
 		"""
-		if not (bl_object := bpy.data.objects.get(self.name)):
-			msg = 'Managed BLObject does not exist'
-			raise ValueError(msg)
+		if (bl_object := bpy.data.objects.get(self.name)) is not None:
+			bpy.ops.object.select_all(action='DESELECT')
+			bl_object.select_set(True)
 
-		bpy.ops.object.select_all(action='DESELECT')
-		bl_object.select_set(True)
+		msg = 'Managed BLObject does not exist'
+		raise ValueError(msg)
 
 	####################
-	# - Managed Object Management
+	# - BLObject Management
 	####################
 	def bl_object(
 		self,
@@ -177,30 +211,41 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 	):
 		"""Returns the managed blender object.
 
-		If the requested object data type is different, then delete the old
+		If the requested object data kind is different, then delete the old
 		object and recreate.
 		"""
 		# Remove Object (if mismatch)
-		if (
-			bl_object := bpy.data.objects.get(self.name)
-		) and bl_object.type != kind:
+		if (bl_object := bpy.data.objects.get(self.name)) and bl_object.type != kind:
+			log.info(
+				'Removing (recreating) "%s" (existing kind is "%s", but "%s" is requested)',
+				bl_object.name,
+				bl_object.type,
+				kind,
+			)
 			self.free()
 
 		# Create Object w/Appropriate Data Block
 		if not (bl_object := bpy.data.objects.get(self.name)):
+			log.info(
+				'Creating "%s" with kind "%s"',
+				bl_object.name,
+				kind,
+			)
 			if kind == 'MESH':
-				bl_data = bpy.data.meshes.new(self.bl_mesh_name)
+				bl_data = bpy.data.meshes.new(self.name)
 			elif kind == 'EMPTY':
 				bl_data = None
 			elif kind == 'VOLUME':
 				raise NotImplementedError
 			else:
-				msg = (
-					f'Requested `bl_object` type {bl_object.type} is not valid'
-				)
+				msg = f'Created BLObject w/invalid kind "{bl_object.type}" for "{self.name}"'
 				raise ValueError(msg)
 
 			bl_object = bpy.data.objects.new(self.name, bl_data)
+			log.debug(
+				'Linking "%s" to Base Collection',
+				bl_object.name,
+			)
 			bl_collection(
 				MANAGED_COLLECTION_NAME, view_layer_exclude=True
 			).objects.link(bl_object)
@@ -211,17 +256,16 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 	# - Mesh Data Properties
 	####################
 	@property
-	def raw_mesh(self) -> bpy.types.Mesh:
-		"""Returns the object's raw mesh data.
+	def mesh_data(self) -> bpy.types.Mesh:
+		"""Directly loads the Blender mesh data.
 
-		Raises an error if the object has no mesh data.
+		Raises:
+			ValueError: If the object has no mesh data.
 		"""
-		if (
-			bl_object := bpy.data.objects.get(self.name)
-		) and bl_object.type == 'MESH':
+		if (bl_object := bpy.data.objects.get(self.name)) and bl_object.type == 'MESH':
 			return bl_object.data
 
-		msg = f'Requested MESH data from `bl_object` of type {bl_object.type}'
+		msg = f'Requested mesh data from {self.name} of type {bl_object.type}'
 		raise ValueError(msg)
 
 	@contextlib.contextmanager
@@ -230,9 +274,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		evaluate: bool = True,
 		triangulate: bool = False,
 	) -> bpy.types.Mesh:
-		if (
-			bl_object := bpy.data.objects.get(self.name)
-		) and bl_object.type == 'MESH':
+		if (bl_object := bpy.data.objects.get(self.name)) and bl_object.type == 'MESH':
 			bmesh_mesh = None
 			try:
 				bmesh_mesh = bmesh.new()
@@ -254,7 +296,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 					bmesh_mesh.free()
 
 		else:
-			msg = f'Requested BMesh from `bl_object` of type {bl_object.type}'
+			msg = f'Requested BMesh from "{self.name}" of type "{bl_object.type}"'
 			raise ValueError(msg)
 
 	@property
@@ -262,27 +304,31 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		## TODO: Cached
 
 		# Ensure Updated Geometry
+		log.debug('Updating View Layer')
 		bpy.context.view_layer.update()
-		## TODO: Must we?
 
 		# Compute Evaluted + Triangulated Mesh
+		log.debug('Casting BMesh of "%s" to Temporary Mesh', self.name)
 		_mesh = bpy.data.meshes.new(name='TemporaryMesh')
 		with self.mesh_as_bmesh(evaluate=True, triangulate=True) as bmesh_mesh:
 			bmesh_mesh.to_mesh(_mesh)
 
 		# Optimized Vertex Copy
 		## See <https://blog.michelanders.nl/2016/02/copying-vertices-to-numpy-arrays-in_4.html>
+		log.debug('Copying Vertices from "%s"', self.name)
 		verts = np.zeros(3 * len(_mesh.vertices), dtype=np.float64)
 		_mesh.vertices.foreach_get('co', verts)
 		verts.shape = (-1, 3)
 
 		# Optimized Triangle Copy
 		## To understand, read it, **carefully**.
+		log.debug('Copying Faces from "%s"', self.name)
 		faces = np.zeros(3 * len(_mesh.polygons), dtype=np.uint64)
 		_mesh.polygons.foreach_get('vertices', faces)
 		faces.shape = (-1, 3)
 
 		# Remove Temporary Mesh
+		log.debug('Removing Temporary Mesh')
 		bpy.data.meshes.remove(_mesh)
 
 		return {
@@ -291,7 +337,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		}
 
 	####################
-	# - Modifier Methods
+	# - Modifiers
 	####################
 	def bl_modifier(
 		self,
@@ -299,10 +345,10 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 	):
 		"""Creates a new modifier for the current `bl_object`.
 
-		For all Blender modifier type names, see: <https://docs.blender.org/api/current/bpy_types_enum_items/object_modifier_type_items.html#rna-enum-object-modifier-type-items>
+		- Modifier Type Names: <https://docs.blender.org/api/current/bpy_types_enum_items/object_modifier_type_items.html#rna-enum-object-modifier-type-items>
 		"""
 		if not (bl_object := bpy.data.objects.get(self.name)):
-			msg = "Can't add modifier to BL object that doesn't exist"
+			msg = f'Tried to add modifier to "{self.name}", but it has no bl_object'
 			raise ValueError(msg)
 
 		# (Create and) Return Modifier
@@ -376,8 +422,7 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 				# Quickly Determine if IDPropertyArray is Equal
 				if (
 					hasattr(bl_modifier[interface_identifier], 'to_list')
-					and tuple(bl_modifier[interface_identifier].to_list())
-					== value
+					and tuple(bl_modifier[interface_identifier].to_list()) == value
 				):
 					continue
 
@@ -395,18 +440,3 @@ class ManagedBLObject(ct.schemas.ManagedObj):
 		# Update DepGraph (if anything changed)
 		if modifier_altered:
 			bl_object.data.update()
-
-	# @property
-	# def volume(self) -> bpy.types.Volume:
-	# """Returns the object's volume data.
-	#
-	# Raises an error if the object has no volume data.
-	# """
-	# if (
-	# (bl_object := bpy.data.objects.get(self.bl_object_name))
-	# and bl_object.type == "VOLUME"
-	# ):
-	# return bl_object.data
-	#
-	# msg = f"Requested VOLUME data from `bl_object` of type {bl_object.type}"
-	# raise ValueError(msg)
