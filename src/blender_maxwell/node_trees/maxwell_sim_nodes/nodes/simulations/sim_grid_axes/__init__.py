@@ -1,7 +1,9 @@
-from . import automatic_sim_grid_axis
-from . import manual_sim_grid_axis
-from . import uniform_sim_grid_axis
-from . import array_sim_grid_axis
+from . import (
+    array_sim_grid_axis,
+    automatic_sim_grid_axis,
+    manual_sim_grid_axis,
+    uniform_sim_grid_axis,
+)
 
 BL_REGISTER = [
 	*automatic_sim_grid_axis.BL_REGISTER,

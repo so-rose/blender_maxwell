@@ -1,13 +1,10 @@
-import tidy3d as td
-import sympy as sp
-import sympy.physics.units as spu
-
 import bpy
+import sympy.physics.units as spu
+import tidy3d as td
 
 from ......utils import analyze_geonodes
 from .... import contracts as ct
-from .... import sockets
-from .... import managed_objs
+from .... import managed_objs, sockets
 from ... import base
 
 GEONODES_STRUCTURE_SPHERE = 'structure_sphere'

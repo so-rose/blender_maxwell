@@ -1,15 +1,13 @@
-import typing as typ
 
 import bpy
 import pydantic as pyd
-import sympy as sp
+import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td
-import scipy as sc
 
-from .....utils.pydantic_sympy import ConstrSympyExpr, Complex
-from .. import base
+from .....utils.pydantic_sympy import ConstrSympyExpr
 from ... import contracts as ct
+from .. import base
 
 VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
 
@@ -93,7 +91,6 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 
 	def sync_unit_change(self):
 		"""Override unit change to only alter frequency unit."""
-
 		self.value = (
 			self.wl * self.prev_unit,
 			complex(*self.rel_permittivity),

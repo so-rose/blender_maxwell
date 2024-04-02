@@ -2,6 +2,7 @@ from ... import contracts as ct
 from ... import sockets
 from .. import base
 
+
 class PhysicalUnitSystemNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.UnitSystem
 	bl_label = 'Unit System'

@@ -9,7 +9,7 @@ class BlenderConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.BlenderConstant
 	bl_label = 'Blender Constant'
 
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		'Object': {
 			'Value': sockets.BlenderObjectSocketDef(),
 		},
@@ -42,6 +42,4 @@ class BlenderConstantNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	BlenderConstantNode,
 ]
-BL_NODES = {
-	ct.NodeType.BlenderConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS)
-}
+BL_NODES = {ct.NodeType.BlenderConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS)}

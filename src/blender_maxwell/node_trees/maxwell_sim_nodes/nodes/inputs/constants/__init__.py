@@ -1,8 +1,6 @@
 # from . import scientific_constant
-from . import number_constant
-
 # from . import physical_constant
-from . import blender_constant
+from . import blender_constant, number_constant
 
 BL_REGISTER = [
 	# *scientific_constant.BL_REGISTER,

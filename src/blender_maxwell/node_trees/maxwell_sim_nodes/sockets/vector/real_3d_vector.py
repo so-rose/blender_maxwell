@@ -1,12 +1,11 @@
-import typing as typ
 
 import bpy
-import sympy as sp
 import pydantic as pyd
+import sympy as sp
 
 from .....utils.pydantic_sympy import ConstrSympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 Real3DVector = ConstrSympyExpr(
 	allow_variables=False,

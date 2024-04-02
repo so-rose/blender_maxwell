@@ -1,9 +1,6 @@
-from . import temporal_shapes
-
-from . import point_dipole_source
-
 # from . import uniform_current_source
-from . import plane_wave_source
+from . import plane_wave_source, point_dipole_source, temporal_shapes
+
 # from . import gaussian_beam_source
 # from . import astigmatic_gaussian_beam_source
 # from . import tfsf_source

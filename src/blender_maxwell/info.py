@@ -29,6 +29,13 @@ DEFAULT_PATH_DEPS = PATH_ADDON_ROOT / '.addon_dependencies'
 ## By default, the addon pydeps are kept in the addon dir.
 
 ####################
+# - Local Addon Cache
+####################
+ADDON_CACHE = PATH_ADDON_ROOT / '.addon_cache'
+ADDON_CACHE.mkdir(exist_ok=True)
+## TODO: Addon preferences?
+
+####################
 # - Logging Info
 ####################
 DEFAULT_LOG_PATH = PATH_ADDON_ROOT / 'addon.log'

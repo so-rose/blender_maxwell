@@ -1,5 +1,4 @@
-from . import bound_box
-from . import bound_faces
+from . import bound_box, bound_faces
 
 BL_REGISTER = [
 	*bound_box.BL_REGISTER,

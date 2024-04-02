@@ -1,73 +1,35 @@
-from . import base
+from ....utils import logger
+from .. import contracts as ct
+from . import basic, blender, maxwell, number, physical, tidy3d, vector
+from .scan_socket_defs import scan_for_socket_defs
 
-from . import basic
+log = logger.get(__name__)
+sockets_modules = [basic, number, vector, physical, blender, maxwell, tidy3d]
 
-AnySocketDef = basic.AnySocketDef
-BoolSocketDef = basic.BoolSocketDef
-StringSocketDef = basic.StringSocketDef
-FilePathSocketDef = basic.FilePathSocketDef
+####################
+# - Scan for SocketDefs
+####################
+SOCKET_DEFS = {}
+for sockets_module in sockets_modules:
+	SOCKET_DEFS |= scan_for_socket_defs(sockets_module)
 
-from . import number
+# Set Global Names from SOCKET_DEFS
+## SOCKET_DEFS values are the classes themselves, which always have a __name__.
+for socket_def_type in SOCKET_DEFS.values():
+	globals()[socket_def_type.__name__] = socket_def_type
 
-IntegerNumberSocketDef = number.IntegerNumberSocketDef
-RationalNumberSocketDef = number.RationalNumberSocketDef
-RealNumberSocketDef = number.RealNumberSocketDef
-ComplexNumberSocketDef = number.ComplexNumberSocketDef
+# Validate SocketType -> SocketDef
+## All SocketTypes should have a SocketDef
+for socket_type in ct.SocketType:
+	if (
+		globals().get(socket_type.value.removesuffix('SocketType') + 'SocketDef')
+		is None
+	):
+		log.warning('Missing SocketDef for %s', socket_type.value)
 
-from . import vector
-
-Real2DVectorSocketDef = vector.Real2DVectorSocketDef
-Complex2DVectorSocketDef = vector.Complex2DVectorSocketDef
-Integer3DVectorSocketDef = vector.Integer3DVectorSocketDef
-Real3DVectorSocketDef = vector.Real3DVectorSocketDef
-Complex3DVectorSocketDef = vector.Complex3DVectorSocketDef
-
-from . import physical
-
-PhysicalUnitSystemSocketDef = physical.PhysicalUnitSystemSocketDef
-PhysicalTimeSocketDef = physical.PhysicalTimeSocketDef
-PhysicalAngleSocketDef = physical.PhysicalAngleSocketDef
-PhysicalLengthSocketDef = physical.PhysicalLengthSocketDef
-PhysicalAreaSocketDef = physical.PhysicalAreaSocketDef
-PhysicalVolumeSocketDef = physical.PhysicalVolumeSocketDef
-PhysicalPoint3DSocketDef = physical.PhysicalPoint3DSocketDef
-PhysicalSize3DSocketDef = physical.PhysicalSize3DSocketDef
-PhysicalMassSocketDef = physical.PhysicalMassSocketDef
-PhysicalSpeedSocketDef = physical.PhysicalSpeedSocketDef
-PhysicalAccelScalarSocketDef = physical.PhysicalAccelScalarSocketDef
-PhysicalForceScalarSocketDef = physical.PhysicalForceScalarSocketDef
-PhysicalPolSocketDef = physical.PhysicalPolSocketDef
-PhysicalFreqSocketDef = physical.PhysicalFreqSocketDef
-
-from . import blender
-
-BlenderMaterialSocketDef = blender.BlenderMaterialSocketDef
-BlenderObjectSocketDef = blender.BlenderObjectSocketDef
-BlenderCollectionSocketDef = blender.BlenderCollectionSocketDef
-BlenderImageSocketDef = blender.BlenderImageSocketDef
-BlenderGeoNodesSocketDef = blender.BlenderGeoNodesSocketDef
-BlenderTextSocketDef = blender.BlenderTextSocketDef
-
-from . import maxwell
-
-MaxwellBoundCondSocketDef = maxwell.MaxwellBoundCondSocketDef
-MaxwellBoundCondsSocketDef = maxwell.MaxwellBoundCondsSocketDef
-MaxwellMediumSocketDef = maxwell.MaxwellMediumSocketDef
-MaxwellMediumNonLinearitySocketDef = maxwell.MaxwellMediumNonLinearitySocketDef
-MaxwellSourceSocketDef = maxwell.MaxwellSourceSocketDef
-MaxwellTemporalShapeSocketDef = maxwell.MaxwellTemporalShapeSocketDef
-MaxwellStructureSocketDef = maxwell.MaxwellStructureSocketDef
-MaxwellMonitorSocketDef = maxwell.MaxwellMonitorSocketDef
-MaxwellFDTDSimSocketDef = maxwell.MaxwellFDTDSimSocketDef
-MaxwellFDTDSimDataSocketDef = maxwell.MaxwellFDTDSimDataSocketDef
-MaxwellSimGridSocketDef = maxwell.MaxwellSimGridSocketDef
-MaxwellSimGridAxisSocketDef = maxwell.MaxwellSimGridAxisSocketDef
-MaxwellSimDomainSocketDef = maxwell.MaxwellSimDomainSocketDef
-
-from . import tidy3d
-
-Tidy3DCloudTaskSocketDef = tidy3d.Tidy3DCloudTaskSocketDef
-
+####################
+# - Exports
+####################
 BL_REGISTER = [
 	*basic.BL_REGISTER,
 	*number.BL_REGISTER,
@@ -77,3 +39,13 @@ BL_REGISTER = [
 	*maxwell.BL_REGISTER,
 	*tidy3d.BL_REGISTER,
 ]
+
+__all__ = [
+	'basic',
+	'number',
+	'vector',
+	'physical',
+	'blender',
+	'maxwell',
+	'tidy3d',
+] + [socket_def_type.__name__ for socket_def_type in SOCKET_DEFS.values()]

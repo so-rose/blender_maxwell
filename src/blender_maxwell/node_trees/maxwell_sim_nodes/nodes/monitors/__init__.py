@@ -1,5 +1,5 @@
-from . import eh_field_monitor
-from . import field_power_flux_monitor
+from . import eh_field_monitor, field_power_flux_monitor
+
 # from . import epsilon_tensor_monitor
 # from . import diffraction_monitor
 

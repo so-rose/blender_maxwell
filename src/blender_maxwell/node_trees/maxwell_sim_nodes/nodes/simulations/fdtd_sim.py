@@ -1,6 +1,5 @@
-import tidy3d as td
 import sympy as sp
-import sympy.physics.units as spu
+import tidy3d as td
 
 from ... import contracts as ct
 from ... import sockets

@@ -1,7 +1,9 @@
-from . import add_non_linearity
-from . import chi_3_susceptibility_non_linearity
-from . import kerr_non_linearity
-from . import two_photon_absorption_non_linearity
+from . import (
+    add_non_linearity,
+    chi_3_susceptibility_non_linearity,
+    kerr_non_linearity,
+    two_photon_absorption_non_linearity,
+)
 
 BL_REGISTER = [
 	*add_non_linearity.BL_REGISTER,

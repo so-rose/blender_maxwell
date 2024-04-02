@@ -1,11 +1,8 @@
-import typing as typ
 
-import bpy
 import pydantic as pyd
-import tidy3d as td
 
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class MaxwellSimDomainBLSocket(base.MaxwellSimSocket):

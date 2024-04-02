@@ -1,10 +1,11 @@
-from . import pml_bound_face
-from . import pec_bound_face
-from . import pmc_bound_face
-
-from . import bloch_bound_face
-from . import periodic_bound_face
-from . import absorbing_bound_face
+from . import (
+    absorbing_bound_face,
+    bloch_bound_face,
+    pec_bound_face,
+    periodic_bound_face,
+    pmc_bound_face,
+    pml_bound_face,
+)
 
 BL_REGISTER = [
 	*pml_bound_face.BL_REGISTER,

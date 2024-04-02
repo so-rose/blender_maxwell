@@ -21,7 +21,7 @@ _DEFAULT_LOOSE_SOCKET_SER = json.dumps(
 		'socket_def_names': [],
 		'models': [],
 	}
-)
+)  ## TODO: What in the jesus christ is this
 
 
 class MaxwellSimNode(bpy.types.Node):
@@ -162,6 +162,7 @@ class MaxwellSimNode(bpy.types.Node):
 					for socket_set_id, socket_set_name in zip(
 						socket_set_ids,
 						socket_set_names,
+						strict=False,
 					)
 				],
 				default=socket_set_names[0],
@@ -316,6 +317,7 @@ class MaxwellSimNode(bpy.types.Node):
 				semi_deser['socket_names'],
 				semi_deser['socket_def_names'],
 				semi_deser['models'],
+				strict=False,
 			)
 			if hasattr(sockets, socket_def_name)
 		}
@@ -538,7 +540,7 @@ class MaxwellSimNode(bpy.types.Node):
 		):
 			return output_socket_method(self)
 
-		msg = f'No output method for ({output_socket_name}, {str(kind.value)}'
+		msg = f'No output method for ({output_socket_name}, {kind.value!s}'
 		raise ValueError(msg)
 
 	####################
@@ -642,7 +644,6 @@ class MaxwellSimNode(bpy.types.Node):
 
 		Restricted to the MaxwellSimTreeType.
 		"""
-
 		return node_tree.bl_idname == ct.TreeType.MaxwellSim.value
 
 	def init(self, context: bpy.types.Context):

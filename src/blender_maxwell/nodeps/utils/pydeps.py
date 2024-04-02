@@ -62,7 +62,8 @@ def _check_pydeps(
 	def conform_pypi_package_deplock(deplock: str):
 		"""Conforms a <package>==<version> de-lock to match if pypi considers them the same (PyPi is case-insensitive and considers -/_ to be the same)
 
-		See <https://peps.python.org/pep-0426/#name>"""
+		See <https://peps.python.org/pep-0426/#name>
+		"""
 		return deplock.lower().replace('_', '-')
 
 	with path_requirementslock.open('r') as file:

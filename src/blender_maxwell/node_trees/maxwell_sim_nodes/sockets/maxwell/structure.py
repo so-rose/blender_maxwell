@@ -1,10 +1,8 @@
-import typing as typ
 
-import bpy
 import pydantic as pyd
 
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class MaxwellStructureBLSocket(base.MaxwellSimSocket):

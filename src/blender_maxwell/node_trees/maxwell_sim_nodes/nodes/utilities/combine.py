@@ -1,8 +1,5 @@
-import sympy as sp
-import sympy.physics.units as spu
-import scipy as sc
-
 import bpy
+import sympy as sp
 
 from ... import contracts as ct
 from ... import sockets

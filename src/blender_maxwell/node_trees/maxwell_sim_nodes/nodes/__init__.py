@@ -1,16 +1,17 @@
 # from . import kitchen_sink
 
-from . import inputs
-from . import outputs
-from . import sources
-from . import mediums
-from . import structures
-
 # from . import bounds
-from . import monitors
-from . import simulations
-from . import utilities
-from . import viz
+from . import (
+    inputs,
+    mediums,
+    monitors,
+    outputs,
+    simulations,
+    sources,
+    structures,
+    utilities,
+    viz,
+)
 
 BL_REGISTER = [
 	# *kitchen_sink.BL_REGISTER,

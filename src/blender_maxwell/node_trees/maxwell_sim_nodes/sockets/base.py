@@ -1,11 +1,11 @@
-import typing as typ
-import typing_extensions as typx
 import functools
+import typing as typ
 
 import bpy
-
 import sympy as sp
 import sympy.physics.units as spu
+import typing_extensions as typx
+
 from .. import contracts as ct
 
 
@@ -180,7 +180,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if self.locked:
 			return False
 		if self.is_output:
-			msg = f"Tried to sync 'link add' on output socket"
+			msg = "Tried to sync 'link add' on output socket"
 			raise RuntimeError(msg)
 
 		self.trigger_action('value_changed')
@@ -195,7 +195,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if self.locked:
 			return False
 		if self.is_output:
-			msg = f"Tried to sync 'link add' on output socket"
+			msg = "Tried to sync 'link add' on output socket"
 			raise RuntimeError(msg)
 
 		self.trigger_action('value_changed')
@@ -359,7 +359,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Can be overridden if more specific logic is required.
 		"""
-
 		prev_value = self.value / self.unit * self.prev_unit
 		## After changing units, self.value is expressed in the wrong unit.
 		## - Therefore, we removing the new unit, and re-add the prev unit.
@@ -398,7 +397,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		text: str,
 	) -> None:
 		"""Called by Blender to draw the socket UI."""
-
 		if self.is_output:
 			self.draw_output(context, layout, node, text)
 		else:
@@ -455,9 +453,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			if self.locked:
 				row = col.row(align=False)
 				row.enabled = False
-		else:
-			if self.locked:
-				row.enabled = False
+		elif self.locked:
+			row.enabled = False
 
 		# Value Column(s)
 		col = row.column(align=True)
@@ -495,11 +492,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Can be overridden.
 		"""
-		pass
 
 	def draw_value_list(self, col: bpy.types.UILayout) -> None:
 		"""Called to draw the value list column in unlinked input sockets.
 
 		Can be overridden.
 		"""
-		pass

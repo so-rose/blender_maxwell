@@ -1,16 +1,13 @@
-import typing_extensions as typx
 import math
 
-import tidy3d as td
+import bpy
 import sympy as sp
 import sympy.physics.units as spu
-
-import bpy
+import tidy3d as td
 
 from .....utils import analyze_geonodes
-from ... import managed_objs
 from ... import contracts as ct
-from ... import sockets
+from ... import managed_objs, sockets
 from .. import base
 
 GEONODES_PLANE_WAVE = 'source_plane_wave'

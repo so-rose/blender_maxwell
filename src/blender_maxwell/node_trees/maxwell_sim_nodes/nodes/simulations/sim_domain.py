@@ -1,13 +1,11 @@
 import bpy
 import sympy as sp
 import sympy.physics.units as spu
-import scipy as sc
 
 from .....utils import analyze_geonodes
 from ... import contracts as ct
-from ... import sockets
+from ... import managed_objs, sockets
 from .. import base
-from ... import managed_objs
 
 GEONODES_DOMAIN_BOX = 'simdomain_box'
 

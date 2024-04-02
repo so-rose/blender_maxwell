@@ -1,12 +1,12 @@
 import typing as typ
 
 import bpy
-import sympy.physics.units as spu
 import pydantic as pyd
+import sympy.physics.units as spu
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 ####################

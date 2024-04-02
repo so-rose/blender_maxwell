@@ -1,5 +1,3 @@
-import sympy.physics.units as spu
-from ....utils import extra_sympy_units as spuex
 
 from .socket_types import SocketType as ST
 

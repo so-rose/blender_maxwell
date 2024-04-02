@@ -1,9 +1,6 @@
-from . import sim_domain
-
 # from . import sim_grid
 # from . import sim_grid_axes
-
-from . import fdtd_sim
+from . import fdtd_sim, sim_domain
 
 BL_REGISTER = [
 	*sim_domain.BL_REGISTER,

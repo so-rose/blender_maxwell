@@ -1,7 +1,5 @@
-from . import box_structure
-
 # from . import cylinder_structure
-from . import sphere_structure
+from . import box_structure, sphere_structure
 
 BL_REGISTER = [
 	*box_structure.BL_REGISTER,

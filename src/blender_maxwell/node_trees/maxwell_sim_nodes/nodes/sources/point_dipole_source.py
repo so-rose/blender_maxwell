@@ -1,14 +1,12 @@
 import typing as typ
-import tidy3d as td
-import sympy as sp
-import sympy.physics.units as spu
 
 import bpy
+import sympy.physics.units as spu
+import tidy3d as td
 
 from ... import contracts as ct
-from ... import sockets
+from ... import managed_objs, sockets
 from .. import base
-from ... import managed_objs
 
 
 class PointDipoleSourceNode(base.MaxwellSimNode):

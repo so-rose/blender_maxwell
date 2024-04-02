@@ -1,12 +1,12 @@
 import typing as typ
 
 import bpy
-import sympy as sp
 import pydantic as pyd
+import sympy as sp
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 ####################
@@ -75,7 +75,6 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 		Returns:
 			The sympy expression representing the complex number.
 		"""
-
 		v1, v2 = self.raw_value
 
 		return {
@@ -91,7 +90,6 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 		- Cartesian: a,b -> a + ib
 		- Polar: r,t -> re^(it)
 		"""
-
 		self.raw_value = {
 			'CARTESIAN': (sp.re(value), sp.im(value)),
 			'POLAR': (sp.Abs(value), sp.arg(value)),

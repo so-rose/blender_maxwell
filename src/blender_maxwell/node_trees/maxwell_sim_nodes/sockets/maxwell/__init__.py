@@ -1,19 +1,16 @@
-from . import bound_cond
-from . import bound_conds
+from . import bound_cond, bound_conds
 
 MaxwellBoundCondSocketDef = bound_cond.MaxwellBoundCondSocketDef
 MaxwellBoundCondsSocketDef = bound_conds.MaxwellBoundCondsSocketDef
 
-from . import medium
-from . import medium_non_linearity
+from . import medium, medium_non_linearity
 
 MaxwellMediumSocketDef = medium.MaxwellMediumSocketDef
 MaxwellMediumNonLinearitySocketDef = (
 	medium_non_linearity.MaxwellMediumNonLinearitySocketDef
 )
 
-from . import source
-from . import temporal_shape
+from . import source, temporal_shape
 
 MaxwellSourceSocketDef = source.MaxwellSourceSocketDef
 MaxwellTemporalShapeSocketDef = temporal_shape.MaxwellTemporalShapeSocketDef
@@ -26,11 +23,7 @@ from . import monitor
 
 MaxwellMonitorSocketDef = monitor.MaxwellMonitorSocketDef
 
-from . import fdtd_sim
-from . import fdtd_sim_data
-from . import sim_grid
-from . import sim_grid_axis
-from . import sim_domain
+from . import fdtd_sim, fdtd_sim_data, sim_domain, sim_grid, sim_grid_axis
 
 MaxwellFDTDSimSocketDef = fdtd_sim.MaxwellFDTDSimSocketDef
 MaxwellFDTDSimDataSocketDef = fdtd_sim_data.MaxwellFDTDSimDataSocketDef

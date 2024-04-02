@@ -10,9 +10,7 @@ from . import angle
 
 PhysicalAngleSocketDef = angle.PhysicalAngleSocketDef
 
-from . import length
-from . import area
-from . import volume
+from . import area, length, volume
 
 PhysicalLengthSocketDef = length.PhysicalLengthSocketDef
 PhysicalAreaSocketDef = area.PhysicalAreaSocketDef
@@ -30,9 +28,7 @@ from . import mass
 
 PhysicalMassSocketDef = mass.PhysicalMassSocketDef
 
-from . import speed
-from . import accel_scalar
-from . import force_scalar
+from . import accel_scalar, force_scalar, speed
 
 PhysicalSpeedSocketDef = speed.PhysicalSpeedSocketDef
 PhysicalAccelScalarSocketDef = accel_scalar.PhysicalAccelScalarSocketDef

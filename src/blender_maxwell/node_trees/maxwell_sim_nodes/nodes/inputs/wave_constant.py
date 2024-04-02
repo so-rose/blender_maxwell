@@ -1,22 +1,20 @@
-import bpy
+import typing as typ
+
 import sympy as sp
 import sympy.physics.units as spu
-import scipy as sc
 
 from .....utils import extra_sympy_units as spux
+from .....utils import sci_constants as constants
 from ... import contracts as ct
 from ... import sockets
 from .. import base
 
-VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
-
 
 class WaveConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.WaveConstant
-
 	bl_label = 'Wave Constant'
 
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		# Single
 		'Vacuum WL': {
 			'WL': sockets.PhysicalLengthSocketDef(
@@ -44,7 +42,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Callbacks
+	# - Event Methods: Listy Output
 	####################
 	@base.computes_output_socket(
 		'WL',
@@ -53,14 +51,11 @@ class WaveConstantNode(base.MaxwellSimNode):
 	def compute_vac_wl(self, input_sockets: dict) -> sp.Expr:
 		if (vac_wl := input_sockets['WL']) is not None:
 			return vac_wl
+		if (freq := input_sockets['Freq']) is not None:
+			return constants.vac_speed_of_light / freq
 
-		elif (freq := input_sockets['Freq']) is not None:
-			return spu.convert_to(
-				VAC_SPEED_OF_LIGHT / freq,
-				spu.meter,
-			)
-
-		raise RuntimeError('Vac WL and Freq are both None')
+		msg = 'Vac WL and Freq are both None'
+		raise RuntimeError(msg)
 
 	@base.computes_output_socket(
 		'Freq',
@@ -68,17 +63,15 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_freq(self, input_sockets: dict) -> sp.Expr:
 		if (vac_wl := input_sockets['WL']) is not None:
-			return spu.convert_to(
-				VAC_SPEED_OF_LIGHT / vac_wl,
-				spu.hertz,
-			)
-		elif (freq := input_sockets['Freq']) is not None:
+			return constants.vac_speed_of_light / vac_wl
+		if (freq := input_sockets['Freq']) is not None:
 			return freq
 
-		raise RuntimeError('Vac WL and Freq are both None')
+		msg = 'Vac WL and Freq are both None'
+		raise RuntimeError(msg)
 
 	####################
-	# - Listy Callbacks
+	# - Event Methods: Listy Output
 	####################
 	@base.computes_output_socket(
 		'WLs',
@@ -87,16 +80,11 @@ class WaveConstantNode(base.MaxwellSimNode):
 	def compute_vac_wls(self, input_sockets: dict) -> sp.Expr:
 		if (vac_wls := input_sockets['WLs']) is not None:
 			return vac_wls
-		elif (freqs := input_sockets['Freqs']) is not None:
-			return [
-				spu.convert_to(
-					VAC_SPEED_OF_LIGHT / freq,
-					spu.meter,
-				)
-				for freq in freqs
-			][::-1]
+		if (freqs := input_sockets['Freqs']) is not None:
+			return [constants.vac_speed_of_light / freq for freq in freqs][::-1]
 
-		raise RuntimeError('Vac WLs and Freqs are both None')
+		msg = 'Vac WL and Freq are both None'
+		raise RuntimeError(msg)
 
 	@base.computes_output_socket(
 		'Freqs',
@@ -104,25 +92,18 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_freqs(self, input_sockets: dict) -> sp.Expr:
 		if (vac_wls := input_sockets['WLs']) is not None:
-			return [
-				spu.convert_to(
-					VAC_SPEED_OF_LIGHT / vac_wl,
-					spu.hertz,
-				)
-				for vac_wl in vac_wls
-			][::-1]
-		elif (freqs := input_sockets['Freqs']) is not None:
+			return [constants.vac_speed_of_light / vac_wl for vac_wl in vac_wls][::-1]
+		if (freqs := input_sockets['Freqs']) is not None:
 			return freqs
 
-		raise RuntimeError('Vac WLs and Freqs are both None')
+		msg = 'Vac WL and Freq are both None'
+		raise RuntimeError(msg)
 
 	####################
-	# - Callbacks
+	# - Event Methods
 	####################
-	@base.on_value_changed(
-		prop_name='active_socket_set', props={'active_socket_set'}
-	)
-	def on_value_changed__active_socket_set(self, props: dict):
+	@base.on_value_changed(prop_name='active_socket_set', props={'active_socket_set'})
+	def on_active_socket_set_changed(self, props: dict):
 		# Singular: Normal Output Sockets
 		if props['active_socket_set'] in {'Vacuum WL', 'Frequency'}:
 			self.loose_output_sockets = {}
@@ -145,7 +126,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@base.on_init()
 	def on_init(self):
-		self.on_value_changed__active_socket_set()
+		self.on_active_socket_set_changed()
 
 
 ####################

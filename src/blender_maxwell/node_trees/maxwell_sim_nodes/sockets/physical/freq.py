@@ -1,16 +1,13 @@
-import typing as typ
-import json
 
-import numpy as np
 import bpy
-import sympy as sp
-import sympy.physics.units as spu
+import numpy as np
 import pydantic as pyd
+import sympy.physics.units as spu
 
 from .....utils import extra_sympy_units as spux
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 ####################

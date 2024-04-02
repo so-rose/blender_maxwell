@@ -1,8 +1,5 @@
 import typing as typ
 
-import bpy
-import sympy as sp
-
 from .... import contracts as ct
 from .... import sockets
 from ... import base
@@ -12,7 +9,7 @@ class NumberConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.NumberConstant
 	bl_label = 'Numerical Constant'
 
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		'Integer': {
 			'Value': sockets.IntegerNumberSocketDef(),
 		},

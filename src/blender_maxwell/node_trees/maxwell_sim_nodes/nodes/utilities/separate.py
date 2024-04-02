@@ -1,10 +1,8 @@
-import tidy3d as td
+import scipy as sc
 import sympy as sp
 import sympy.physics.units as spu
-import scipy as sc
 
-from .... import contracts
-from .... import sockets
+from .... import contracts, sockets
 from ... import base
 
 

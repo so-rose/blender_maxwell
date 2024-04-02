@@ -89,17 +89,13 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		name='Folder of Cloud Tasks',
 		description='An existing folder on the Tidy3D Cloud',
 		items=lambda self, _: self.retrieve_folders(),
-		update=(
-			lambda self, context: self.sync_prop('existing_folder_id', context)
-		),
+		update=(lambda self, context: self.sync_prop('existing_folder_id', context)),
 	)
 	existing_task_id: bpy.props.EnumProperty(
 		name='Existing Cloud Task',
 		description='An existing task on the Tidy3D Cloud, within the given folder',
 		items=lambda self, _: self.retrieve_tasks(),
-		update=(
-			lambda self, context: self.sync_prop('existing_task_id', context)
-		),
+		update=(lambda self, context: self.sync_prop('existing_task_id', context)),
 	)
 
 	# (Potential) New Task
@@ -107,9 +103,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		name='New Cloud Task Name',
 		description='Name of a new task to submit to the Tidy3D Cloud',
 		default='',
-		update=(
-			lambda self, context: self.sync_prop('new_task_name', context)
-		),
+		update=(lambda self, context: self.sync_prop('new_task_name', context)),
 	)
 
 	####################
@@ -158,9 +152,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 					[
 						task.taskName,
 						'('
-						+ task.created_at.astimezone().strftime(
-							'%y-%m-%d @ %H:%M %Z'
-						)
+						+ task.created_at.astimezone().strftime('%y-%m-%d @ %H:%M %Z')
 						+ ')',
 					]
 				),
@@ -205,9 +197,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		"""
 		# Propagate along Link
 		if self.is_linked:
-			msg = (
-				'Cannot sync newly created task to linked Cloud Task socket.'
-			)
+			msg = 'Cannot sync newly created task to linked Cloud Task socket.'
 			raise ValueError(msg)
 			## TODO: A little aggressive. Is there a good use case?
 
@@ -223,9 +213,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		"""
 		# Propagate along Link
 		if self.is_linked:
-			msg = (
-				'Cannot sync newly created task to linked Cloud Task socket.'
-			)
+			msg = 'Cannot sync newly created task to linked Cloud Task socket.'
 			raise ValueError(msg)
 			## TODO: A little aggressive. Is there a good use case?
 
@@ -238,9 +226,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	def draw_label_row(self, row: bpy.types.UILayout, text: str):
 		row.label(text=text)
 
-		auth_icon = (
-			'LOCKVIEW_ON' if tdcloud.IS_AUTHENTICATED else 'LOCKVIEW_OFF'
-		)
+		auth_icon = 'LOCKVIEW_ON' if tdcloud.IS_AUTHENTICATED else 'LOCKVIEW_OFF'
 		row.operator(
 			Authenticate.bl_idname,
 			text='',
@@ -299,11 +285,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	@property
 	def value(
 		self,
-	) -> (
-		tuple[tdcloud.CloudTaskName, tdcloud.CloudFolder]
-		| tdcloud.CloudTask
-		| None
-	):
+	) -> tuple[tdcloud.CloudTaskName, tdcloud.CloudFolder] | tdcloud.CloudTask | None:
 		# Retrieve Folder
 		## Authentication is presumed OK
 		if (

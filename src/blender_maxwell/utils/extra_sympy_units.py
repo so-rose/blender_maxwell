@@ -95,7 +95,7 @@ def parse_abbrev_symbols_to_units(expr: sp.Basic) -> sp.Basic:
 # - Units <-> Scalars
 ####################
 @functools.lru_cache(maxsize=8192)
-def scale_to_unit(expr: sp.Expr, unit: sp.Quantity) -> typ.Any:
+def scale_to_unit(expr: sp.Expr, unit: spu.Quantity) -> typ.Any:
 	## TODO: An LFU cache could do better than an LRU.
 	unitless_expr = spu.convert_to(expr, unit) / unit
 	if not uses_units(unitless_expr):

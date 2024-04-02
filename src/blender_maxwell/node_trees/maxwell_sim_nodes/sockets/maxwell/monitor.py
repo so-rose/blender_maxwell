@@ -1,13 +1,8 @@
-import typing as typ
 
-import bpy
-import sympy.physics.units as spu
 import pydantic as pyd
-import tidy3d as td
-import scipy as sc
 
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class MaxwellMonitorBLSocket(base.MaxwellSimSocket):

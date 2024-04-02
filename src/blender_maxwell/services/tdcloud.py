@@ -6,8 +6,10 @@
 
 import datetime as dt
 import functools
+import tempfile
 import typing as typ
 from dataclasses import dataclass
+from pathlib import Path
 
 import tidy3d as td
 import tidy3d.web as td_web
@@ -237,6 +239,37 @@ class TidyCloudTasks:
 		cls.cache_folder_tasks[cloud_folder.folder_id] = set(cloud_tasks)
 
 		return cloud_tasks
+
+	####################
+	# - Task Download
+	####################
+	@classmethod
+	def download_task_sim_data(
+		cls, cloud_task: CloudTask, download_sim_path: Path | None = None
+	) -> td.SimulationData:
+		# Expose Path for SimData Download
+		if download_sim_path is None:
+			with tempfile.NamedTemporaryFile(delete=False) as f:
+				_path_tmp = Path(f.name)
+				_path_tmp.rename(f.name + '.hdf5')
+				path_sim = Path(f.name + '.hdf5')
+		else:
+			path_sim = download_sim_path
+
+		# Get Sim Data (from file and/or download)
+		if path_sim.is_file():
+			sim_data = td.SimulationData.from_file(str(download_sim_path))
+		else:
+			sim_data = td_web.api.webapi.load(
+				cloud_task.task_id,
+				path=str(download_sim_path),
+			)
+
+		# Delete Temporary File (if used)
+		if download_sim_path is None:
+			Path(path_sim).unlink()
+
+		return sim_data
 
 	####################
 	# - Task Create/Delete

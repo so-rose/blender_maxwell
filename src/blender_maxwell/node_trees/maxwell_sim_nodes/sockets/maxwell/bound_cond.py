@@ -1,12 +1,10 @@
-import typing as typ
-import typing_extensions as typx
-
 import bpy
 import pydantic as pyd
 import tidy3d as td
+import typing_extensions as typx
 
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):

@@ -1,13 +1,11 @@
 import typing as typ
 
 import bpy
-import sympy as sp
-import sympy.physics.units as spu
 import pydantic as pyd
+import sympy as sp
 
-from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class PhysicalAreaBLSocket(base.MaxwellSimSocket):
@@ -43,7 +41,6 @@ class PhysicalAreaBLSocket(base.MaxwellSimSocket):
 		Returns:
 			The area as a sympy expression (with units).
 		"""
-
 		return self.raw_value * self.unit
 
 	@default_value.setter
@@ -52,7 +49,6 @@ class PhysicalAreaBLSocket(base.MaxwellSimSocket):
 		unit conversions to normalize the input value to the selected
 		units.
 		"""
-
 		self.raw_value = self.value_as_unit(value)
 
 

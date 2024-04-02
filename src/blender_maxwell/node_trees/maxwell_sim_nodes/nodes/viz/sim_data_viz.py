@@ -1,18 +1,10 @@
 import typing as typ
 
-import tidy3d as td
-import numpy as np
-import sympy as sp
-import sympy.physics.units as spu
-
 import bpy
 
-from .....utils import analyze_geonodes
-from ... import bl_socket_map
 from ... import contracts as ct
-from ... import sockets
-from .. import base
-from ... import managed_objs
+from ... import managed_objs, sockets
+from .. import base, events
 
 CACHE = {}
 
@@ -252,7 +244,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 	####################
 	# - On Value Changed Methods
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name='FDTD Sim Data',
 		managed_objs={'viz_object'},
 		input_sockets={'FDTD Sim Data'},
@@ -275,7 +267,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 	####################
 	# - Plotting
 	####################
-	@base.on_show_plot(
+	@events.on_show_plot(
 		managed_objs={'viz_plot'},
 		props={
 			'viz_monitor_name',
@@ -330,7 +322,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 			bl_select=True,
 		)
 
-	# @base.on_show_preview(
+	# @events.on_show_preview(
 	# managed_objs={"viz_object"},
 	# )
 	# def on_show_preview(

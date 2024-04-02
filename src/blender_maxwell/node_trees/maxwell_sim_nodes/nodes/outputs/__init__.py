@@ -1,5 +1,4 @@
-from . import viewer
-from . import exporters
+from . import exporters, viewer
 
 BL_REGISTER = [
 	*viewer.BL_REGISTER,

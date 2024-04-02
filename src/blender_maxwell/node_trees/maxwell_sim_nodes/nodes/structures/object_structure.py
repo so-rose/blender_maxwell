@@ -1,13 +1,9 @@
-import tidy3d as td
-import numpy as np
-import sympy as sp
-import sympy.physics.units as spu
-
-import bpy
 import bmesh
+import bpy
+import numpy as np
+import tidy3d as td
 
-from ... import contracts
-from ... import sockets
+from ... import contracts, sockets
 from .. import base
 
 

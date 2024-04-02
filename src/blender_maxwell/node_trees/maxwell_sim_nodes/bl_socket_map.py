@@ -1,7 +1,6 @@
 """Tools for translating between BLMaxwell sockets and pure Blender sockets.
 
 Attributes:
-	SOCKET_DEFS: Maps BLMaxwell SocketType objects to their corresponding SocketDef.
 	BL_SOCKET_3D_TYPE_PREFIXES: Blender socket prefixes which indicate that the Blender socket has three values.
 	BL_SOCKET_4D_TYPE_PREFIXES: Blender socket prefixes which indicate that the Blender socket has four values.
 """
@@ -15,8 +14,7 @@ import sympy as sp
 from ...utils import extra_sympy_units as spux
 from ...utils import logger as _logger
 from . import contracts as ct
-from . import sockets as sck
-from .contracts import SocketType as ST  # noqa: N817
+from . import sockets
 
 log = _logger.get(__name__)
 
@@ -25,26 +23,7 @@ BLSocketValue: typ.TypeAlias = typ.Any  ## A Blender Socket Value
 BLSocketSize: typ.TypeAlias = int
 DescType: typ.TypeAlias = str
 Unit: typ.TypeAlias = typ.Any  ## Type of a valid unit
-
-####################
-# - Socket to SocketDef
-####################
-## TODO: It's only smelly because of the way we bubble up SocketDefs
-SOCKET_DEFS = {
-	socket_type: getattr(
-		sck,
-		socket_type.value.removesuffix('SocketType') + 'SocketDef',
-	)
-	for socket_type in ST
-	if hasattr(sck, socket_type.value.removesuffix('SocketType') + 'SocketDef')
-}
-
-for socket_type in ST:
-	if not hasattr(
-		sck,
-		socket_type.value.removesuffix('SocketType') + 'SocketDef',
-	):
-		log.warning('Missing SocketDef for %s', socket_type.value)
+## TODO: Move this kind of thing to contracts
 
 
 ####################
@@ -96,7 +75,7 @@ def _size_from_bl_socket(
 def _socket_type_from_bl_socket(
 	description: str,
 	bl_socket_type: BLSocketType,
-) -> ST:
+) -> ct.SocketType:
 	"""Parse a Blender socket for a matching BLMaxwell socket type, relying on both the Blender socket type and user-generated hints in the description.
 
 	Arguments:
@@ -141,8 +120,8 @@ def _socket_type_from_bl_socket(
 def _socket_def_from_bl_socket(
 	description: str,
 	bl_socket_type: BLSocketType,
-) -> ST:
-	return SOCKET_DEFS[_socket_type_from_bl_socket(description, bl_socket_type)]
+) -> ct.SocketType:
+	return sockets.SOCKET_DEFS[_socket_type_from_bl_socket(description, bl_socket_type)]
 
 
 def socket_def_from_bl_socket(
@@ -252,7 +231,6 @@ def writable_bl_socket_value(
 
 	Returns:
 		A value corresponding to the input, which is guaranteed to be compatible with the Blender socket (incl. via a GeoNodes modifier), as well as correctly scaled with respect to the given unit system.
-
 	"""
 	return _writable_bl_socket_value(
 		bl_interface_socket.description,

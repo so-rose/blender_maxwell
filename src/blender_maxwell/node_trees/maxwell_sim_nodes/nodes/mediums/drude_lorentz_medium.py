@@ -1,9 +1,7 @@
-import tidy3d as td
-import sympy as sp
 import sympy.physics.units as spu
+import tidy3d as td
 
-from ... import contracts
-from ... import sockets
+from ... import contracts, sockets
 from .. import base
 
 
@@ -19,7 +17,7 @@ class DrudeLorentzMediumNode(base.MaxwellSimTreeNode):
 	input_sockets = (
 		{
 			'eps_inf': sockets.RealNumberSocketDef(
-				label=f'εr_∞',
+				label='εr_∞',
 			),
 		}
 		| {
@@ -52,7 +50,7 @@ class DrudeLorentzMediumNode(base.MaxwellSimTreeNode):
 	def compute_medium(self: contracts.NodeTypeProtocol) -> td.Sellmeier:
 		## Retrieval
 		return td.Lorentz(
-			eps_inf=self.compute_input(f'eps_inf'),
+			eps_inf=self.compute_input('eps_inf'),
 			coeffs=[
 				(
 					self.compute_input(f'del_eps{i}'),

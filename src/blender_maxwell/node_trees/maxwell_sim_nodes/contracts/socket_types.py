@@ -3,7 +3,6 @@ import enum
 from ....utils.blender_type_enum import (
 	BlenderTypeEnum,
 	append_cls_name_to_values,
-	wrap_values_in_MT,
 )
 
 

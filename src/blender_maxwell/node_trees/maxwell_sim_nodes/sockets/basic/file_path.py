@@ -1,12 +1,10 @@
-import typing as typ
 from pathlib import Path
 
 import bpy
-import sympy as sp
 import pydantic as pyd
 
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 ####################
@@ -51,7 +49,7 @@ class FilePathBLSocket(base.MaxwellSimSocket):
 class FilePathSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.FilePath
 
-	default_path: Path = Path('')
+	default_path: Path = Path()
 
 	def init(self, bl_socket: FilePathBLSocket) -> None:
 		bl_socket.value = self.default_path

@@ -1,12 +1,10 @@
-import typing as typ
-import typing_extensions as typx
 import io
-
-import numpy as np
-import pydantic as pyd
-import matplotlib.axis as mpl_ax
+import typing as typ
 
 import bpy
+import matplotlib.axis as mpl_ax
+import numpy as np
+import typing_extensions as typx
 
 from .. import contracts as ct
 
@@ -161,7 +159,7 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 			height_px = int(_height_inches * _dpi)
 
 		else:
-			msg = f'There must either be a preview area, or defined `width_inches`, `height_inches`, and `dpi`'
+			msg = 'There must either be a preview area, or defined `width_inches`, `height_inches`, and `dpi`'
 			raise ValueError(msg)
 
 		# Compute Plot Dimensions

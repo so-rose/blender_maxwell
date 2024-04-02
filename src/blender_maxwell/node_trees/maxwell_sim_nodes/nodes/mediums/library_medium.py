@@ -1,17 +1,14 @@
 import typing as typ
-import functools
 
 import bpy
-import tidy3d as td
+import scipy as sc
 import sympy as sp
 import sympy.physics.units as spu
-import numpy as np
-import scipy as sc
+import tidy3d as td
 
 from .....utils import extra_sympy_units as spuex
 from ... import contracts as ct
-from ... import sockets
-from ... import managed_objs
+from ... import managed_objs, sockets
 from .. import base
 
 VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second

@@ -1,5 +1,4 @@
-from . import json_file_exporter
-from . import tidy3d_web_exporter
+from . import json_file_exporter, tidy3d_web_exporter
 
 BL_REGISTER = [
 	*json_file_exporter.BL_REGISTER,

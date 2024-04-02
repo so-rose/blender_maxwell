@@ -1,7 +1,5 @@
 # from . import object_structure
-from . import geonodes_structure
-
-from . import primitives
+from . import geonodes_structure, primitives
 
 BL_REGISTER = [
 	# *object_structure.BL_REGISTER,

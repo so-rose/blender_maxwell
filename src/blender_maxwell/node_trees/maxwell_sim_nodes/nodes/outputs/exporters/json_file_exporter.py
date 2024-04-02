@@ -1,11 +1,9 @@
-import typing as typ
 import json
+import typing as typ
 from pathlib import Path
 
 import bpy
-import sympy as sp
 import pydantic as pyd
-import tidy3d as td
 
 from .... import contracts as ct
 from .... import sockets

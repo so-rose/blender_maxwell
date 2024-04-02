@@ -1,14 +1,13 @@
-import typing as typ
 
 import bpy
-import sympy as sp
-import sympy.physics.units as spu
-import sympy.physics.optics.polarization as spo_pol
 import pydantic as pyd
+import sympy as sp
+import sympy.physics.optics.polarization as spo_pol
+import sympy.physics.units as spu
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 StokesVector = SympyExpr
 

@@ -1,18 +1,13 @@
-import typing as typ
-import functools
 
 import bpy
-import tidy3d as td
 import sympy as sp
 import sympy.physics.units as spu
-import numpy as np
-import scipy as sc
+import tidy3d as td
 
 from .....utils import analyze_geonodes
 from .....utils import extra_sympy_units as spux
 from ... import contracts as ct
-from ... import sockets
-from ... import managed_objs
+from ... import managed_objs, sockets
 from .. import base
 
 GEONODES_MONITOR_BOX = 'monitor_flux_box'

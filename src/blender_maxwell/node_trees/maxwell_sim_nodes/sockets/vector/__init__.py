@@ -1,12 +1,9 @@
-from . import real_2d_vector
-from . import complex_2d_vector
+from . import complex_2d_vector, real_2d_vector
 
 Real2DVectorSocketDef = real_2d_vector.Real2DVectorSocketDef
 Complex2DVectorSocketDef = complex_2d_vector.Complex2DVectorSocketDef
 
-from . import integer_3d_vector
-from . import real_3d_vector
-from . import complex_3d_vector
+from . import complex_3d_vector, integer_3d_vector, real_3d_vector
 
 Integer3DVectorSocketDef = integer_3d_vector.Integer3DVectorSocketDef
 Real3DVectorSocketDef = real_3d_vector.Real3DVectorSocketDef

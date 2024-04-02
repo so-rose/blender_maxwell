@@ -1,16 +1,13 @@
 import typing as typ
 
-import tidy3d as td
-import numpy as np
-import sympy as sp
-import sympy.physics.units as spu
-
 import bpy
+import numpy as np
+import sympy.physics.units as spu
+import tidy3d as td
 
 from ......utils import extra_sympy_units as spuex
 from .... import contracts as ct
-from .... import sockets
-from .... import managed_objs
+from .... import managed_objs, sockets
 from ... import base
 
 

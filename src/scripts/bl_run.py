@@ -155,7 +155,7 @@ def main():
 	) as path_zipped:
 		try:
 			install_addon(info.ADDON_NAME, path_zipped)
-		except Exception as exe:
+		except Exception:
 			traceback.print_exc()
 			install_failed = True
 

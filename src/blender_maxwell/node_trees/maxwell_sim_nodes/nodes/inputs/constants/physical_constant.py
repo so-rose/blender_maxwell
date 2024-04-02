@@ -1,19 +1,16 @@
-import bpy
+import typing as typ
+
 import sympy as sp
 
-from .... import contracts
-from .... import sockets
-from ... import base
+from .... import contracts, sockets
+from ... import base, events
 
 
 class PhysicalConstantNode(base.MaxwellSimTreeNode):
 	node_type = contracts.NodeType.PhysicalConstant
-
 	bl_label = 'Physical Constant'
-	# bl_icon = constants.ICON_SIM_INPUT
 
-	input_sockets = {}
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		'time': {
 			'value': sockets.PhysicalTimeSocketDef(
 				label='Time',
@@ -51,13 +48,12 @@ class PhysicalConstantNode(base.MaxwellSimTreeNode):
 		},
 		## I got bored so maybe the rest later
 	}
-	output_sockets = {}
-	output_socket_sets = input_socket_sets
+	output_socket_sets: typ.ClassVar = input_socket_sets
 
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket('value')
+	@events.computes_output_socket('value')
 	def compute_value(self: contracts.NodeTypeProtocol) -> sp.Expr:
 		return self.compute_input('value')
 

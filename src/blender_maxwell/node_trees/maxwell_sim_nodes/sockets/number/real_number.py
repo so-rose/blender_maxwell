@@ -1,12 +1,10 @@
-import typing as typ
 
 import bpy
-import sympy as sp
 import pydantic as pyd
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 ####################

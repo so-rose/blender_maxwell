@@ -1,13 +1,12 @@
-import typing as typ
 
 import bpy
+import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
-import pydantic as pyd
 
 from .....utils.pydantic_sympy import SympyExpr
-from .. import base
 from ... import contracts as ct
+from .. import base
 
 
 class PhysicalSize3DBLSocket(base.MaxwellSimSocket):

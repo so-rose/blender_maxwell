@@ -1,4 +1,3 @@
-
 import bpy
 import pydantic as pyd
 
@@ -7,6 +6,8 @@ from ... import contracts as ct
 from .. import base
 
 ST = ct.SocketType
+
+
 def SU(socket_type):  # noqa: N802, D103
 	return ct.SOCKET_UNITS[socket_type]['values']
 
@@ -45,9 +46,7 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 		name='Show Unit System Definition',
 		description='Toggle to show unit system definition',
 		default=False,
-		update=(
-			lambda self, context: self.sync_prop('show_definition', context)
-		),
+		update=(lambda self, context: self.sync_prop('show_definition', context)),
 	)
 
 	unit_time: bpy.props.EnumProperty(
@@ -93,18 +92,14 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 		description='Unit of 2D points',
 		items=contract_units_to_items(ST.PhysicalPoint2D),
 		default=default_unit_key_for(ST.PhysicalPoint2D),
-		update=(
-			lambda self, context: self.sync_prop('unit_point_2d', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_point_2d', context)),
 	)
 	unit_point_3d: bpy.props.EnumProperty(
 		name='Point3D Unit',
 		description='Unit of 3D points',
 		items=contract_units_to_items(ST.PhysicalPoint3D),
 		default=default_unit_key_for(ST.PhysicalPoint3D),
-		update=(
-			lambda self, context: self.sync_prop('unit_point_3d', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_point_3d', context)),
 	)
 
 	unit_size_2d: bpy.props.EnumProperty(
@@ -142,36 +137,28 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 		description='Unit of acceleration',
 		items=contract_units_to_items(ST.PhysicalAccelScalar),
 		default=default_unit_key_for(ST.PhysicalAccelScalar),
-		update=(
-			lambda self, context: self.sync_prop('unit_accel_scalar', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_accel_scalar', context)),
 	)
 	unit_force_scalar: bpy.props.EnumProperty(
 		name='Force Scalar Unit',
 		description='Unit of scalar force',
 		items=contract_units_to_items(ST.PhysicalForceScalar),
 		default=default_unit_key_for(ST.PhysicalForceScalar),
-		update=(
-			lambda self, context: self.sync_prop('unit_force_scalar', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_force_scalar', context)),
 	)
 	unit_accel_3d: bpy.props.EnumProperty(
 		name='Accel3D Unit',
 		description='Unit of 3D vector acceleration',
 		items=contract_units_to_items(ST.PhysicalAccel3D),
 		default=default_unit_key_for(ST.PhysicalAccel3D),
-		update=(
-			lambda self, context: self.sync_prop('unit_accel_3d', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_accel_3d', context)),
 	)
 	unit_force_3d: bpy.props.EnumProperty(
 		name='Force3D Unit',
 		description='Unit of 3D vector force',
 		items=contract_units_to_items(ST.PhysicalForce3D),
 		default=default_unit_key_for(ST.PhysicalForce3D),
-		update=(
-			lambda self, context: self.sync_prop('unit_force_3d', context)
-		),
+		update=(lambda self, context: self.sync_prop('unit_force_3d', context)),
 	)
 
 	unit_freq: bpy.props.EnumProperty(
@@ -187,9 +174,7 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 	####################
 	def draw_label_row(self, row: bpy.types.UILayout, text) -> None:
 		row.label(text=text)
-		row.prop(
-			self, 'show_definition', toggle=True, text='', icon='MOD_LENGTH'
-		)
+		row.prop(self, 'show_definition', toggle=True, text='', icon='MOD_LENGTH')
 
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		if self.show_definition:
@@ -263,7 +248,8 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 	@property
 	def value(self) -> dict[ST, SympyExpr]:
 		return {
-			socket_type: SU(socket_type)[socket_unit_prop] for socket_type, socket_unit_prop in [
+			socket_type: SU(socket_type)[socket_unit_prop]
+			for socket_type, socket_unit_prop in [
 				(ST.PhysicalTime, self.unit_time),
 				(ST.PhysicalAngle, self.unit_angle),
 				(ST.PhysicalLength, self.unit_length),

@@ -1,8 +1,5 @@
-from pathlib import Path
 
-import tidy3d as td
 import sympy as sp
-import sympy.physics.units as spu
 
 from .. import contracts as ct
 from .. import sockets
