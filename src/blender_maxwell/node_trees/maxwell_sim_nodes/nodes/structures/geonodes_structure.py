@@ -5,7 +5,7 @@ import tidy3d as td
 from .....utils import analyze_geonodes, logger
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
-from .. import base
+from .. import base, events
 
 log = logger.get(__name__)
 
@@ -39,7 +39,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	####################
 	# - Event Methods
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Structure',
 		input_sockets={'Medium'},
 		managed_objs={'geometry'},
@@ -67,7 +67,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	####################
 	# - Event Methods
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name='GeoNodes',
 		prop_name='preview_active',
 		any_loose_input_socket=True,

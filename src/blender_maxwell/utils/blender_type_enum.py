@@ -9,8 +9,7 @@ class BlenderTypeEnum(str, enum.Enum):
 def append_cls_name_to_values(cls):
 	# Construct Set w/Modified Member Names
 	new_members = {
-		name: f'{name}{cls.__name__}'
-		for name, member in cls.__members__.items()
+		name: f'{name}{cls.__name__}' for name, member in cls.__members__.items()
 	}
 
 	# Dynamically Declare New Enum Class w/Modified Members
@@ -24,8 +23,7 @@ def append_cls_name_to_values(cls):
 def wrap_values_in_MT(cls):
 	# Construct Set w/Modified Member Names
 	new_members = {
-		name: f'BLENDER_MAXWELL_MT_{name}'
-		for name, member in cls.__members__.items()
+		name: f'BLENDER_MAXWELL_MT_{name}' for name, member in cls.__members__.items()
 	}
 
 	# Dynamically Declare New Enum Class w/Modified Members

@@ -2,7 +2,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from ... import contracts, sockets
-from .. import base
+from .. import base, events
 
 
 class TripleSellmeierMediumNode(base.MaxwellSimTreeNode):
@@ -20,9 +20,7 @@ class TripleSellmeierMediumNode(base.MaxwellSimTreeNode):
 		)
 		for i in [1, 2, 3]
 	} | {
-		f'C{i}': sockets.PhysicalAreaSocketDef(
-			label=f'C{i}', default_unit=spu.um**2
-		)
+		f'C{i}': sockets.PhysicalAreaSocketDef(label=f'C{i}', default_unit=spu.um**2)
 		for i in [1, 2, 3]
 	}
 	output_sockets = {
@@ -62,7 +60,7 @@ class TripleSellmeierMediumNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('medium')
+	@events.computes_output_socket('medium')
 	def compute_medium(self: contracts.NodeTypeProtocol) -> td.Sellmeier:
 		## Retrieval
 		# B1 = self.compute_input("B1")

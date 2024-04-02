@@ -1,4 +1,3 @@
-
 from .socket_types import SocketType as ST
 
 ## TODO: Don't just presume sRGB.

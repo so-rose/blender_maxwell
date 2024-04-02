@@ -69,9 +69,7 @@ def zipped_addon(  # noqa: PLR0913
 
 			# Write File to Zip
 			else:
-				f_zip.write(
-					file_to_zip, file_to_zip.relative_to(path_addon_pkg.parent)
-				)
+				f_zip.write(file_to_zip, file_to_zip.relative_to(path_addon_pkg.parent))
 
 		# Install pyproject.toml @ /pyproject.toml of Addon
 		f_zip.write(
@@ -114,5 +112,6 @@ def main():
 		# TODO: GPG signature for distribution
 		pass
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
 	main()

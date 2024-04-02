@@ -5,7 +5,7 @@ import sympy.physics.units as spu
 from .....utils import analyze_geonodes
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 GEONODES_DOMAIN_BOX = 'simdomain_box'
 
@@ -38,7 +38,7 @@ class SimDomainNode(base.MaxwellSimNode):
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Domain',
 		input_sockets={'Duration', 'Center', 'Size', 'Grid', 'Ambient Medium'},
 	)
@@ -66,7 +66,7 @@ class SimDomainNode(base.MaxwellSimNode):
 	####################
 	# - Preview
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		input_sockets={'Center', 'Size'},
 		managed_objs={'domain_box'},
@@ -77,21 +77,15 @@ class SimDomainNode(base.MaxwellSimNode):
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
 		_center = input_sockets['Center']
-		center = tuple(
-			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
-		)
+		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
 		_size = input_sockets['Size']
-		size = tuple(
-			[float(el) for el in spu.convert_to(_size, spu.um) / spu.um]
-		)
+		size = tuple([float(el) for el in spu.convert_to(_size, spu.um) / spu.um])
 		## TODO: Preview unit system?? Presume um for now
 
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_DOMAIN_BOX]
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Sync Modifier Inputs
 		managed_objs['domain_box'].sync_geonodes_modifier(
@@ -108,7 +102,7 @@ class SimDomainNode(base.MaxwellSimNode):
 		# Sync Object Position
 		managed_objs['domain_box'].bl_object('MESH').location = center
 
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'domain_box'},
 	)
 	def on_show_preview(

@@ -2,7 +2,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from ... import contracts, sockets
-from .. import base
+from .. import base, events
 
 
 class DrudeLorentzMediumNode(base.MaxwellSimTreeNode):
@@ -46,7 +46,7 @@ class DrudeLorentzMediumNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('medium')
+	@events.computes_output_socket('medium')
 	def compute_medium(self: contracts.NodeTypeProtocol) -> td.Sellmeier:
 		## Retrieval
 		return td.Lorentz(
@@ -77,7 +77,5 @@ BL_REGISTER = [
 	DrudeLorentzMediumNode,
 ]
 BL_NODES = {
-	contracts.NodeType.DrudeLorentzMedium: (
-		contracts.NodeCategory.MAXWELLSIM_MEDIUMS
-	)
+	contracts.NodeType.DrudeLorentzMedium: (contracts.NodeCategory.MAXWELLSIM_MEDIUMS)
 }

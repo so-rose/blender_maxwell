@@ -6,7 +6,7 @@ import tidy3d as td
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 
 class PointDipoleSourceNode(base.MaxwellSimNode):
@@ -64,7 +64,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Source',
 		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
 		props={'pol_axis'},
@@ -95,7 +95,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	####################
 	# - Preview
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name='Center',
 		input_sockets={'Center'},
 		managed_objs={'sphere_empty'},
@@ -113,7 +113,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		bl_object = mobj.bl_object('EMPTY')
 		bl_object.location = center  # tuple([float(el) for el in center])
 
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'sphere_empty'},
 	)
 	def on_show_preview(
@@ -124,9 +124,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			'EMPTY',
 			empty_display_type='SPHERE',
 		)
-		managed_objs['sphere_empty'].bl_object(
-			'EMPTY'
-		).empty_display_size = 0.2
+		managed_objs['sphere_empty'].bl_object('EMPTY').empty_display_size = 0.2
 
 
 ####################
@@ -135,6 +133,4 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	PointDipoleSourceNode,
 ]
-BL_NODES = {
-	ct.NodeType.PointDipoleSource: (ct.NodeCategory.MAXWELLSIM_SOURCES)
-}
+BL_NODES = {ct.NodeType.PointDipoleSource: (ct.NodeCategory.MAXWELLSIM_SOURCES)}

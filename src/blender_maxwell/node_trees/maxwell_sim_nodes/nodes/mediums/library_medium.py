@@ -9,7 +9,7 @@ import tidy3d as td
 from .....utils import extra_sympy_units as spuex
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
 
@@ -72,9 +72,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			/ spuex.terahertz
 			for val in mat.medium.frequency_range
 		]
-		return sp.pretty(
-			[freq_range[0].n(4), freq_range[1].n(4)], use_unicode=True
-		)
+		return sp.pretty([freq_range[0].n(4), freq_range[1].n(4)], use_unicode=True)
 
 	@property
 	def nm_range_str(self) -> str:
@@ -88,9 +86,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			/ spu.nanometer
 			for val in reversed(mat.medium.frequency_range)
 		]
-		return sp.pretty(
-			[nm_range[0].n(4), nm_range[1].n(4)], use_unicode=True
-		)
+		return sp.pretty([nm_range[0].n(4), nm_range[1].n(4)], use_unicode=True)
 
 	####################
 	# - UI
@@ -115,14 +111,14 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Output Sockets
 	####################
-	@base.computes_output_socket('Medium')
+	@events.computes_output_socket('Medium')
 	def compute_vac_wl(self) -> sp.Expr:
 		return td.material_library[self.material].medium
 
 	####################
 	# - Event Callbacks
 	####################
-	@base.on_show_plot(
+	@events.on_show_plot(
 		managed_objs={'nk_plot'},
 		props={'material'},
 		stop_propagation=True,  ## Plot only the first plottable node

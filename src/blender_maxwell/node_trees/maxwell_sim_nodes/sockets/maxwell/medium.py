@@ -1,4 +1,3 @@
-
 import bpy
 import pydantic as pyd
 import scipy as sc
@@ -35,9 +34,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 		size=2,
 		default=(1.0, 0.0),
 		precision=2,
-		update=(
-			lambda self, context: self.sync_prop('rel_permittivity', context)
-		),
+		update=(lambda self, context: self.sync_prop('rel_permittivity', context)),
 	)
 
 	####################

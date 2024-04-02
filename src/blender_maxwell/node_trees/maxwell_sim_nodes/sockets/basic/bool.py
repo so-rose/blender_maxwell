@@ -1,4 +1,3 @@
-
 import bpy
 import pydantic as pyd
 
@@ -26,9 +25,7 @@ class BoolBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Socket UI
 	####################
-	def draw_label_row(
-		self, label_col_row: bpy.types.UILayout, text: str
-	) -> None:
+	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
 		label_col_row.label(text=text)
 		label_col_row.prop(self, 'raw_value', text='')
 

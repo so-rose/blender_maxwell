@@ -5,7 +5,7 @@ import tidy3d as td
 from ......utils import analyze_geonodes
 from .... import contracts as ct
 from .... import managed_objs, sockets
-from ... import base
+from ... import base, events
 
 GEONODES_STRUCTURE_SPHERE = 'structure_sphere'
 
@@ -38,7 +38,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Structure',
 		input_sockets={'Center', 'Radius', 'Medium'},
 	)
@@ -61,7 +61,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Radius'},
 		input_sockets={'Center', 'Radius'},
 		managed_objs={'structure_sphere'},
@@ -72,9 +72,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
 		_center = input_sockets['Center']
-		center = tuple(
-			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
-		)
+		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
 		_radius = input_sockets['Radius']
 		radius = float(spu.convert_to(_radius, spu.um) / spu.um)
@@ -82,9 +80,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_STRUCTURE_SPHERE]
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Sync Modifier Inputs
 		managed_objs['structure_sphere'].sync_geonodes_modifier(
@@ -104,7 +100,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Show Preview
 	####################
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'structure_sphere'},
 	)
 	def on_show_preview(
@@ -122,7 +118,5 @@ BL_REGISTER = [
 	SphereStructureNode,
 ]
 BL_NODES = {
-	ct.NodeType.SphereStructure: (
-		ct.NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES
-	)
+	ct.NodeType.SphereStructure: (ct.NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES)
 }

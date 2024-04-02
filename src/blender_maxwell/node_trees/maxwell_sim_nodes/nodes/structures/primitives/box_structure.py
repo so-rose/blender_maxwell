@@ -7,7 +7,7 @@ import tidy3d as td
 from .....assets.import_geonodes import import_geonodes
 from .... import contracts as ct
 from .... import managed_objs, sockets
-from ... import base
+from ... import base, events
 
 GEONODES_BOX = 'box'
 
@@ -43,7 +43,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 	####################
 	# - Event Methods
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Structure',
 		input_sockets={'Medium', 'Center', 'Size'},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
@@ -61,7 +61,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			medium=input_sockets['Medium'],
 		)
 
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		prop_name='preview_active',
 		# Method Data
@@ -96,7 +96,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 		if props['preview_active']:
 			managed_objs['mesh'].show_preview()
 
-	@base.on_init()
+	@events.on_init()
 	def on_init(self):
 		self.on_input_change()
 

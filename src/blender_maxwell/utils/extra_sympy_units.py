@@ -104,6 +104,7 @@ def scale_to_unit(expr: sp.Expr, unit: spu.Quantity) -> typ.Any:
 	msg = f'Expression "{expr}" was scaled to the unit "{unit}" with the expectation that the result would be unitless, but the result "{unitless_expr}" has units "{get_units(unitless_expr)}"'
 	raise ValueError(msg)
 
+
 ####################
 # - Sympy <-> Scalars
 ####################

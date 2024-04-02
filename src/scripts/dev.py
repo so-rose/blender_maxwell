@@ -54,5 +54,6 @@ def main():
 	elif return_code != 0:
 		print(''.join(output))  # noqa: T201
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
 	main()

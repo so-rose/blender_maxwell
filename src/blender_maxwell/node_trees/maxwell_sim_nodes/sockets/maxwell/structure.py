@@ -1,4 +1,3 @@
-
 import pydantic as pyd
 
 from ... import contracts as ct

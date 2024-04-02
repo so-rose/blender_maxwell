@@ -2,7 +2,7 @@ import typing as typ
 
 from .... import contracts as ct
 from .... import sockets
-from ... import base
+from ... import base, events
 
 
 class NumberConstantNode(base.MaxwellSimNode):
@@ -28,7 +28,7 @@ class NumberConstantNode(base.MaxwellSimNode):
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket('Value', input_sockets={'Value'})
+	@events.computes_output_socket('Value', input_sockets={'Value'})
 	def compute_value(self, input_sockets) -> typ.Any:
 		return input_sockets['Value']
 
@@ -39,6 +39,4 @@ class NumberConstantNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	NumberConstantNode,
 ]
-BL_NODES = {
-	ct.NodeType.NumberConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS)
-}
+BL_NODES = {ct.NodeType.NumberConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS_CONSTANTS)}

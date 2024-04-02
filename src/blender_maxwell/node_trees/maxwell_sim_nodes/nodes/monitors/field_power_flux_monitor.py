@@ -1,4 +1,3 @@
-
 import bpy
 import sympy as sp
 import sympy.physics.units as spu
@@ -8,7 +7,7 @@ from .....utils import analyze_geonodes
 from .....utils import extra_sympy_units as spux
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 GEONODES_MONITOR_BOX = 'monitor_flux_box'
 
@@ -37,9 +36,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 		},
 		'Time Domain': {
 			'Rec Start': sockets.PhysicalTimeSocketDef(),
-			'Rec Stop': sockets.PhysicalTimeSocketDef(
-				default_value=200 * spux.fs
-			),
+			'Rec Stop': sockets.PhysicalTimeSocketDef(default_value=200 * spux.fs),
 			'Samples/Time': sockets.IntegerNumberSocketDef(
 				default_value=100,
 			),
@@ -72,7 +69,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Output Sockets
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Monitor',
 		input_sockets={
 			'Rec Start',
@@ -86,9 +83,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 		},
 		props={'active_socket_set', 'sim_node_name'},
 	)
-	def compute_monitor(
-		self, input_sockets: dict, props: dict
-	) -> td.FieldTimeMonitor:
+	def compute_monitor(self, input_sockets: dict, props: dict) -> td.FieldTimeMonitor:
 		_center = input_sockets['Center']
 		_size = input_sockets['Size']
 		_samples_space = input_sockets['Samples/Space']
@@ -108,8 +103,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 				name=props['sim_node_name'],
 				interval_space=samples_space,
 				freqs=[
-					float(spu.convert_to(freq, spu.hertz) / spu.hertz)
-					for freq in freqs
+					float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
 				],
 				normal_dir=direction,
 			)
@@ -134,7 +128,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		input_sockets={'Center', 'Size', 'Direction'},
 		managed_objs={'monitor_box'},
@@ -145,30 +139,22 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
 		_center = input_sockets['Center']
-		center = tuple(
-			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
-		)
+		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
 		_size = input_sockets['Size']
-		size = tuple(
-			[float(el) for el in spu.convert_to(_size, spu.um) / spu.um]
-		)
+		size = tuple([float(el) for el in spu.convert_to(_size, spu.um) / spu.um])
 		## TODO: Preview unit system?? Presume um for now
 
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_MONITOR_BOX]
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Sync Modifier Inputs
 		managed_objs['monitor_box'].sync_geonodes_modifier(
 			geonodes_node_group=geo_nodes,
 			geonodes_identifier_to_value={
 				geonodes_interface['Size'].identifier: size,
-				geonodes_interface['Direction'].identifier: input_sockets[
-					'Direction'
-				],
+				geonodes_interface['Direction'].identifier: input_sockets['Direction'],
 				## TODO: Use 'bl_socket_map.value_to_bl`!
 				## - This accounts for auto-conversion, unit systems, etc. .
 				## - We could keep it in the node base class...
@@ -182,7 +168,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Show Preview
 	####################
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'monitor_box'},
 	)
 	def on_show_preview(
@@ -199,6 +185,4 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	FieldPowerFluxMonitorNode,
 ]
-BL_NODES = {
-	ct.NodeType.FieldPowerFluxMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)
-}
+BL_NODES = {ct.NodeType.FieldPowerFluxMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)}

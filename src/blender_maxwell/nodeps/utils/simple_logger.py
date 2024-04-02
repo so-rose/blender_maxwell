@@ -18,7 +18,7 @@ LOG_LEVEL_MAP: dict[str, LogLevel] = {
 
 SIMPLE_LOGGER_PREFIX = 'simple::'
 
-STREAM_LOG_FORMAT = 11*' ' + '%(levelname)-8s %(message)s (%(name)s)'
+STREAM_LOG_FORMAT = 11 * ' ' + '%(levelname)-8s %(message)s (%(name)s)'
 FILE_LOG_FORMAT = STREAM_LOG_FORMAT
 
 ####################
@@ -122,7 +122,7 @@ def sync_bootstrap_logging(
 			file_path=file_path,
 			file_level=file_level,
 		)
-	logger_logger.info("Bootstrapped Logging w/Settings %s", str(CACHE))
+	logger_logger.info('Bootstrapped Logging w/Settings %s', str(CACHE))
 
 
 def sync_loggers(
@@ -153,9 +153,7 @@ def sync_loggers(
 # - Logger Iteration
 ####################
 def loggers():
-	return [
-		logging.getLogger(name) for name in logging.root.manager.loggerDict
-	]
+	return [logging.getLogger(name) for name in logging.root.manager.loggerDict]
 
 
 def simple_loggers():

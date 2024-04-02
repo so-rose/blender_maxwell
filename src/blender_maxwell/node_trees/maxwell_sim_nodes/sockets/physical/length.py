@@ -1,4 +1,3 @@
-
 import bpy
 import numpy as np
 import pydantic as pyd
@@ -74,8 +73,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 	@property
 	def value_list(self) -> list[SympyExpr]:
 		return [
-			el * self.unit
-			for el in np.linspace(self.min_len, self.max_len, self.steps)
+			el * self.unit for el in np.linspace(self.min_len, self.max_len, self.steps)
 		]
 
 	@value_list.setter

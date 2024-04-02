@@ -7,7 +7,7 @@ from .....utils import analyze_geonodes, logger
 from .....utils import extra_sympy_units as spux
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 log = logger.get(__name__)
 
@@ -59,7 +59,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Output Sockets
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Monitor',
 		input_sockets={
 			'Rec Start',
@@ -129,7 +129,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		input_sockets={'Center', 'Size'},
 		managed_objs={'monitor_box'},
@@ -164,7 +164,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Show Preview
 	####################
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'monitor_box'},
 	)
 	def on_show_preview(

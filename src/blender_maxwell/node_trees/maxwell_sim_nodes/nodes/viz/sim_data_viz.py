@@ -16,12 +16,12 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'FDTD Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
 	}
-	output_sockets = {'Preview': sockets.AnySocketDef()}
+	output_sockets: typ.ClassVar = {'Preview': sockets.AnySocketDef()}
 
-	managed_obj_defs = {
+	managed_obj_defs: typ.ClassVar = {
 		'viz_plot': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLImage(name),
 			name_prefix='',
@@ -63,9 +63,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 			# ("Hz", "Hz", "Hz"),
 		],
 		default='E',
-		update=lambda self, context: self.sync_prop(
-			'field_viz_component', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_component', context),
 	)
 	field_viz_part: bpy.props.EnumProperty(
 		name='Field Part',
@@ -88,9 +86,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 			('dB', 'Log (dB)', 'Logarithmic (dB) Scale'),
 		],
 		default='lin',
-		update=lambda self, context: self.sync_prop(
-			'field_viz_scale', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_scale', context),
 	)
 	field_viz_structure_visibility: bpy.props.FloatProperty(
 		name='Field Viz Plot: Structure Visibility',
@@ -98,75 +94,57 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 		default=0.2,
 		min=0.0,
 		max=1.0,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fixed_f', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fixed_f', context),
 	)
 
 	field_viz_plot_fix_x: bpy.props.BoolProperty(
 		name='Field Viz Plot: Fix X',
 		description='Fix the x-coordinate on the plot',
 		default=False,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fix_x', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fix_x', context),
 	)
 	field_viz_plot_fix_y: bpy.props.BoolProperty(
 		name='Field Viz Plot: Fix Y',
 		description='Fix the y coordinate on the plot',
 		default=False,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fix_y', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fix_y', context),
 	)
 	field_viz_plot_fix_z: bpy.props.BoolProperty(
 		name='Field Viz Plot: Fix Z',
 		description='Fix the z coordinate on the plot',
 		default=False,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fix_z', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fix_z', context),
 	)
 	field_viz_plot_fix_f: bpy.props.BoolProperty(
 		name='Field Viz Plot: Fix Freq',
 		description='Fix the frequency coordinate on the plot',
 		default=False,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fix_f', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fix_f', context),
 	)
 
 	field_viz_plot_fixed_x: bpy.props.FloatProperty(
 		name='Field Viz Plot: Fix X',
 		description='Fix the x-coordinate on the plot',
 		default=0.0,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fixed_x', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fixed_x', context),
 	)
 	field_viz_plot_fixed_y: bpy.props.FloatProperty(
 		name='Field Viz Plot: Fixed Y',
 		description='Fix the y coordinate on the plot',
 		default=0.0,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fixed_y', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fixed_y', context),
 	)
 	field_viz_plot_fixed_z: bpy.props.FloatProperty(
 		name='Field Viz Plot: Fixed Z',
 		description='Fix the z coordinate on the plot',
 		default=0.0,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fixed_z', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fixed_z', context),
 	)
 	field_viz_plot_fixed_f: bpy.props.FloatProperty(
 		name='Field Viz Plot: Fixed Freq (Thz)',
 		description='Fix the frequency coordinate on the plot',
 		default=0.0,
-		update=lambda self, context: self.sync_prop(
-			'field_viz_plot_fixed_f', context
-		),
+		update=lambda self, context: self.sync_prop('field_viz_plot_fixed_f', context),
 	)
 
 	####################
@@ -176,9 +154,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 		if (sim_data := self._compute_input('FDTD Sim Data')) is None:
 			return
 
-		self.cache_viz_monitor_type = sim_data.monitor_data[
-			self.viz_monitor_name
-		].type
+		self.cache_viz_monitor_type = sim_data.monitor_data[self.viz_monitor_name].type
 		self.sync_prop('viz_monitor_name', context)
 
 	def retrieve_monitors(self, context) -> list[tuple]:
@@ -260,9 +236,7 @@ class FDTDSimDataVizNode(base.MaxwellSimNode):
 			CACHE.pop(self.instance_id, None)
 			return
 
-		CACHE[self.instance_id] = {
-			'monitors': list(sim_data.monitor_data.keys())
-		}
+		CACHE[self.instance_id] = {'monitors': list(sim_data.monitor_data.keys())}
 
 	####################
 	# - Plotting

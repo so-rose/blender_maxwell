@@ -1,4 +1,3 @@
-
 import bpy
 import pydantic as pyd
 import tidy3d as td
@@ -31,9 +30,7 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 		name='Show Bounds Definition',
 		description='Toggle to show bound faces',
 		default=False,
-		update=(
-			lambda self, context: self.sync_prop('show_definition', context)
-		),
+		update=(lambda self, context: self.sync_prop('show_definition', context)),
 	)
 
 	x_pos: bpy.props.EnumProperty(
@@ -84,9 +81,7 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 	####################
 	def draw_label_row(self, row: bpy.types.UILayout, text) -> None:
 		row.label(text=text)
-		row.prop(
-			self, 'show_definition', toggle=True, text='', icon='MOD_LENGTH'
-		)
+		row.prop(self, 'show_definition', toggle=True, text='', icon='MOD_LENGTH')
 
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		if not self.show_definition:

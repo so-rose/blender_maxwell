@@ -5,7 +5,7 @@ from .....utils import logger
 from ... import contracts as ct
 from ... import sockets
 from ...managed_objs import managed_bl_object
-from .. import base
+from .. import base, events
 
 log = logger.get(__name__)
 console = logger.OUTPUT_CONSOLE
@@ -113,7 +113,7 @@ class ViewerNode(base.MaxwellSimNode):
 	####################
 	# - Updates
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name='Data',
 		props={'auto_3d_preview'},
 	)
@@ -135,7 +135,7 @@ class ViewerNode(base.MaxwellSimNode):
 		if props['auto_3d_preview']:
 			self.trigger_action('show_preview')
 
-	@base.on_value_changed(
+	@events.on_value_changed(
 		prop_name='auto_3d_preview',
 		props={'auto_3d_preview'},
 	)

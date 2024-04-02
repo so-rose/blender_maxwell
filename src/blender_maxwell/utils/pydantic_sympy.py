@@ -51,12 +51,8 @@ class _SympyExpr:
 
 		sympy_expr_schema = pyd_core_schema.chain_schema(
 			[
-				pyd_core_schema.no_info_plain_validator_function(
-					validate_from_str
-				),
-				pyd_core_schema.no_info_plain_validator_function(
-					validate_from_expr
-				),
+				pyd_core_schema.no_info_plain_validator_function(validate_from_str),
+				pyd_core_schema.no_info_plain_validator_function(validate_from_expr),
 				pyd_core_schema.is_instance_schema(AllowedSympyExprs),
 			]
 		)
@@ -108,9 +104,7 @@ def ConstrSympyExpr(
 				f'allow_variables={allow_variables} does not match expression {expr}.'
 			)
 		if (not allow_units) and spux.uses_units(expr):
-			msgs.add(
-				f'allow_units={allow_units} does not match expression {expr}.'
-			)
+			msgs.add(f'allow_units={allow_units} does not match expression {expr}.')
 
 		# Validate Structure Class
 		if (
@@ -150,9 +144,7 @@ def ConstrSympyExpr(
 				f'allowed_symbols={allowed_symbols} does not match expression {expr}'
 			)
 		if allowed_units and spux.get_units(expr).issubset(allowed_units):
-			msgs.add(
-				f'allowed_units={allowed_units} does not match expression {expr}'
-			)
+			msgs.add(f'allowed_units={allowed_units} does not match expression {expr}')
 
 		# Validate Shape Class
 		if (

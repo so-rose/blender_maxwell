@@ -4,7 +4,7 @@ import numpy as np
 import tidy3d as td
 
 from ... import contracts, sockets
-from .. import base
+from .. import base, events
 
 
 class ObjectStructureNode(base.MaxwellSimTreeNode):
@@ -32,7 +32,7 @@ class ObjectStructureNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('structure')
+	@events.computes_output_socket('structure')
 	def compute_structure(self: contracts.NodeTypeProtocol) -> td.Structure:
 		# Extract the Blender Object
 		bl_object = self.compute_input('object')
@@ -54,9 +54,7 @@ class ObjectStructureNode(base.MaxwellSimTreeNode):
 
 		# Extract Vertices and Faces
 		vertices = np.array([vert.co for vert in mesh.vertices])
-		faces = np.array(
-			[[vert for vert in poly.vertices] for poly in mesh.polygons]
-		)
+		faces = np.array([[vert for vert in poly.vertices] for poly in mesh.polygons])
 
 		# Remove Temporary Mesh
 		bpy.data.meshes.remove(mesh)
@@ -74,7 +72,5 @@ BL_REGISTER = [
 	ObjectStructureNode,
 ]
 BL_NODES = {
-	contracts.NodeType.ObjectStructure: (
-		contracts.NodeCategory.MAXWELLSIM_STRUCTURES
-	)
+	contracts.NodeType.ObjectStructure: (contracts.NodeCategory.MAXWELLSIM_STRUCTURES)
 }

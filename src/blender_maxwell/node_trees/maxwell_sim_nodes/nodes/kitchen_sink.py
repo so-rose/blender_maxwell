@@ -1,4 +1,3 @@
-
 import sympy as sp
 
 from .. import contracts as ct

@@ -1,14 +1,11 @@
-import tempfile
 import typing as typ
 from pathlib import Path
-
-import tidy3d as td
 
 from ...... import info
 from ......services import tdcloud
 from .... import contracts as ct
 from .... import sockets
-from ... import base
+from ... import base, events
 
 
 def _sim_data_cache_path(task_id: str) -> Path:
@@ -36,7 +33,7 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 	####################
 	# - Event Methods
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'FDTD Sim Data',
 		input_sockets={'Cloud Task'},
 	)
@@ -61,7 +58,7 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 			cloud_task, _sim_data_cache_path(cloud_task.task_id)
 		)
 
-	@base.on_value_changed(socket_name='Cloud Task', input_sockets={'Cloud Task'})
+	@events.on_value_changed(socket_name='Cloud Task', input_sockets={'Cloud Task'})
 	def on_cloud_task_changed(self, input_sockets: dict):
 		if (
 			(cloud_task := input_sockets['Cloud Task']) is not None
@@ -74,7 +71,7 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 		else:
 			self.loose_output_sockets = {}
 
-	@base.on_init()
+	@events.on_init()
 	def on_init(self):
 		self.on_cloud_task_changed()
 

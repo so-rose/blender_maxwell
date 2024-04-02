@@ -3,7 +3,7 @@ import sympy as sp
 
 from ... import contracts as ct
 from ... import sockets
-from .. import base
+from .. import base, events
 
 MAX_AMOUNT = 20
 
@@ -20,9 +20,7 @@ class CombineNode(base.MaxwellSimNode):
 		'Maxwell Sources': {},
 		'Maxwell Structures': {},
 		'Maxwell Monitors': {},
-		'Real 3D Vector': {
-			f'x_{i}': sockets.RealNumberSocketDef() for i in range(3)
-		},
+		'Real 3D Vector': {f'x_{i}': sockets.RealNumberSocketDef() for i in range(3)},
 		# "Point 3D": {
 		# axis: sockets.PhysicalLengthSocketDef()
 		# for i, axis in zip(
@@ -84,13 +82,13 @@ class CombineNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Real 3D Vector', input_sockets={'x_0', 'x_1', 'x_2'}
 	)
 	def compute_real_3d_vector(self, input_sockets) -> sp.Expr:
 		return sp.Matrix([input_sockets[f'x_{i}'] for i in range(3)])
 
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Sources',
 		input_sockets={f'Source #{i}' for i in range(MAX_AMOUNT)},
 		props={'amount'},
@@ -98,17 +96,15 @@ class CombineNode(base.MaxwellSimNode):
 	def compute_sources(self, input_sockets, props) -> sp.Expr:
 		return [input_sockets[f'Source #{i}'] for i in range(props['amount'])]
 
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Structures',
 		input_sockets={f'Structure #{i}' for i in range(MAX_AMOUNT)},
 		props={'amount'},
 	)
 	def compute_structures(self, input_sockets, props) -> sp.Expr:
-		return [
-			input_sockets[f'Structure #{i}'] for i in range(props['amount'])
-		]
+		return [input_sockets[f'Structure #{i}'] for i in range(props['amount'])]
 
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Monitors',
 		input_sockets={f'Monitor #{i}' for i in range(MAX_AMOUNT)},
 		props={'amount'},
@@ -119,7 +115,7 @@ class CombineNode(base.MaxwellSimNode):
 	####################
 	# - Input Socket Compilation
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		prop_name='active_socket_set',
 		props={'active_socket_set', 'amount'},
 	)
@@ -142,13 +138,13 @@ class CombineNode(base.MaxwellSimNode):
 		else:
 			self.loose_input_sockets = {}
 
-	@base.on_value_changed(
+	@events.on_value_changed(
 		prop_name='amount',
 	)
 	def on_value_changed__amount(self):
 		self.on_value_changed__active_socket_set()
 
-	@base.on_init()
+	@events.on_init()
 	def on_init(self):
 		self.on_value_changed__active_socket_set()
 

@@ -8,7 +8,7 @@ import tidy3d as td
 from .....utils import analyze_geonodes
 from ... import contracts as ct
 from ... import managed_objs, sockets
-from .. import base
+from .. import base, events
 
 GEONODES_PLANE_WAVE = 'source_plane_wave'
 
@@ -53,9 +53,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	input_sockets = {
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
 		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'Direction': sockets.Real3DVectorSocketDef(
-			default_value=sp.Matrix([0, 0, -1])
-		),
+		'Direction': sockets.Real3DVectorSocketDef(default_value=sp.Matrix([0, 0, -1])),
 		'Pol Angle': sockets.PhysicalAngleSocketDef(),
 	}
 	output_sockets = {
@@ -72,7 +70,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Source',
 		input_sockets={'Temporal Shape', 'Center', 'Direction', 'Pol Angle'},
 	)
@@ -82,9 +80,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		direction = input_sockets['Direction']
 		pol_angle = input_sockets['Pol Angle']
 
-		injection_axis, dir_sgn, theta, phi = convert_vector_to_spherical(
-			direction
-		)
+		injection_axis, dir_sgn, theta, phi = convert_vector_to_spherical(direction)
 
 		size = {
 			'x': (0, math.inf, math.inf),
@@ -107,7 +103,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	####################
 	# - Preview
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name={'Center', 'Direction'},
 		input_sockets={'Center', 'Direction'},
 		managed_objs={'plane_wave_source'},
@@ -118,9 +114,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	):
 		_center = input_sockets['Center']
-		center = tuple(
-			[float(el) for el in spu.convert_to(_center, spu.um) / spu.um]
-		)
+		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
 		_direction = input_sockets['Direction']
 		direction = tuple([float(el) for el in _direction])
@@ -128,9 +122,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 
 		# Retrieve Hard-Coded GeoNodes and Analyze Input
 		geo_nodes = bpy.data.node_groups[GEONODES_PLANE_WAVE]
-		geonodes_interface = analyze_geonodes.interface(
-			geo_nodes, direc='INPUT'
-		)
+		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
 		# Sync Modifier Inputs
 		managed_objs['plane_wave_source'].sync_geonodes_modifier(
@@ -147,7 +139,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		# Sync Object Position
 		managed_objs['plane_wave_source'].bl_object('MESH').location = center
 
-	@base.on_show_preview(
+	@events.on_show_preview(
 		managed_objs={'plane_wave_source'},
 	)
 	def on_show_preview(

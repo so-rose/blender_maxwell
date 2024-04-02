@@ -8,7 +8,7 @@ import tidy3d as td
 from ......utils import extra_sympy_units as spuex
 from .... import contracts as ct
 from .... import managed_objs, sockets
-from ... import base
+from ... import base, events
 
 
 class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
@@ -55,17 +55,13 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 		name='Plot Time Start (ps)',
 		description='The instance ID of a particular MaxwellSimNode instance, used to index caches',
 		default=0.0,
-		update=(
-			lambda self, context: self.sync_prop('plot_time_start', context)
-		),
+		update=(lambda self, context: self.sync_prop('plot_time_start', context)),
 	)
 	plot_time_end: bpy.props.FloatProperty(
 		name='Plot Time End (ps)',
 		description='The instance ID of a particular MaxwellSimNode instance, used to index caches',
 		default=5,
-		update=(
-			lambda self, context: self.sync_prop('plot_time_start', context)
-		),
+		update=(lambda self, context: self.sync_prop('plot_time_start', context)),
 	)
 
 	####################
@@ -85,7 +81,7 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Temporal Shape',
 		input_sockets={
 			'Freq Center',
@@ -100,8 +96,7 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 			(_freq_center := input_sockets['Freq Center']) is None
 			or (_freq_std := input_sockets['Freq Std.']) is None
 			or (_phase := input_sockets['Phase']) is None
-			or (time_delay_rel_ang_freq := input_sockets['Delay rel. AngFreq'])
-			is None
+			or (time_delay_rel_ang_freq := input_sockets['Delay rel. AngFreq']) is None
 			or (remove_dc_component := input_sockets['Remove DC']) is None
 		):
 			raise ValueError('Inputs not defined')
@@ -120,7 +115,7 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 			remove_dc_component=remove_dc_component,
 		)
 
-	@base.on_show_plot(
+	@events.on_show_plot(
 		managed_objs={'amp_time'},
 		props={'plot_time_start', 'plot_time_end'},
 		output_sockets={'Temporal Shape'},

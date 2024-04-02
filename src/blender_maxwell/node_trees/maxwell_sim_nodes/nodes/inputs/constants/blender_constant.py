@@ -2,7 +2,7 @@ import typing as typ
 
 from .... import contracts as ct
 from .... import sockets
-from ... import base
+from ... import base, events
 
 
 class BlenderConstantNode(base.MaxwellSimNode):
@@ -31,7 +31,7 @@ class BlenderConstantNode(base.MaxwellSimNode):
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket('Value', input_sockets={'Value'})
+	@events.computes_output_socket('Value', input_sockets={'Value'})
 	def compute_value(self, input_sockets) -> typ.Any:
 		return input_sockets['Value']
 

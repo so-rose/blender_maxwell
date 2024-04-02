@@ -107,9 +107,7 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		"""
 		if preview_area := self.preview_area:
 			return next(
-				space
-				for space in preview_area.spaces
-				if space.type == SPACE_TYPE
+				space for space in preview_area.spaces if space.type == SPACE_TYPE
 			)
 
 	####################

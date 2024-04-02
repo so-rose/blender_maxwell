@@ -1,6 +1,6 @@
 from ... import contracts as ct
 from ... import sockets
-from .. import base
+from .. import base, events
 
 
 class PhysicalUnitSystemNode(base.MaxwellSimNode):
@@ -19,7 +19,7 @@ class PhysicalUnitSystemNode(base.MaxwellSimNode):
 	####################
 	# - Callbacks
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Unit System',
 		input_sockets={'Unit System'},
 	)

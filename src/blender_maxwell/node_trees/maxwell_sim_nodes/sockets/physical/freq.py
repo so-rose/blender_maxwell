@@ -1,4 +1,3 @@
-
 import bpy
 import numpy as np
 import pydantic as pyd

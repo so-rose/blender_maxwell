@@ -161,7 +161,7 @@ def main():
 
 	# Setup Addon for Development Use
 	setup_for_development(info.ADDON_NAME, info.PATH_ADDON_DEV_DEPS)
-	
+
 	# Load Development .blend
 	## TODO: We need a better (also final-deployed-compatible) solution for what happens when a user opened a .blend file without installing dependencies!
 	if not install_failed:

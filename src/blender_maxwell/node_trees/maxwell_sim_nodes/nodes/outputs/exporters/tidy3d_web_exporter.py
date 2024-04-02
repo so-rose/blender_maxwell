@@ -3,7 +3,7 @@ import bpy
 from ......services import tdcloud
 from .... import contracts as ct
 from .... import sockets
-from ... import base
+from ... import base, events
 
 
 ####################
@@ -77,9 +77,7 @@ class ReloadTrackedTask(bpy.types.Operator):
 
 	def execute(self, context):
 		node = context.node
-		if (
-			cloud_task := tdcloud.TidyCloudTasks.task(node.tracked_task_id)
-		) is None:
+		if (cloud_task := tdcloud.TidyCloudTasks.task(node.tracked_task_id)) is None:
 			msg = "Tried to reload tracked task, but it doesn't exist"
 			raise RuntimeError(msg)
 
@@ -105,13 +103,9 @@ class EstCostTrackedTask(bpy.types.Operator):
 	def execute(self, context):
 		node = context.node
 		if (
-			task_info := tdcloud.TidyCloudTasks.task_info(
-				context.node.tracked_task_id
-			)
+			task_info := tdcloud.TidyCloudTasks.task_info(context.node.tracked_task_id)
 		) is None:
-			msg = (
-				"Tried to estimate cost of tracked task, but it doesn't exist"
-			)
+			msg = "Tried to estimate cost of tracked task, but it doesn't exist"
 			raise RuntimeError(msg)
 
 		node.cache_est_cost = task_info.cost_est()
@@ -235,13 +229,13 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			msg = 'Tried to upload simulation, but none is attached'
 			raise ValueError(msg)
 
-		if (
-			new_task := self._compute_input('Cloud Task')
-		) is None or isinstance(
+		if (new_task := self._compute_input('Cloud Task')) is None or isinstance(
 			new_task,
 			tdcloud.CloudTask,
 		):
-			msg = 'Tried to upload simulation to new task, but existing task was selected'
+			msg = (
+				'Tried to upload simulation to new task, but existing task was selected'
+			)
 			raise ValueError(msg)
 
 		# Create Cloud Task
@@ -262,9 +256,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		self.tracked_task_id = cloud_task.task_id
 
 	def run_tracked_task(self):
-		if (
-			cloud_task := tdcloud.TidyCloudTasks.task(self.tracked_task_id)
-		) is None:
+		if (cloud_task := tdcloud.TidyCloudTasks.task(self.tracked_task_id)) is None:
 			msg = "Tried to run tracked task, but it doesn't exist"
 			raise RuntimeError(msg)
 
@@ -302,9 +294,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 
 	def draw_info(self, context, layout):
 		# Connection Info
-		auth_icon = (
-			'CHECKBOX_HLT' if tdcloud.IS_AUTHENTICATED else 'CHECKBOX_DEHLT'
-		)
+		auth_icon = 'CHECKBOX_HLT' if tdcloud.IS_AUTHENTICATED else 'CHECKBOX_DEHLT'
 		conn_icon = 'CHECKBOX_HLT' if tdcloud.IS_ONLINE else 'CHECKBOX_DEHLT'
 
 		row = layout.row()
@@ -338,9 +328,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			## Split: Right Column
 			col = split.column(align=False)
 			col.alignment = 'RIGHT'
-			col.label(
-				text=f'{self.cache_total_monitor_data / 1_000_000:.2f}MB'
-			)
+			col.label(text=f'{self.cache_total_monitor_data / 1_000_000:.2f}MB')
 
 		# Cloud Task Info
 		if self.tracked_task_id and tdcloud.IS_AUTHENTICATED:
@@ -383,9 +371,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 
 			## Split: Right Column
 			cost_est = (
-				f'{self.cache_est_cost:.2f}'
-				if self.cache_est_cost >= 0
-				else 'TBD'
+				f'{self.cache_est_cost:.2f}' if self.cache_est_cost >= 0 else 'TBD'
 			)
 			cost_real = (
 				f'{task_info.cost_real:.2f}'
@@ -404,16 +390,12 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	####################
 	# - Output Methods
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'Cloud Task',
 		input_sockets={'Cloud Task'},
 	)
-	def compute_cloud_task(
-		self, input_sockets: dict
-	) -> tdcloud.CloudTask | None:
-		if isinstance(
-			cloud_task := input_sockets['Cloud Task'], tdcloud.CloudTask
-		):
+	def compute_cloud_task(self, input_sockets: dict) -> tdcloud.CloudTask | None:
+		if isinstance(cloud_task := input_sockets['Cloud Task'], tdcloud.CloudTask):
 			return cloud_task
 
 		return None
@@ -421,7 +403,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	####################
 	# - Output Methods
 	####################
-	@base.on_value_changed(
+	@events.on_value_changed(
 		socket_name='FDTD Sim',
 		input_sockets={'FDTD Sim'},
 	)
@@ -446,7 +428,5 @@ BL_REGISTER = [
 	Tidy3DWebExporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DWebExporter: (
-		ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS
-	)
+	ct.NodeType.Tidy3DWebExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS)
 }

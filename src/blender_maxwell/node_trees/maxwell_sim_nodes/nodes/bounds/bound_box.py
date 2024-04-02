@@ -2,7 +2,7 @@ import tidy3d as td
 
 from ... import contracts as ct
 from ... import sockets
-from .. import base
+from .. import base, events
 
 
 class BoundCondsNode(base.MaxwellSimNode):
@@ -28,7 +28,7 @@ class BoundCondsNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'BCs', input_sockets={'+X', '-X', '+Y', '-Y', '+Z', '-Z'}
 	)
 	def compute_simulation(self, input_sockets) -> td.BoundarySpec:

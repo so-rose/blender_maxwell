@@ -7,7 +7,7 @@ import pydantic as pyd
 
 from .... import contracts as ct
 from .... import sockets
-from ... import base
+from ... import base, events
 
 
 ####################
@@ -38,9 +38,7 @@ class JSONFileExporterNode(base.MaxwellSimNode):
 
 	input_sockets = {
 		'Data': sockets.AnySocketDef(),
-		'JSON Path': sockets.FilePathSocketDef(
-			default_path=Path('simulation.json')
-		),
+		'JSON Path': sockets.FilePathSocketDef(default_path=Path('simulation.json')),
 		'JSON Indent': sockets.IntegerNumberSocketDef(
 			default_value=4,
 		),
@@ -72,13 +70,11 @@ class JSONFileExporterNode(base.MaxwellSimNode):
 	####################
 	# - Output Sockets
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'JSON String',
 		input_sockets={'Data'},
 	)
-	def compute_json_string(
-		self, input_sockets: dict[str, typ.Any]
-	) -> str | None:
+	def compute_json_string(self, input_sockets: dict[str, typ.Any]) -> str | None:
 		if not (data := input_sockets['Data']):
 			return None
 
@@ -102,7 +98,5 @@ BL_REGISTER = [
 	JSONFileExporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.JSONFileExporter: (
-		ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS
-	)
+	ct.NodeType.JSONFileExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS)
 }

@@ -3,7 +3,7 @@ import tidy3d as td
 
 from ... import contracts as ct
 from ... import sockets
-from .. import base
+from .. import base, events
 
 
 class FDTDSimNode(base.MaxwellSimNode):
@@ -33,7 +33,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket(
+	@events.computes_output_socket(
 		'FDTD Sim',
 		kind=ct.DataFlowKind.Value,
 		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},

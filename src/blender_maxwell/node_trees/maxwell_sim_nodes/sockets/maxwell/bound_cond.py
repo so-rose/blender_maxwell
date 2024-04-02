@@ -24,9 +24,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 			('PERIODIC', 'Periodic', 'Infinitely periodic layer'),
 		],
 		default='PML',
-		update=(
-			lambda self, context: self.sync_prop('default_choice', context)
-		),
+		update=(lambda self, context: self.sync_prop('default_choice', context)),
 	)
 
 	####################
@@ -48,9 +46,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 		}[self.default_choice]
 
 	@value.setter
-	def value(
-		self, value: typx.Literal['PML', 'PEC', 'PMC', 'PERIODIC']
-	) -> None:
+	def value(self, value: typx.Literal['PML', 'PEC', 'PMC', 'PERIODIC']) -> None:
 		self.default_choice = value
 
 

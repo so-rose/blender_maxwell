@@ -3,7 +3,7 @@ import sympy as sp
 import sympy.physics.units as spu
 
 from .... import contracts, sockets
-from ... import base
+from ... import base, events
 
 
 class WaveConverterNode(base.MaxwellSimTreeNode):
@@ -44,11 +44,9 @@ class WaveConverterNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('freq')
+	@events.computes_output_socket('freq')
 	def compute_freq(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		vac_speed_of_light = (
-			sc.constants.speed_of_light * spu.meter / spu.second
-		)
+		vac_speed_of_light = sc.constants.speed_of_light * spu.meter / spu.second
 
 		vacwl = self.compute_input('vacwl')
 
@@ -57,11 +55,9 @@ class WaveConverterNode(base.MaxwellSimTreeNode):
 			spu.hertz,
 		)
 
-	@base.computes_output_socket('vacwl')
+	@events.computes_output_socket('vacwl')
 	def compute_vacwl(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		vac_speed_of_light = (
-			sc.constants.speed_of_light * spu.meter / spu.second
-		)
+		vac_speed_of_light = sc.constants.speed_of_light * spu.meter / spu.second
 
 		freq = self.compute_input('freq')
 

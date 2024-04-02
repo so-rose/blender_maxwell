@@ -2,7 +2,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from .... import contracts, sockets
-from ... import base
+from ... import base, events
 
 
 class CylinderStructureNode(base.MaxwellSimTreeNode):
@@ -36,7 +36,7 @@ class CylinderStructureNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('structure')
+	@events.computes_output_socket('structure')
 	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.Box:
 		medium = self.compute_input('medium')
 		_center = self.compute_input('center')

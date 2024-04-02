@@ -59,10 +59,7 @@ def import_geonodes(
 	- Retrieve the node group and return it.
 	"""
 	if geonodes in bpy.data.node_groups and not force_import:
-		log.info(
-			'Found Existing GeoNodes Tree (name=%s)',
-			geonodes
-		)
+		log.info('Found Existing GeoNodes Tree (name=%s)', geonodes)
 		return bpy.data.node_groups[geonodes]
 
 	filename = geonodes
@@ -72,7 +69,7 @@ def import_geonodes(
 	directory = filepath.removesuffix(geonodes)
 	log.info(
 		'%s GeoNodes (filename=%s, directory=%s, filepath=%s)',
-		"Linking" if import_method == 'link' else "Appending",
+		'Linking' if import_method == 'link' else 'Appending',
 		filename,
 		directory,
 		filepath,

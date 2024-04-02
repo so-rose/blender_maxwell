@@ -35,9 +35,7 @@ ADDON_VERSION = PROJ_SPEC['project']['version']
 # - Packaging Information
 ####################
 PATH_ADDON_PKG = PATH_ROOT / 'src' / ADDON_NAME
-PATH_ADDON_ZIP = (
-	PATH_ROOT / 'build' / (ADDON_NAME + '__' + ADDON_VERSION + '.zip')
-)
+PATH_ADDON_ZIP = PATH_ROOT / 'build' / (ADDON_NAME + '__' + ADDON_VERSION + '.zip')
 
 PATH_ADDON_BLEND_STARTER = PATH_ADDON_PKG / 'blenders' / 'starter.blend'
 

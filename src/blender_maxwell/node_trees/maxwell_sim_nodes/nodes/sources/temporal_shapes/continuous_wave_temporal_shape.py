@@ -2,7 +2,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from .... import contracts, sockets
-from ... import base
+from ... import base, events
 
 
 class ContinuousWaveTemporalShapeNode(base.MaxwellSimTreeNode):
@@ -41,7 +41,7 @@ class ContinuousWaveTemporalShapeNode(base.MaxwellSimTreeNode):
 	####################
 	# - Output Socket Computation
 	####################
-	@base.computes_output_socket('temporal_shape')
+	@events.computes_output_socket('temporal_shape')
 	def compute_source(self: contracts.NodeTypeProtocol) -> td.PointDipole:
 		_phase = self.compute_input('phase')
 		_freq_center = self.compute_input('freq_center')
