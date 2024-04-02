@@ -1,4 +1,6 @@
 import functools
+import itertools
+import typing as typ
 
 from . import pydeps
 
@@ -10,9 +12,10 @@ with pydeps.syspath_from_bpy_prefs():
 ####################
 # - Useful Methods
 ####################
+@functools.lru_cache(maxsize=4096)
 def uses_units(expression: sp.Expr) -> bool:
+	## TODO: An LFU cache could do better than an LRU.
 	"""Checks if an expression uses any units (`Quantity`)."""
-
 	for arg in sp.preorder_traversal(expression):
 		if isinstance(arg, spu.Quantity):
 			return True
@@ -20,9 +23,10 @@ def uses_units(expression: sp.Expr) -> bool:
 
 
 # Function to return a set containing all units used in the expression
+@functools.lru_cache(maxsize=4096)
 def get_units(expression: sp.Expr):
+	## TODO: An LFU cache could do better than an LRU.
 	"""Gets all the units of an expression (as `Quantity`)."""
-
 	return {
 		arg
 		for arg in sp.preorder_traversal(expression)
@@ -79,29 +83,59 @@ ALL_UNIT_SYMBOLS = {
 	unit.abbrev: unit
 	for unit in spu.__dict__.values()
 	if isinstance(unit, spu.Quantity)
-} | {
-	unit.abbrev: unit
-	for unit in globals().values()
-	if isinstance(unit, spu.Quantity)
-}
+} | {unit.abbrev: unit for unit in globals().values() if isinstance(unit, spu.Quantity)}
 
 
-@functools.lru_cache(maxsize=1024)
+@functools.lru_cache(maxsize=4096)
 def parse_abbrev_symbols_to_units(expr: sp.Basic) -> sp.Basic:
-	print('IN ABBREV', expr)
 	return expr.subs(ALL_UNIT_SYMBOLS)
 
 
-# def has_units(expr: sp.Expr):
-# return any(
-# symbol in ALL_UNIT_SYMBOLS
-# for symbol in expr.atoms(sp.Symbol)
-# )
-# def is_exactly_expressed_as_unit(expr: sp.Expr, unit) -> bool:
-# #try:
-# converted_expr = expr / unit
-#
-# return (
-# converted_expr.is_number
-# and not converted_expr.has(spu.Quantity)
-# )
+####################
+# - Units <-> Scalars
+####################
+@functools.lru_cache(maxsize=8192)
+def scale_to_unit(expr: sp.Expr, unit: sp.Quantity) -> typ.Any:
+	## TODO: An LFU cache could do better than an LRU.
+	unitless_expr = spu.convert_to(expr, unit) / unit
+	if not uses_units(unitless_expr):
+		return unitless_expr
+
+	msg = f'Expression "{expr}" was scaled to the unit "{unit}" with the expectation that the result would be unitless, but the result "{unitless_expr}" has units "{get_units(unitless_expr)}"'
+	raise ValueError(msg)
+
+####################
+# - Sympy <-> Scalars
+####################
+@functools.lru_cache(maxsize=8192)
+def sympy_to_python(scalar: sp.Basic) -> int | float | complex | tuple | list:
+	"""Convert a scalar sympy expression to the directly corresponding Python type.
+
+	Arguments:
+		scalar: A sympy expression that has no symbols, but is expressed as a Sympy type.
+			For expressions that are equivalent to a scalar (ex. "(2a + a)/a"), you must simplify the expression with ex. `sp.simplify()` before passing to this parameter.
+
+	Returns:
+		A pure Python type that directly corresponds to the input scalar expression.
+	"""
+	## TODO: If there are symbols, we could simplify.
+	## - Someone has to do it somewhere, might as well be here.
+	## - ...Since we have all the information we need.
+	if isinstance(scalar, sp.MatrixBase):
+		list_2d = [[sympy_to_python(el) for el in row] for row in scalar.tolist()]
+
+		# Detect Row / Column Vector
+		## When it's "actually" a 1D structure, flatten and return as tuple.
+		if 1 in scalar.shape:
+			return tuple(itertools.from_iterable(list_2d))
+
+		return list_2d
+	if scalar.is_integer:
+		return int(scalar)
+	if scalar.is_rational or scalar.is_real:
+		return float(scalar)
+	if scalar.is_complex:
+		return complex(scalar)
+
+	msg = f'Cannot convert sympy scalar expression "{scalar}" to a Python type. Check the assumptions on the expr (current expr assumptions: "{scalar._assumptions}")'  # noqa: SLF001
+	raise ValueError(msg)

@@ -3,7 +3,6 @@ import contextlib
 import bmesh
 import bpy
 import numpy as np
-import typing_extensions as typx
 
 from ....utils import logger
 from .. import contracts as ct
@@ -98,20 +97,28 @@ class ManagedBLMesh(ct.schemas.ManagedObj):
 
 		If it's already included, do nothing.
 		"""
-		bl_object = self.bl_object()
-		if bl_object.name not in preview_collection().objects:
+		if (
+			bl_object := bpy.data.objects.get(self.name)
+		) is not None and bl_object.name not in preview_collection().objects:
 			log.info('Moving "%s" to Preview Collection', bl_object.name)
 			preview_collection().objects.link(bl_object)
+
+		msg = 'Managed BLMesh does not exist'
+		raise ValueError(msg)
 
 	def hide_preview(self) -> None:
 		"""Removes the managed Blender object from the preview collection.
 
 		If it's already removed, do nothing.
 		"""
-		bl_object = self.bl_object()
-		if bl_object.name not in preview_collection().objects:
+		if (
+			bl_object := bpy.data.objects.get(self.name)
+		) is not None and bl_object.name in preview_collection().objects:
 			log.info('Removing "%s" from Preview Collection', bl_object.name)
 			preview_collection.objects.unlink(bl_object)
+
+		msg = 'Managed BLMesh does not exist'
+		raise ValueError(msg)
 
 	def bl_select(self) -> None:
 		"""Selects the managed Blender object, causing it to be ex. outlined in the 3D viewport."""
@@ -125,7 +132,7 @@ class ManagedBLMesh(ct.schemas.ManagedObj):
 	####################
 	# - BLMesh Management
 	####################
-	def bl_object(self):
+	def bl_object(self, location: tuple[float, float, float] = (0, 0, 0)):
 		"""Returns the managed blender object."""
 		# Create Object w/Appropriate Data Block
 		if not (bl_object := bpy.data.objects.get(self.name)):
@@ -140,6 +147,10 @@ class ManagedBLMesh(ct.schemas.ManagedObj):
 				bl_object.name,
 			)
 			managed_collection().objects.link(bl_object)
+
+		for i, coord in enumerate(location):
+			if bl_object.location[i] != coord:
+				bl_object.location[i] = coord
 
 		return bl_object
 

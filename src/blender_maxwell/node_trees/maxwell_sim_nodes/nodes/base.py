@@ -1,4 +1,3 @@
-import inspect
 import json
 import typing as typ
 import uuid
@@ -43,16 +42,18 @@ class MaxwellSimNode(bpy.types.Node):
 	# Sockets
 	_output_socket_methods: dict
 
-	input_sockets: dict[str, ct.schemas.SocketDef] = {}
-	output_sockets: dict[str, ct.schemas.SocketDef] = {}
-	input_socket_sets: dict[str, dict[str, ct.schemas.SocketDef]] = {}
-	output_socket_sets: dict[str, dict[str, ct.schemas.SocketDef]] = {}
+	input_sockets: typ.ClassVar[dict[str, ct.schemas.SocketDef]] = {}
+	output_sockets: typ.ClassVar[dict[str, ct.schemas.SocketDef]] = {}
+	input_socket_sets: typ.ClassVar[dict[str, dict[str, ct.schemas.SocketDef]]] = {}
+	output_socket_sets: typ.ClassVar[dict[str, dict[str, ct.schemas.SocketDef]]] = {}
 
 	# Presets
-	presets = {}
+	presets: typ.ClassVar = {}
 
 	# Managed Objects
-	managed_obj_defs: dict[ct.ManagedObjName, ct.schemas.ManagedObjDef] = {}
+	managed_obj_defs: typ.ClassVar[
+		dict[ct.ManagedObjName, ct.schemas.ManagedObjDef]
+	] = {}
 
 	####################
 	# - Initialization
@@ -82,6 +83,14 @@ class MaxwellSimNode(bpy.types.Node):
 			update=(lambda self, context: self.sync_sim_node_name(context)),
 		)
 
+		# Setup "Previewing" Property for Node
+		cls.__annotations__['preview_active'] = bpy.props.BoolProperty(
+			name='Preview Active',
+			description='Whether the preview (if any) is currently active',
+			default='',
+			update=lambda self, context: self.sync_prop('preview_active', context),
+		)
+
 		# Setup Locked Property for Node
 		cls.__annotations__['locked'] = bpy.props.BoolProperty(
 			name='Locked State',
@@ -96,34 +105,30 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Setup Callback Methods
 		cls._output_socket_methods = {
-			method._index_by: method
+			(method.extra_data['output_socket_name'], method.extra_data['kind']): method
 			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), '_callback_type')
-			and method._callback_type == 'computes_output_socket'
+			if hasattr(method := getattr(cls, attr_name), 'action_type')
+			and method.action_type == 'computes_output_socket'
+			and hasattr(method, 'extra_data')
+			and method.extra_data
 		}
 		cls._on_value_changed_methods = {
 			method
 			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), '_callback_type')
-			and method._callback_type == 'on_value_changed'
-		}
-		cls._on_show_preview = {
-			method
-			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), '_callback_type')
-			and method._callback_type == 'on_show_preview'
+			if hasattr(method := getattr(cls, attr_name), 'action_type')
+			and method.action_type == 'on_value_changed'
 		}
 		cls._on_show_plot = {
 			method
 			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), '_callback_type')
-			and method._callback_type == 'on_show_plot'
+			if hasattr(method := getattr(cls, attr_name), 'action_type')
+			and method.action_type == 'on_show_plot'
 		}
 		cls._on_init = {
 			method
 			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), '_callback_type')
-			and method._callback_type == 'on_init'
+			if hasattr(method := getattr(cls, attr_name), 'action_type')
+			and method.action_type == 'on_init'
 		}
 
 		# Setup Socket Set Dropdown
@@ -135,7 +140,7 @@ class MaxwellSimNode(bpy.types.Node):
 				_input_socket_set_names := list(cls.input_socket_sets.keys())
 			) + [
 				output_socket_set_name
-				for output_socket_set_name in cls.output_socket_sets.keys()
+				for output_socket_set_name in cls.output_socket_sets
 				if output_socket_set_name not in _input_socket_set_names
 			]
 			socket_set_ids = [
@@ -160,9 +165,7 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 				],
 				default=socket_set_names[0],
-				update=lambda self, context: self.sync_active_socket_set(
-					context
-				),
+				update=lambda self, context: self.sync_active_socket_set(context),
 			)
 
 		# Setup Preset Dropdown
@@ -181,8 +184,8 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 					for preset_name, preset_def in cls.presets.items()
 				],
-				default=list(cls.presets.keys())[0],
-				update=lambda self, context: (self.sync_active_preset()()),
+				default=next(cls.presets.keys()),
+				update=lambda self, _: (self.sync_active_preset()()),
 			)
 
 	####################
@@ -192,7 +195,7 @@ class MaxwellSimNode(bpy.types.Node):
 		self.sync_sockets()
 		self.sync_prop('active_socket_set', context)
 
-	def sync_sim_node_name(self, context):
+	def sync_sim_node_name(self, _):
 		if (mobjs := CACHE[self.instance_id].get('managed_objs')) is None:
 			return
 
@@ -212,7 +215,6 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	@property
 	def managed_objs(self):
-		global CACHE
 		if not CACHE.get(self.instance_id):
 			CACHE[self.instance_id] = {}
 
@@ -229,9 +231,7 @@ class MaxwellSimNode(bpy.types.Node):
 			# Fill w/Managed Objects by Name Socket
 			for mobj_id, mobj_def in self.managed_obj_defs.items():
 				name = mobj_def.name_prefix + self.sim_node_name
-				CACHE[self.instance_id]['managed_objs'][mobj_id] = mobj_def.mk(
-					name
-				)
+				CACHE[self.instance_id]['managed_objs'][mobj_id] = mobj_def.mk(name)
 
 			return CACHE[self.instance_id]['managed_objs']
 
@@ -253,9 +253,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Retrieve Active Socket Set Sockets
 		socket_sets = (
-			self.input_socket_sets
-			if direc == 'input'
-			else self.output_socket_sets
+			self.input_socket_sets if direc == 'input' else self.output_socket_sets
 		)
 		active_socket_set_sockets = socket_sets.get(self.active_socket_set)
 
@@ -265,24 +263,13 @@ class MaxwellSimNode(bpy.types.Node):
 		return active_socket_set_sockets
 
 	def active_sockets(self, direc: typx.Literal['input', 'output']):
-		static_sockets = (
-			self.input_sockets if direc == 'input' else self.output_sockets
-		)
-		socket_sets = (
-			self.input_socket_sets
-			if direc == 'input'
-			else self.output_socket_sets
-		)
+		static_sockets = self.input_sockets if direc == 'input' else self.output_sockets
 		loose_sockets = (
-			self.loose_input_sockets
-			if direc == 'input'
-			else self.loose_output_sockets
+			self.loose_input_sockets if direc == 'input' else self.loose_output_sockets
 		)
 
 		return (
-			static_sockets
-			| self.active_socket_set_sockets(direc=direc)
-			| loose_sockets
+			static_sockets | self.active_socket_set_sockets(direc=direc) | loose_sockets
 		)
 
 	####################
@@ -302,12 +289,8 @@ class MaxwellSimNode(bpy.types.Node):
 	)
 
 	## Internal Serialization/Deserialization Methods (yuck)
-	def _ser_loose_sockets(
-		self, deser: dict[str, ct.schemas.SocketDef]
-	) -> str:
-		if not all(
-			isinstance(model, pyd.BaseModel) for model in deser.values()
-		):
+	def _ser_loose_sockets(self, deser: dict[str, ct.schemas.SocketDef]) -> str:
+		if not all(isinstance(model, pyd.BaseModel) for model in deser.values()):
 			msg = 'Trying to deserialize loose sockets with invalid SocketDefs (they must be `pydantic` BaseModels).'
 			raise ValueError(msg)
 
@@ -325,9 +308,7 @@ class MaxwellSimNode(bpy.types.Node):
 			}
 		)  ## Big reliance on order-preservation of dicts here.)
 
-	def _deser_loose_sockets(
-		self, ser: str
-	) -> dict[str, ct.schemas.SocketDef]:
+	def _deser_loose_sockets(self, ser: str) -> dict[str, ct.schemas.SocketDef]:
 		semi_deser = json.loads(ser)
 		return {
 			socket_name: getattr(sockets, socket_def_name)(**model_kwargs)
@@ -354,6 +335,11 @@ class MaxwellSimNode(bpy.types.Node):
 		self,
 		value: dict[str, ct.schemas.SocketDef],
 	) -> None:
+		log.info(
+			'Setting Loose Input Sockets on "%s" to "%s"',
+			self.bl_label,
+			str(value),
+		)
 		if not value:
 			self.ser_loose_input_sockets = _DEFAULT_LOOSE_SOCKET_SER
 		else:
@@ -448,9 +434,7 @@ class MaxwellSimNode(bpy.types.Node):
 	# - Preset Management
 	####################
 	def sync_active_preset(self) -> None:
-		"""Applies the active preset by overwriting the value of
-		preset-defined input sockets.
-		"""
+		"""Applies the active preset by overwriting the value of preset-defined input sockets."""
 		if not (preset_def := self.presets.get(self.active_preset)):
 			msg = f'Tried to apply active preset, but the active preset ({self.active_preset}) is not in presets ({self.presets})'
 			raise RuntimeError(msg)
@@ -507,7 +491,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 	## TODO: Side panel buttons for fanciness.
 
-	def draw_plot_settings(self, context, layout):
+	def draw_plot_settings(self, _: bpy.types.Context, layout: bpy.types.UILayout):
 		if self.locked:
 			layout.enabled = False
 
@@ -522,16 +506,14 @@ class MaxwellSimNode(bpy.types.Node):
 		"""Computes the data of an input socket, by socket name and data flow kind, by asking the socket nicely via `bl_socket.compute_data`.
 
 		Args:
-			input_socket_name: The name of the input socket, as defined in
-				`self.input_sockets`.
-			kind: The data flow kind to compute retrieve.
+			input_socket_name: The name of the input socket, as defined in `self.input_sockets`.
+			kind: The kind of data flow to compute.
 		"""
-		if not (bl_socket := self.inputs.get(input_socket_name)):
-			return None
-			# msg = f"Input socket name {input_socket_name} is not an active input sockets."
-			# raise ValueError(msg)
+		if bl_socket := self.inputs.get(input_socket_name):
+			return bl_socket.compute_data(kind=kind)
 
-		return bl_socket.compute_data(kind=kind)
+		msg = f'Input socket "{input_socket_name}" on "{self.bl_idname}" is not an active input socket'
+		raise ValueError(msg)
 
 	def compute_output(
 		self,
@@ -544,27 +526,25 @@ class MaxwellSimNode(bpy.types.Node):
 		This method is run to produce the value.
 
 		Args:
-			output_socket_name: The name declaring the output socket,
-				for which this method computes the output.
+			output_socket_name: The name declaring the output socket, for which this method computes the output.
+			kind: The DataFlowKind to use when computing the output socket value.
 
 		Returns:
 			The value of the output socket, as computed by the dedicated method
 			registered using the `@computes_output_socket` decorator.
 		"""
-		if not (
-			output_socket_method := self._output_socket_methods.get(
-				(output_socket_name, kind)
-			)
+		if output_socket_method := self._output_socket_methods.get(
+			(output_socket_name, kind)
 		):
-			msg = f'No output method for ({output_socket_name}, {str(kind.value)}'
-			raise ValueError(msg)
+			return output_socket_method(self)
 
-		return output_socket_method(self)
+		msg = f'No output method for ({output_socket_name}, {str(kind.value)}'
+		raise ValueError(msg)
 
 	####################
 	# - Action Chain
 	####################
-	def sync_prop(self, prop_name: str, context: bpy.types.Context):
+	def sync_prop(self, prop_name: str, _: bpy.types.Context):
 		"""Called when a property has been updated."""
 		if not hasattr(self, prop_name):
 			msg = f'Property {prop_name} not defined on socket {self}'
@@ -598,17 +578,12 @@ class MaxwellSimNode(bpy.types.Node):
 				if (
 					(
 						socket_name
-						and socket_name
-						in method._extra_data.get('changed_sockets')
+						and socket_name in method.extra_data['changed_sockets']
 					)
-					or (
-						prop_name
-						and prop_name
-						in method._extra_data.get('changed_props')
-					)
+					or (prop_name and prop_name in method.extra_data['changed_props'])
 					or (
 						socket_name
-						and method._extra_data['changed_loose_input']
+						and method.extra_data['changed_loose_input']
 						and socket_name in self.loose_input_sockets
 					)
 				):
@@ -635,8 +610,11 @@ class MaxwellSimNode(bpy.types.Node):
 
 		elif action == 'show_preview':
 			# Run User Callbacks
-			for method in self._on_show_preview:
-				method(self)
+			## "On Show Preview" callbacks are 'on_value_changed' callbacks...
+			## ...which simply hook into the 'preview_active' property.
+			## By (maybe) altering 'preview_active', callbacks run as needed.
+			if not self.preview_active:
+				self.preview_active = True
 
 			## Propagate via Input Sockets
 			for bl_socket in self.active_bl_sockets('input'):
@@ -648,7 +626,7 @@ class MaxwellSimNode(bpy.types.Node):
 			## ...because they can stop propagation, they should go first.
 			for method in self._on_show_plot:
 				method(self)
-				if method._extra_data['stop_propagation']:
+				if method.extra_data['stop_propagation']:
 					return
 
 			## Propagate via Input Sockets
@@ -669,8 +647,6 @@ class MaxwellSimNode(bpy.types.Node):
 
 	def init(self, context: bpy.types.Context):
 		"""Run (by Blender) on node creation."""
-		global CACHE
-
 		# Initialize Cache and Instance ID
 		self.instance_id = str(uuid.uuid4())
 		CACHE[self.instance_id] = {}
@@ -695,7 +671,6 @@ class MaxwellSimNode(bpy.types.Node):
 
 	def free(self) -> None:
 		"""Run (by Blender) when deleting the node."""
-		global CACHE
 		if not CACHE.get(self.instance_id):
 			CACHE[self.instance_id] = {}
 		node_tree = self.id_data
@@ -725,306 +700,3 @@ class MaxwellSimNode(bpy.types.Node):
 		# Finally: Free Instance Cache
 		if self.instance_id in CACHE:
 			del CACHE[self.instance_id]
-
-
-def chain_event_decorator(
-	callback_type: typ.Literal[
-		'computes_output_socket',
-		'on_value_changed',
-		'on_show_preview',
-		'on_show_plot',
-		'on_init',
-	],
-	index_by: typ.Any | None = None,
-	extra_data: dict[str, typ.Any] | None = None,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),  ## For now, presume
-	output_sockets: set[str] = set(),  ## For now, presume
-	loose_input_sockets: bool = False,
-	loose_output_sockets: bool = False,
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-	req_params: set[str] = set(),
-):
-	def decorator(method: typ.Callable) -> typ.Callable:
-		# Check Function Signature Validity
-		func_sig = set(inspect.signature(method).parameters.keys())
-
-		## Too Little
-		if func_sig != req_params and func_sig.issubset(req_params):
-			msg = f'Decorated method {method.__name__} is missing arguments {req_params - func_sig}'
-
-		## Too Much
-		if func_sig != req_params and func_sig.issuperset(req_params):
-			msg = f'Decorated method {method.__name__} has superfluous arguments {func_sig - req_params}'
-			raise ValueError(msg)
-
-		## Just Right :)
-
-		# TODO: Check Function Annotation Validity
-		# - w/pydantic and/or socket capabilities
-
-		def decorated(node: MaxwellSimNode):
-			# Assemble Keyword Arguments
-			method_kw_args = {}
-
-			## Add Input Sockets
-			if input_sockets:
-				_input_sockets = {
-					input_socket_name: node._compute_input(
-						input_socket_name, kind
-					)
-					for input_socket_name in input_sockets
-				}
-				method_kw_args |= dict(input_sockets=_input_sockets)
-
-			## Add Output Sockets
-			if output_sockets:
-				_output_sockets = {
-					output_socket_name: node.compute_output(
-						output_socket_name, kind
-					)
-					for output_socket_name in output_sockets
-				}
-				method_kw_args |= dict(output_sockets=_output_sockets)
-
-			## Add Loose Sockets
-			if loose_input_sockets:
-				_loose_input_sockets = {
-					input_socket_name: node._compute_input(
-						input_socket_name, kind
-					)
-					for input_socket_name in node.loose_input_sockets
-				}
-				method_kw_args |= dict(
-					loose_input_sockets=_loose_input_sockets
-				)
-			if loose_output_sockets:
-				_loose_output_sockets = {
-					output_socket_name: node.compute_output(
-						output_socket_name, kind
-					)
-					for output_socket_name in node.loose_output_sockets
-				}
-				method_kw_args |= dict(
-					loose_output_sockets=_loose_output_sockets
-				)
-
-			## Add Props
-			if props:
-				_props = {
-					prop_name: getattr(node, prop_name) for prop_name in props
-				}
-				method_kw_args |= dict(props=_props)
-
-			## Add Managed Object
-			if managed_objs:
-				_managed_objs = {
-					managed_obj_name: node.managed_objs[managed_obj_name]
-					for managed_obj_name in managed_objs
-				}
-				method_kw_args |= dict(managed_objs=_managed_objs)
-
-			# Call Method
-			return method(
-				node,
-				**method_kw_args,
-			)
-
-		# Set Attributes for Discovery
-		decorated._callback_type = callback_type
-		if index_by:
-			decorated._index_by = index_by
-		if extra_data:
-			decorated._extra_data = extra_data
-
-		return decorated
-
-	return decorator
-
-
-####################
-# - Decorator: Output Socket
-####################
-def computes_output_socket(
-	output_socket_name: ct.SocketName,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-	cacheable: bool = True,
-):
-	"""Given a socket name, defines a function-that-makes-a-function (aka.
-	decorator) which has the name of the socket attached.
-
-	Must be used as a decorator, ex. `@compute_output_socket("name")`.
-
-	Args:
-		output_socket_name: The name of the output socket to attach the
-			decorated method to.
-		input_sockets: The values of these input sockets will be computed
-			using `_compute_input`, then passed to the decorated function
-			as `input_sockets: list[Any]`. If the input socket doesn't exist (ex. is contained in an inactive loose socket or socket set), then None is returned.
-		managed_objs: These managed objects will be passed to the
-			function as `managed_objs: list[Any]`.
-		kind: Requests for this `output_socket_name, DataFlowKind` pair will
-			be returned by the decorated function.
-		cacheable: The output of th
-			be returned by the decorated function.
-
-	Returns:
-		The decorator, which takes the output-socket-computing method
-			and returns a new output-socket-computing method, now annotated
-			and discoverable by the `MaxwellSimTreeNode`.
-	"""
-	req_params = (
-		{'self'}
-		| ({'input_sockets'} if input_sockets else set())
-		| ({'props'} if props else set())
-		| ({'managed_objs'} if managed_objs else set())
-	)
-
-	return chain_event_decorator(
-		callback_type='computes_output_socket',
-		index_by=(output_socket_name, kind),
-		kind=kind,
-		input_sockets=input_sockets,
-		props=props,
-		managed_objs=managed_objs,
-		req_params=req_params,
-	)
-
-
-####################
-# - Decorator: On Show Preview
-####################
-def on_value_changed(
-	socket_name: set[ct.SocketName] | ct.SocketName | None = None,
-	prop_name: set[str] | str | None = None,
-	any_loose_input_socket: bool = False,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-):
-	if (
-		sum(
-			[
-				int(socket_name is not None),
-				int(prop_name is not None),
-				int(any_loose_input_socket),
-			]
-		)
-		> 1
-	):
-		msg = 'Define only one of socket_name, prop_name or any_loose_input_socket'
-		raise ValueError(msg)
-
-	req_params = (
-		{'self'}
-		| ({'input_sockets'} if input_sockets else set())
-		| ({'loose_input_sockets'} if any_loose_input_socket else set())
-		| ({'props'} if props else set())
-		| ({'managed_objs'} if managed_objs else set())
-	)
-
-	return chain_event_decorator(
-		callback_type='on_value_changed',
-		extra_data={
-			'changed_sockets': (
-				socket_name if isinstance(socket_name, set) else {socket_name}
-			),
-			'changed_props': (
-				prop_name if isinstance(prop_name, set) else {prop_name}
-			),
-			'changed_loose_input': any_loose_input_socket,
-		},
-		kind=kind,
-		input_sockets=input_sockets,
-		loose_input_sockets=any_loose_input_socket,
-		props=props,
-		managed_objs=managed_objs,
-		req_params=req_params,
-	)
-
-
-def on_show_preview(
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),  ## For now, presume only same kind
-	output_sockets: set[str] = set(),  ## For now, presume only same kind
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-):
-	req_params = (
-		{'self'}
-		| ({'input_sockets'} if input_sockets else set())
-		| ({'output_sockets'} if output_sockets else set())
-		| ({'props'} if props else set())
-		| ({'managed_objs'} if managed_objs else set())
-	)
-
-	return chain_event_decorator(
-		callback_type='on_show_preview',
-		kind=kind,
-		input_sockets=input_sockets,
-		output_sockets=output_sockets,
-		props=props,
-		managed_objs=managed_objs,
-		req_params=req_params,
-	)
-
-
-def on_show_plot(
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),
-	output_sockets: set[str] = set(),
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-	stop_propagation: bool = False,
-):
-	req_params = (
-		{'self'}
-		| ({'input_sockets'} if input_sockets else set())
-		| ({'output_sockets'} if output_sockets else set())
-		| ({'props'} if props else set())
-		| ({'managed_objs'} if managed_objs else set())
-	)
-
-	return chain_event_decorator(
-		callback_type='on_show_plot',
-		extra_data={
-			'stop_propagation': stop_propagation,
-		},
-		kind=kind,
-		input_sockets=input_sockets,
-		output_sockets=output_sockets,
-		props=props,
-		managed_objs=managed_objs,
-		req_params=req_params,
-	)
-
-
-def on_init(
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-	input_sockets: set[str] = set(),
-	output_sockets: set[str] = set(),
-	props: set[str] = set(),
-	managed_objs: set[str] = set(),
-):
-	req_params = (
-		{'self'}
-		| ({'input_sockets'} if input_sockets else set())
-		| ({'output_sockets'} if output_sockets else set())
-		| ({'props'} if props else set())
-		| ({'managed_objs'} if managed_objs else set())
-	)
-
-	return chain_event_decorator(
-		callback_type='on_init',
-		kind=kind,
-		input_sockets=input_sockets,
-		output_sockets=output_sockets,
-		props=props,
-		managed_objs=managed_objs,
-		req_params=req_params,
-	)

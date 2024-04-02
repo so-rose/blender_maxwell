@@ -30,6 +30,8 @@ from .socket_units import SOCKET_UNITS
 from .socket_colors import SOCKET_COLORS
 from .socket_shapes import SOCKET_SHAPES
 
+from .unit_systems import UNITS_BLENDER, UNITS_TIDY3D
+
 from .socket_from_bl_desc import BL_SOCKET_DESCR_TYPE_MAP
 from .socket_from_bl_direct import BL_SOCKET_DIRECT_TYPE_MAP
 
@@ -73,6 +75,8 @@ __all__ = [
 	'SOCKET_UNITS',
 	'SOCKET_COLORS',
 	'SOCKET_SHAPES',
+	'UNITS_BLENDER',
+	'UNITS_TIDY3D',
 	'BL_SOCKET_DESCR_TYPE_MAP',
 	'BL_SOCKET_DIRECT_TYPE_MAP',
 	'BL_SOCKET_DESCR_ANNOT_STRING',

@@ -1,13 +1,11 @@
 import typing as typ
 
-import bpy
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from ......utils import analyze_geonodes
-from .... import contracts as ct
 from .....assets.import_geonodes import import_geonodes
+from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base
 
@@ -22,7 +20,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'Size': sockets.PhysicalSize3DSocketDef(
@@ -36,78 +34,71 @@ class BoxStructureNode(base.MaxwellSimNode):
 	managed_obj_defs: typ.ClassVar = {
 		'mesh': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLMesh(name),
-			name_prefix='',
 		),
-		'box': ct.schemas.ManagedObjDef(
+		'modifier': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLModifier(name),
-			name_prefix='',
 		),
 	}
 
 	####################
-	# - Output Socket Computation
+	# - Event Methods
 	####################
 	@base.computes_output_socket(
 		'Structure',
 		input_sockets={'Medium', 'Center', 'Size'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Size': 'Tidy3DUnits',
+		},
 	)
-	def compute_structure(self, input_sockets: dict) -> td.Box:
-		medium = input_sockets['Medium']
-		center = as_unit_system(input_sockets['Center'], 'tidy3d')
-		size = as_unit_system(input_sockets['Size'], 'tidy3d')
-		#_center = input_sockets['Center']
-		#_size = input_sockets['Size']
-
-		#center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		#size = tuple(spu.convert_to(_size, spu.um) / spu.um)
-
+	def compute_output(self, input_sockets: dict, unit_systems: dict) -> td.Box:
 		return td.Structure(
 			geometry=td.Box(
-				center=center,
-				size=size,
+				center=input_sockets['Center'],
+				size=input_sockets['Size'],
 			),
-			medium=medium,
+			medium=input_sockets['Medium'],
 		)
 
-	####################
-	# - Events
-	####################
 	@base.on_value_changed(
 		socket_name={'Center', 'Size'},
+		prop_name='preview_active',
+		# Method Data
 		input_sockets={'Center', 'Size'},
-		managed_objs={'mesh', 'box'},
+		managed_objs={'mesh', 'modifier'},
+		# Unit System Scaling
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'BlenderUnits',
+		},
 	)
-	def on_value_changed__center_size(
+	def on_input_changed(
 		self,
+		props: dict,
+		managed_objs: dict[str, ct.schemas.ManagedObj],
 		input_sockets: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		unit_systems: dict,
 	):
-		center = as_unit_system(input_sockets['Center'], 'blender')
-		#center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
-		## TODO: Implement + aggressively memoize as_unit_system
-		## - This should also understand that ex. Blender likes tuples, Tidy3D might like something else.
-
-		size = as_unit_system(input_sockets['Size'], 'blender')
-		#size = tuple([float(el) for el in spu.convert_to(_size, spu.um) / spu.um])
-
-		# Sync Attributes
-		managed_objs['mesh'].bl_object().location = center
-		managed_objs['box'].bl_modifier(managed_objs['mesh'].bl_object(), 'NODES', {
-			'node_group': import_geonodes(GEONODES_BOX, 'link'),
-			'inputs': {
-				'Size': size,  
+		# Push Input Values to GeoNodes Modifier
+		managed_objs['modifier'].bl_modifier(
+			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+			'NODES',
+			{
+				'node_group': import_geonodes(GEONODES_BOX, 'link'),
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Size': input_sockets['Size'],
+				},
 			},
-		})
+		)
+		# Push Preview State
+		if props['preview_active']:
+			managed_objs['mesh'].show_preview()
 
-	@base.on_show_preview(
-		managed_objs={'mesh'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		managed_objs['mesh'].show_preview()
-		self.on_value_changed__center_size()
+	@base.on_init()
+	def on_init(self):
+		self.on_input_change()
 
 
 ####################

@@ -1,28 +1,35 @@
+"""Tools for translating between BLMaxwell sockets and pure Blender sockets.
+
+Attributes:
+	SOCKET_DEFS: Maps BLMaxwell SocketType objects to their corresponding SocketDef.
+	BL_SOCKET_3D_TYPE_PREFIXES: Blender socket prefixes which indicate that the Blender socket has three values.
+	BL_SOCKET_4D_TYPE_PREFIXES: Blender socket prefixes which indicate that the Blender socket has four values.
+"""
+
+import functools
 import typing as typ
 
 import bpy
 import sympy as sp
-import sympy.physics.units as spu
-import typing_extensions as typx
 
+from ...utils import extra_sympy_units as spux
 from ...utils import logger as _logger
 from . import contracts as ct
 from . import sockets as sck
-from .contracts import SocketType as ST
+from .contracts import SocketType as ST  # noqa: N817
 
 log = _logger.get(__name__)
 
-# TODO: Caching?
-# TODO: Move the manual labor stuff to contracts
-
-BLSocketType = str  ## A Blender-Defined Socket Type
-BLSocketSize = int
-DescType = str
-Unit = typ.Any  ## Type of a valid unit
+BLSocketType: typ.TypeAlias = str  ## A Blender-Defined Socket Type
+BLSocketValue: typ.TypeAlias = typ.Any  ## A Blender Socket Value
+BLSocketSize: typ.TypeAlias = int
+DescType: typ.TypeAlias = str
+Unit: typ.TypeAlias = typ.Any  ## Type of a valid unit
 
 ####################
 # - Socket to SocketDef
 ####################
+## TODO: It's only smelly because of the way we bubble up SocketDefs
 SOCKET_DEFS = {
 	socket_type: getattr(
 		sck,
@@ -31,7 +38,6 @@ SOCKET_DEFS = {
 	for socket_type in ST
 	if hasattr(sck, socket_type.value.removesuffix('SocketType') + 'SocketDef')
 }
-## TODO: Bit of a hack. Is it robust enough?
 
 for socket_type in ST:
 	if not hasattr(
@@ -53,9 +59,11 @@ BL_SOCKET_4D_TYPE_PREFIXES = {
 }
 
 
-def size_from_bl_interface_socket(
-	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
-) -> typx.Literal[1, 2, 3, 4]:
+@functools.lru_cache(maxsize=4096)
+def _size_from_bl_socket(
+	description: str,
+	bl_socket_type: BLSocketType,
+):
 	"""Parses the `size`, aka. number of elements, contained within the `default_value` of a Blender interface socket.
 
 	Since there are no 2D sockets in Blender, the user can specify "2D" in the Blender socket's description to "promise" that only the first two values will be used.
@@ -65,15 +73,15 @@ def size_from_bl_interface_socket(
 	- For 3D sockets, a hard-coded list of Blender node socket types is used.
 	- Else, it is a 1D socket type.
 	"""
-	if bl_interface_socket.description.startswith('2D'):
+	if description.startswith('2D'):
 		return 2
 	if any(
-		bl_interface_socket.socket_type.startswith(bl_socket_3d_type_prefix)
+		bl_socket_type.startswith(bl_socket_3d_type_prefix)
 		for bl_socket_3d_type_prefix in BL_SOCKET_3D_TYPE_PREFIXES
 	):
 		return 3
 	if any(
-		bl_interface_socket.socket_type.startswith(bl_socket_4d_type_prefix)
+		bl_socket_type.startswith(bl_socket_4d_type_prefix)
 		for bl_socket_4d_type_prefix in BL_SOCKET_4D_TYPE_PREFIXES
 	):
 		return 4
@@ -84,176 +92,171 @@ def size_from_bl_interface_socket(
 ####################
 # - BL Socket Type / Unit Parser
 ####################
-def parse_bl_interface_socket(
-	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
-) -> tuple[ST, sp.Expr | None]:
-	"""Parse a Blender interface socket by parsing its description, falling back to any direct type links.
+@functools.lru_cache(maxsize=4096)
+def _socket_type_from_bl_socket(
+	description: str,
+	bl_socket_type: BLSocketType,
+) -> ST:
+	"""Parse a Blender socket for a matching BLMaxwell socket type, relying on both the Blender socket type and user-generated hints in the description.
 
 	Arguments:
-		bl_interface_socket: An interface socket associated with the global input to a node tree.
+		description: The description from Blender socket, aka. `bl_socket.description`.
+		bl_socket_type: The Blender socket type, aka. `bl_socket.socket_type`.
 
 	Returns:
-		The type of a corresponding MaxwellSimSocket, as well as a unit (if a particular unit was requested by the Blender interface socket).
+		The type of a MaxwellSimSocket that corresponds to the Blender socket.
 	"""
-	size = size_from_bl_interface_socket(bl_interface_socket)
+	size = _size_from_bl_socket(description, bl_socket_type)
 
-	# Determine Direct Socket Type
+	# Determine Socket Type Directly
+	## The naive mapping from BL socket -> Maxwell socket may be good enough.
 	if (
-		direct_socket_type := ct.BL_SOCKET_DIRECT_TYPE_MAP.get(
-			(bl_interface_socket.socket_type, size)
-		)
+		direct_socket_type := ct.BL_SOCKET_DIRECT_TYPE_MAP.get((bl_socket_type, size))
 	) is None:
 		msg = "Blender interface socket has no mapping among 'MaxwellSimSocket's."
 		raise ValueError(msg)
 
-	# (Maybe) Return Direct Socket Type
-	## When there's no description, that's it; return.
-	if not ct.BL_SOCKET_DESCR_ANNOT_STRING in bl_interface_socket.description:
-		return (direct_socket_type, None)
+	# (No Description) Return Direct Socket Type
+	if ct.BL_SOCKET_DESCR_ANNOT_STRING not in description:
+		return direct_socket_type
 
 	# Parse Description for Socket Type
-	tokens = (
-		_tokens
-		if (_tokens := bl_interface_socket.description.split(' '))[0] != '2D'
-		else _tokens[1:]
-	)  ## Don't include the "2D" token, if defined.
+	## The "2D" token is special; don't include it if it's there.
+	tokens = _tokens if (_tokens := description.split(' '))[0] != '2D' else _tokens[1:]
 	if (
 		socket_type := ct.BL_SOCKET_DESCR_TYPE_MAP.get(
-			(tokens[0], bl_interface_socket.socket_type, size)
+			(tokens[0], bl_socket_type, size)
 		)
 	) is None:
-		return (
-			direct_socket_type,
-			None,
-		)  ## Description doesn't map to anything
+		msg = f'Socket description "{(tokens[0], bl_socket_type, size)}" doesn\'t map to a socket type + unit'
+		raise ValueError(msg)
 
-	# Determine Socket Unit (to use instead of "unit system")
-	## This is entirely OPTIONAL
-	socket_unit = None
-	if socket_type in ct.SOCKET_UNITS:
-		## Case: Unit is User-Defined
-		if len(tokens) > 1 and '(' in tokens[1] and ')' in tokens[1]:
-			# Compute (<unit_str>) as Unit Token
-			unit_token = tokens[1].removeprefix('(').removesuffix(')')
-
-			# Compare Unit Token to Valid Sympy-Printed Units
-			socket_unit = (
-				_socket_unit
-				if (
-					_socket_unit := [
-						unit
-						for unit in ct.SOCKET_UNITS[socket_type][
-							'values'
-						].values()
-						if str(unit) == unit_token
-					]
-				)
-				else ct.SOCKET_UNITS[socket_type]['values'][
-					ct.SOCKET_UNITS[socket_type]['default']
-				]
-			)
-			## TODO: Enforce abbreviated sympy printing here, not globally
-
-	return (socket_type, socket_unit)
+	return socket_type
 
 
 ####################
 # - BL Socket Interface Definition
 ####################
-def socket_def_from_bl_interface_socket(
+@functools.lru_cache(maxsize=4096)
+def _socket_def_from_bl_socket(
+	description: str,
+	bl_socket_type: BLSocketType,
+) -> ST:
+	return SOCKET_DEFS[_socket_type_from_bl_socket(description, bl_socket_type)]
+
+
+def socket_def_from_bl_socket(
 	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
-):
+) -> ct.schemas.SocketDef:
 	"""Computes an appropriate (no-arg) SocketDef from the given `bl_interface_socket`, by parsing it."""
-	return SOCKET_DEFS[parse_bl_interface_socket(bl_interface_socket)[0]]
+	return _socket_def_from_bl_socket(
+		bl_interface_socket.description, bl_interface_socket.socket_type
+	)
 
 
 ####################
 # - Extract Default Interface Socket Value
 ####################
-def value_from_bl(
+@functools.lru_cache(maxsize=4096)
+def _read_bl_socket_default_value(
+	description: str,
+	bl_socket_type: BLSocketType,
+	bl_socket_value: BLSocketValue,
+	unit_system: dict | None = None,
+) -> typ.Any:
+	# Parse the BL Socket Type and Value
+	## The 'lambda' delays construction until size is determined.
+	socket_type = _socket_type_from_bl_socket(description, bl_socket_type)
+	parsed_socket_value = {
+		1: lambda: bl_socket_value,
+		2: lambda: sp.Matrix(tuple(bl_socket_value)[:2]),
+		3: lambda: sp.Matrix(tuple(bl_socket_value)),
+		4: lambda: sp.Matrix(tuple(bl_socket_value)),
+	}[_size_from_bl_socket(description, bl_socket_type)]()
+
+	# Add Unit-System Unit to Parsed
+	## Use the matching socket type to lookup the unit in the unit system.
+	if unit_system is not None:
+		if (unit := unit_system.get(socket_type)) is None:
+			msg = f'Unit system does not provide a unit for {socket_type}'
+			raise RuntimeError(msg)
+
+		if unit not in (valid_units := ct.SOCKET_UNITS[socket_type]['values'].values()):
+			msg = f'Unit system provided a unit "{unit}" that is invalid for socket type "{socket_type}" (valid units: {valid_units})'
+			raise RuntimeError(msg)
+
+		return parsed_socket_value * unit
+
+	return parsed_socket_value
+
+
+def read_bl_socket_default_value(
 	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
 	unit_system: dict | None = None,
 ) -> typ.Any:
-	"""Reads the value of any Blender socket, and writes its `default_value` to the `value` of any `MaxwellSimSocket`.
-	- If the size of the Blender socket is >1, then `value` is written to as a `sympy.Matrix`.
-	- If a unit system is given, then the Blender socket is matched to a `MaxwellSimSocket`, which is used to lookup an appropriate unit in the given `unit_system`.
+	"""Reads the `default_value` of a Blender socket, guaranteeing a well-formed value consistent with the passed unit system.
+
+	Arguments:
+		bl_interface_socket: The Blender interface socket to analyze for description, socket type, and default value.
+		unit_system: The mapping from BLMaxwell SocketType to corresponding unit, used to apply the appropriate unit to the output.
+
+	Returns:
+		The parsed, well-formed version of `bl_socket.default_value`, of the appropriate form and unit.
 
 	"""
-	## TODO: Consider sympy.S()'ing the default_value
-	parsed_bl_socket_value = {
-		1: lambda: bl_interface_socket.default_value,
-		2: lambda: sp.Matrix(tuple(bl_interface_socket.default_value)[:2]),
-		3: lambda: sp.Matrix(tuple(bl_interface_socket.default_value)),
-		4: lambda: sp.Matrix(tuple(bl_interface_socket.default_value)),
-	}[size_from_bl_interface_socket(bl_interface_socket)]()
-	## The 'lambda' delays construction until size is determined
-
-	socket_type, unit = parse_bl_interface_socket(bl_interface_socket)
-
-	# Add Unit to Parsed (if relevant)
-	if unit is not None:
-		parsed_bl_socket_value *= unit
-	elif unit_system is not None:
-		parsed_bl_socket_value *= unit_system[socket_type]
-
-	return parsed_bl_socket_value
+	return _read_bl_socket_default_value(
+		bl_interface_socket.description,
+		bl_interface_socket.socket_type,
+		bl_interface_socket.default_value,
+		unit_system,
+	)
 
 
-####################
-# - Convert to Blender-Compatible Value
-####################
-def make_scalar_bl_compat(scalar: typ.Any) -> typ.Any:
-	"""Blender doesn't accept ex. Sympy numbers as values.
-	Therefore, we need to do some conforming.
-
-	Currently hard-coded; this is probably best.
-	"""
-	if isinstance(scalar, sp.Integer):
-		return int(scalar)
-	elif isinstance(scalar, sp.Float):
-		return float(scalar)
-	elif isinstance(scalar, sp.Rational):
-		return float(scalar)
-	elif isinstance(scalar, sp.Expr):
-		return float(scalar.n())
-	## TODO: More?
-
-	return scalar
-
-
-def value_to_bl(
-	bl_interface_socket: bpy.types.NodeSocket,
+@functools.lru_cache(maxsize=4096)
+def _writable_bl_socket_value(
+	description: str,
+	bl_socket_type: BLSocketType,
 	value: typ.Any,
 	unit_system: dict | None = None,
 ) -> typ.Any:
-	socket_type, unit = parse_bl_interface_socket(bl_interface_socket)
+	socket_type = _socket_type_from_bl_socket(description, bl_socket_type)
 
-	# Set Socket
-	if unit is not None:
-		bl_socket_value = spu.convert_to(value, unit) / unit
-	elif unit_system is not None and socket_type in unit_system:
-		bl_socket_value = (
-			spu.convert_to(value, unit_system[socket_type])
-			/ unit_system[socket_type]
-		)
+	# Retrieve Unit-System Unit
+	if unit_system is not None:
+		if (unit := unit_system.get(socket_type)) is None:
+			msg = f'Unit system does not provide a unit for {socket_type}'
+			raise RuntimeError(msg)
+
+		_bl_socket_value = spux.scale_to_unit(value, unit)
 	else:
-		bl_socket_value = value
+		_bl_socket_value = value
 
-	return {
-		1: lambda: make_scalar_bl_compat(bl_socket_value),
-		2: lambda: tuple(
-			[
-				make_scalar_bl_compat(bl_socket_value[0]),
-				make_scalar_bl_compat(bl_socket_value[1]),
-				bl_interface_socket.default_value[2],
-				## Don't touch (unused) 3rd bl_socket coordinate
-			]
-		),
-		3: lambda: tuple(
-			[make_scalar_bl_compat(el) for el in bl_socket_value]
-		),
-		4: lambda: tuple(
-			[make_scalar_bl_compat(el) for el in bl_socket_value]
-		),
-	}[size_from_bl_interface_socket(bl_interface_socket)]()
-	## The 'lambda' delays construction until size is determined
+	# Compute Blender Socket Value
+	bl_socket_value = spux.sympy_to_python(_bl_socket_value)
+	if _size_from_bl_socket(description, bl_socket_type) == 2:  # noqa: PLR2004
+		bl_socket_value = bl_socket_value[:2]
+	return bl_socket_value
+
+
+def writable_bl_socket_value(
+	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
+	value: typ.Any,
+	unit_system: dict | None = None,
+) -> typ.Any:
+	"""Processes a value to be ready-to-write to a Blender socket.
+
+	Arguments:
+		bl_interface_socket: The Blender interface socket to analyze
+		value: The value to prepare for writing to the given Blender socket.
+		unit_system: The mapping from BLMaxwell SocketType to corresponding unit, used to scale the value to the the appropriate unit.
+
+	Returns:
+		A value corresponding to the input, which is guaranteed to be compatible with the Blender socket (incl. via a GeoNodes modifier), as well as correctly scaled with respect to the given unit system.
+
+	"""
+	return _writable_bl_socket_value(
+		bl_interface_socket.description,
+		bl_interface_socket.bl_socket_type,
+		value,
+		unit_system,
+	)

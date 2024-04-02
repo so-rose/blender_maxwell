@@ -263,8 +263,7 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 	@property
 	def value(self) -> dict[ST, SympyExpr]:
 		return {
-			socket_type: SU(socket_type)[socket_unit_prop]
-			for socket_type, socket_unit_prop in [
+			socket_type: SU(socket_type)[socket_unit_prop] for socket_type, socket_unit_prop in [
 				(ST.PhysicalTime, self.unit_time),
 				(ST.PhysicalAngle, self.unit_angle),
 				(ST.PhysicalLength, self.unit_length),

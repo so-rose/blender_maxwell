@@ -2,10 +2,12 @@ import typing as typ
 
 import tidy3d as td
 
-from .....utils import analyze_geonodes
+from .....utils import analyze_geonodes, logger
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 class GeoNodesStructureNode(base.MaxwellSimNode):
@@ -17,8 +19,8 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Unit System': sockets.PhysicalUnitSystemSocketDef(),
 		'Medium': sockets.MaxwellMediumSocketDef(),
+		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
@@ -26,36 +28,38 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_defs: typ.ClassVar = {
-		'geometry': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix='',
-		)
+		'mesh': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLMesh(name),
+		),
+		'modifier': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLModifier(name),
+		),
 	}
 
 	####################
-	# - Output Socket Computation
+	# - Event Methods
 	####################
 	@base.computes_output_socket(
 		'Structure',
 		input_sockets={'Medium'},
 		managed_objs={'geometry'},
 	)
-	def compute_structure(
+	def compute_output(
 		self,
 		input_sockets: dict[str, typ.Any],
 		managed_objs: dict[str, ct.schemas.ManagedObj],
 	) -> td.Structure:
-		# Extract the Managed Blender Object
-		mobj = managed_objs['geometry']
+		# Simulate Input Value Change
+		## This ensures that the mesh has been re-computed.
+		self.on_input_changed()
 
-		# Extract Geometry as Arrays
-		geometry_as_arrays = mobj.mesh_as_arrays
-
-		# Return TriMesh Structure
+		## TODO: mesh_as_arrays might not take the Center into account.
+		## - Alternatively, Tidy3D might have a way to transform?
+		mesh_as_arrays = managed_objs['mesh'].mesh_as_arrays
 		return td.Structure(
 			geometry=td.TriangleMesh.from_vertices_faces(
-				geometry_as_arrays['verts'],
-				geometry_as_arrays['faces'],
+				mesh_as_arrays['verts'],
+				mesh_as_arrays['faces'],
 			),
 			medium=input_sockets['Medium'],
 		)
@@ -65,104 +69,87 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	####################
 	@base.on_value_changed(
 		socket_name='GeoNodes',
-		managed_objs={'geometry'},
-		input_sockets={'GeoNodes'},
-	)
-	def on_value_changed__geonodes(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-		input_sockets: dict[str, typ.Any],
-	) -> None:
-		"""Called whenever the GeoNodes socket is changed.
-
-		Refreshes the Loose Input Sockets, which map directly to the GeoNodes tree input sockets.
-		"""
-		if not (geo_nodes := input_sockets['GeoNodes']):
-			managed_objs['geometry'].free()
-			self.loose_input_sockets = {}
-			return
-
-		# Analyze GeoNodes
-		## Extract Valid Inputs (via GeoNodes Tree "Interface")
-		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
-
-		# Set Loose Input Sockets
-		## Retrieve the appropriate SocketDef for the Blender Interface Socket
-		self.loose_input_sockets = {
-			socket_name: bl_socket_map.socket_def_from_bl_interface_socket(
-				bl_interface_socket
-			)()  ## === <SocketType>SocketDef(), but with dynamic SocketDef
-			for socket_name, bl_interface_socket in geonodes_interface.items()
-		}
-
-		## Set Loose `socket.value` from Interface `default_value`
-		for socket_name in self.loose_input_sockets:
-			socket = self.inputs[socket_name]
-			bl_interface_socket = geonodes_interface[socket_name]
-
-			socket.value = bl_socket_map.value_from_bl(bl_interface_socket)
-
-		## Implicitly triggers the loose-input `on_value_changed` for each.
-
-	@base.on_value_changed(
+		prop_name='preview_active',
 		any_loose_input_socket=True,
-		managed_objs={'geometry'},
-		input_sockets={'Unit System', 'GeoNodes'},
+		# Method Data
+		managed_objs={'mesh', 'modifier'},
+		input_sockets={'GeoNodes'},
+		# Unit System Scaling
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 	)
-	def on_value_changed__loose_inputs(
+	def on_input_changed(
 		self,
+		props: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
-		input_sockets: dict[str, typ.Any],
-		loose_input_sockets: dict[str, typ.Any],
-	):
-		"""Called whenever a Loose Input Socket is altered.
+		input_sockets: dict,
+		loose_input_sockets: dict,
+		unit_systems: dict,
+	) -> None:
+		# No GeoNodes: Remove Modifier (if any)
+		if (geonodes := input_sockets['GeoNodes']) is None:
+			if (
+				managed_objs['modifier'].name
+				in managed_objs['mesh'].bl_object().modifiers
+			):
+				log.info(
+					'Removing Modifier "%s" from BLObject "%s"',
+					managed_objs['modifier'].name,
+					managed_objs['mesh'].name,
+				)
+				managed_objs['mesh'].bl_object().modifiers.remove(
+					managed_objs['modifier'].name
+				)
 
-		Synchronizes the change to the actual GeoNodes modifier, so that the change is immediately visible.
-		"""
-		# Retrieve Data
-		unit_system = input_sockets['Unit System']
-		mobj = managed_objs['geometry']
-
-		if not (geo_nodes := input_sockets['GeoNodes']):
+				# Reset Loose Input Sockets
+				self.loose_input_sockets = {}
 			return
 
-		# Analyze GeoNodes Interface (input direction)
-		## This retrieves NodeTreeSocketInterface elements
-		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
+		# No Loose Input Sockets: Create from GeoNodes Interface
+		## TODO: Other reasons to trigger re-filling loose_input_sockets.
+		if not loose_input_sockets:
+			# Retrieve the GeoNodes Interface
+			geonodes_interface = analyze_geonodes.interface(
+				input_sockets['GeoNodes'], direc='INPUT'
+			)
 
-		## TODO: Check that Loose Sockets matches the Interface
-		## - If the user deletes an interface socket, bad things will happen.
-		## - We will try to set an identifier that doesn't exist!
-		## - Instead, this should update the loose input sockets.
+			# Fill the Loose Input Sockets
+			log.info(
+				'Initializing GeoNodes Structure Node "%s" from GeoNodes Group "%s"',
+				self.bl_label,
+				str(geonodes),
+			)
+			self.loose_input_sockets = {
+				socket_name: bl_socket_map.socket_def_from_bl_socket(iface_socket)()
+				for socket_name, iface_socket in geonodes_interface.items()
+			}
 
-		## Push Values to the GeoNodes Modifier
-		mobj.sync_geonodes_modifier(
-			geonodes_node_group=geo_nodes,
-			geonodes_identifier_to_value={
-				bl_interface_socket.identifier: bl_socket_map.value_to_bl(
-					bl_interface_socket,
-					loose_input_sockets[socket_name],
-					unit_system,
+			# Set Loose Input Sockets to Interface (Default) Values
+			## Changing socket.value invokes recursion of this function.
+			## The else: below ensures that only one push occurs.
+			## (well, one push per .value set, which simplifies to one push)
+			log.debug(
+				'Setting Loose Input Sockets of "%s" to GeoNodes Defaults',
+				self.bl_label,
+			)
+			for socket_name in self.loose_input_sockets:
+				socket = self.inputs[socket_name]
+				socket.value = bl_socket_map.read_bl_socket_default_value(
+					geonodes_interface[socket_name]
 				)
-				for socket_name, bl_interface_socket in (geonodes_interface.items())
-			},
-		)
-
-	####################
-	# - Event Methods
-	####################
-	@base.on_show_preview(
-		managed_objs={'geometry'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		"""Called whenever a Loose Input Socket is altered.
-
-		Synchronizes the change to the actual GeoNodes modifier, so that the change is immediately visible.
-		"""
-		managed_objs['geometry'].show_preview('MESH')
+		else:
+			# Push Loose Input Values to GeoNodes Modifier
+			managed_objs['modifier'].bl_modifier(
+				managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+				'NODES',
+				{
+					'node_group': input_sockets['GeoNodes'],
+					'unit_system': unit_systems['BlenderUnits'],
+					'inputs': loose_input_sockets,
+				},
+			)
+			# Push Preview State
+			if props['preview_active']:
+				managed_objs['mesh'].show_preview()
 
 
 ####################

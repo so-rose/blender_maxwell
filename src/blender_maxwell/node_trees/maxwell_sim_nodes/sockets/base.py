@@ -4,7 +4,6 @@ import functools
 
 import bpy
 
-import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
 from .. import contracts as ct
@@ -303,9 +302,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			return self._compute_data(kind)
 
 		## Linked: Compute Output of Linked Sockets
-		linked_values = [
-			link.from_socket.compute_data(kind) for link in self.links
-		]
+		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
 		## Return Single Value / List of Values
 		if len(linked_values) == 1:
