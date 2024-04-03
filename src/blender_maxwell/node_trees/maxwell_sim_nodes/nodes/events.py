@@ -3,9 +3,12 @@ import inspect
 import typing as typ
 from types import MappingProxyType
 
-from ....utils import sympy_extra_units as spux
+from ....utils import extra_sympy_units as spux
+from ....utils import logger
 from .. import contracts as ct
 from .base import MaxwellSimNode
+
+log = logger.get(__name__)
 
 UnitSystemID = str
 UnitSystem = dict[ct.SocketType, typ.Any]
@@ -206,6 +209,10 @@ def event_decorator(
 				}
 				method_kw_args |= {'loose_output_sockets': _loose_output_sockets}
 
+			# Unit Systems
+			if unit_systems:
+				method_kw_args |= {'unit_systems': unit_systems}
+
 			# Call Method
 			return method(
 				node,
@@ -253,19 +260,6 @@ def on_value_changed(
 	any_loose_input_socket: bool = False,
 	**kwargs,
 ):
-	if (
-		sum(
-			[
-				int(socket_name is not None),
-				int(prop_name is not None),
-				int(any_loose_input_socket),
-			]
-		)
-		> 1
-	):
-		msg = 'Define only one of socket_name, prop_name or any_loose_input_socket'
-		raise ValueError(msg)
-
 	return event_decorator(
 		action_type=EventCallbackType.on_value_changed,
 		extra_data={

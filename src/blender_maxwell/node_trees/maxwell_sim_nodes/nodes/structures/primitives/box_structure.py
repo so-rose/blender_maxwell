@@ -4,12 +4,10 @@ import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from .....assets.import_geonodes import import_geonodes
+from ......assets.import_geonodes import GeoNodes, import_geonodes
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
-
-GEONODES_BOX = 'box'
 
 
 class BoxStructureNode(base.MaxwellSimNode):
@@ -64,16 +62,15 @@ class BoxStructureNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		prop_name='preview_active',
-		# Method Data
+		props={'preview_active'},
 		input_sockets={'Center', 'Size'},
 		managed_objs={'mesh', 'modifier'},
-		# Unit System Scaling
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
 		},
 	)
-	def on_input_changed(
+	def on_inputs_changed(
 		self,
 		props: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
@@ -85,7 +82,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
-				'node_group': import_geonodes(GEONODES_BOX, 'link'),
+				'node_group': import_geonodes(GeoNodes.PrimitiveBox, 'link'),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],
@@ -98,7 +95,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 
 	@events.on_init()
 	def on_init(self):
-		self.on_input_change()
+		self.on_inputs_changed()
 
 
 ####################

@@ -71,10 +71,10 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		socket_name='GeoNodes',
 		prop_name='preview_active',
 		any_loose_input_socket=True,
-		# Method Data
+		props={'preview_active'},
 		managed_objs={'mesh', 'modifier'},
-		input_sockets={'GeoNodes'},
-		# Unit System Scaling
+		input_sockets={'Center', 'GeoNodes'},
+		all_loose_input_sockets=True,
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 	)
 	def on_input_changed(
@@ -127,15 +127,22 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 			## Changing socket.value invokes recursion of this function.
 			## The else: below ensures that only one push occurs.
 			## (well, one push per .value set, which simplifies to one push)
-			log.debug(
+			log.info(
 				'Setting Loose Input Sockets of "%s" to GeoNodes Defaults',
 				self.bl_label,
 			)
 			for socket_name in self.loose_input_sockets:
 				socket = self.inputs[socket_name]
 				socket.value = bl_socket_map.read_bl_socket_default_value(
-					geonodes_interface[socket_name]
+					geonodes_interface[socket_name],
+					unit_systems['BlenderUnits'],
+					allow_unit_not_in_unit_system=True,
 				)
+			log.info(
+				'Set Loose Input Sockets of "%s" to: %s',
+				self.bl_label,
+				str(self.loose_input_sockets),
+			)
 		else:
 			# Push Loose Input Values to GeoNodes Modifier
 			managed_objs['modifier'].bl_modifier(

@@ -68,6 +68,10 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		'Source',
 		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
 		props={'pol_axis'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+		},
 	)
 	def compute_source(
 		self, input_sockets: dict[str, typ.Any], props: dict[str, typ.Any]
@@ -78,53 +82,46 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			'EZ': 'Ez',
 		}[props['pol_axis']]
 
-		temporal_shape = input_sockets['Temporal Shape']
-		_center = input_sockets['Center']
-		interpolate = input_sockets['Interpolate']
-
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-
-		_res = td.PointDipole(
-			center=center,
-			source_time=temporal_shape,
-			interpolate=interpolate,
+		return td.PointDipole(
+			center=input_sockets['Center'],
+			source_time=input_sockets['Temporal Shape'],
+			interpolate=input_sockets['Interpolate'],
 			polarization=pol_axis,
 		)
-		return _res
 
-	####################
-	# - Preview
-	####################
-	@events.on_value_changed(
-		socket_name='Center',
-		input_sockets={'Center'},
-		managed_objs={'sphere_empty'},
-	)
-	def on_value_changed__center(
-		self,
-		input_sockets: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		_center = input_sockets['Center']
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		## TODO: Preview unit system?? Presume um for now
+	#####################
+	## - Preview
+	#####################
+	# @events.on_value_changed(
+	# socket_name='Center',
+	# input_sockets={'Center'},
+	# managed_objs={'sphere_empty'},
+	# )
+	# def on_value_changed__center(
+	# self,
+	# input_sockets: dict,
+	# managed_objs: dict[str, ct.schemas.ManagedObj],
+	# ):
+	# _center = input_sockets['Center']
+	# center = tuple(spu.convert_to(_center, spu.um) / spu.um)
+	# ## TODO: Preview unit system?? Presume um for now
 
-		mobj = managed_objs['sphere_empty']
-		bl_object = mobj.bl_object('EMPTY')
-		bl_object.location = center  # tuple([float(el) for el in center])
+	# mobj = managed_objs['sphere_empty']
+	# bl_object = mobj.bl_object('EMPTY')
+	# bl_object.location = center  # tuple([float(el) for el in center])
 
-	@events.on_show_preview(
-		managed_objs={'sphere_empty'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		managed_objs['sphere_empty'].show_preview(
-			'EMPTY',
-			empty_display_type='SPHERE',
-		)
-		managed_objs['sphere_empty'].bl_object('EMPTY').empty_display_size = 0.2
+	# @events.on_show_preview(
+	# managed_objs={'sphere_empty'},
+	# )
+	# def on_show_preview(
+	# self,
+	# managed_objs: dict[str, ct.schemas.ManagedObj],
+	# ):
+	# managed_objs['sphere_empty'].show_preview(
+	# 'EMPTY',
+	# empty_display_type='SPHERE',
+	# )
+	# managed_objs['sphere_empty'].bl_object('EMPTY').empty_display_size = 0.2
 
 
 ####################

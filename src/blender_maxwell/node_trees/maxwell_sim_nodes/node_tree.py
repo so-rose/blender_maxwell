@@ -2,7 +2,11 @@ import typing as typ
 
 import bpy
 
+from ...utils import logger
 from . import contracts as ct
+from .managed_objs.managed_bl_collection import preview_collection
+
+log = logger.get(__name__)
 
 ####################
 # - Cache Management
@@ -72,6 +76,15 @@ class MaxwellSimTree(bpy.types.NodeTree):
 			node.locked = False
 			for bl_socket in [*node.inputs, *node.outputs]:
 				bl_socket.locked = False
+
+	def unpreview_all(self):
+		log.info('Disabling All 3D Previews')
+		for node in self.nodes:
+			if node.preview_active:
+				node.preview_active = False
+
+			for bl_object in preview_collection().objects.values():
+				preview_collection().objects.unlink(bl_object)
 
 	####################
 	# - Init Methods

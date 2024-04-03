@@ -37,7 +37,8 @@ UNITS_BLENDER: UnitSystem = {
 }  ## TODO: Load (dynamically?) from addon preferences
 
 UNITS_TIDY3D: UnitSystem = {
-	ST.PhysicalTime: spu.picosecond,
+	## https://docs.flexcompute.com/projects/tidy3d/en/latest/faq/docs/faq/What-are-the-units-used-in-the-simulation.html
+	ST.PhysicalTime: spu.second,
 	ST.PhysicalAngle: spu.radian,
 	ST.PhysicalLength: spu.micrometer,
 	ST.PhysicalArea: spu.micrometer**2,
@@ -52,6 +53,6 @@ UNITS_TIDY3D: UnitSystem = {
 	ST.PhysicalForceScalar: spux.micronewton,
 	ST.PhysicalAccel3D: spu.um / spu.second**2,
 	ST.PhysicalForce3D: spux.micronewton,
-	ST.PhysicalFreq: spux.terahertz,
+	ST.PhysicalFreq: spu.hertz,
 	ST.PhysicalPol: spu.radian,
 }

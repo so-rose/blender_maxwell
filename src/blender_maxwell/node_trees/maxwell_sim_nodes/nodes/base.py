@@ -87,8 +87,8 @@ class MaxwellSimNode(bpy.types.Node):
 		cls.__annotations__['preview_active'] = bpy.props.BoolProperty(
 			name='Preview Active',
 			description='Whether the preview (if any) is currently active',
-			default='',
-			update=lambda self, context: self.sync_prop('preview_active', context),
+			default=False,
+			update=lambda self, context: self.sync_preview_active(context),
 		)
 
 		# Setup Locked Property for Node
@@ -210,6 +210,21 @@ class MaxwellSimNode(bpy.types.Node):
 			## - This will happen whenever the name is taken.
 			## - If altered, set the 'sim_node_name' to the altered name.
 			## - This will cause recursion, but only once.
+
+	def sync_preview_active(self, _: bpy.types.Context):
+		log.info(
+			'Changed Preview Active in "%s" to "%s"',
+			self.name,
+			self.preview_active,
+		)
+		for method in self._on_value_changed_methods:
+			if 'preview_active' in method.extra_data['changed_props']:
+				log.info(
+					'Running Previewer Callback "%s" in "%s")',
+					method.__name__,
+					self.name,
+				)
+				method(self)
 
 	####################
 	# - Managed Object Properties
@@ -571,6 +586,13 @@ class MaxwellSimNode(bpy.types.Node):
 		Invalidates (recursively) the cache of any managed object or
 		output socket method that implicitly depends on this input socket.
 		"""
+		#log.debug(
+		#	'Action "%s" Triggered in "%s" (socket_name="%s", prop_name="%s")',
+		#	action,
+		#	self.name,
+		#	socket_name,
+		#	prop_name,
+		#)
 		# Forwards Chains
 		if action == 'value_changed':
 			# Run User Callbacks
@@ -589,6 +611,11 @@ class MaxwellSimNode(bpy.types.Node):
 						and socket_name in self.loose_input_sockets
 					)
 				):
+					#log.debug(
+					#	'Running Value-Change Callback "%s" in "%s")',
+					#	method.__name__,
+					#	self.name,
+					#)
 					method(self)
 
 			# Propagate via Output Sockets
@@ -616,6 +643,10 @@ class MaxwellSimNode(bpy.types.Node):
 			## ...which simply hook into the 'preview_active' property.
 			## By (maybe) altering 'preview_active', callbacks run as needed.
 			if not self.preview_active:
+				log.info(
+					'Activating Preview in "%s")',
+					self.name,
+				)
 				self.preview_active = True
 
 			## Propagate via Input Sockets

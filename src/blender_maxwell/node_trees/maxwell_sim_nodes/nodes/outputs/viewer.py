@@ -1,10 +1,12 @@
+import typing as typ
+
 import bpy
 import sympy as sp
 
 from .....utils import logger
 from ... import contracts as ct
 from ... import sockets
-from ...managed_objs import managed_bl_object
+from ...managed_objs.managed_bl_collection import preview_collection
 from .. import base, events
 
 log = logger.get(__name__)
@@ -46,7 +48,7 @@ class ViewerNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.Viewer
 	bl_label = 'Viewer'
 
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Data': sockets.AnySocketDef(),
 	}
 
@@ -65,6 +67,12 @@ class ViewerNode(base.MaxwellSimNode):
 		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
 		default=False,
 		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
+	)
+
+	cache__data_was_unlinked: bpy.props.BoolProperty(
+		name='Data Was Unlinked',
+		description="Whether the Data input was unlinked last time it was checked.",
+		default=True,
 	)
 
 	####################
@@ -111,46 +119,39 @@ class ViewerNode(base.MaxwellSimNode):
 			console.print(data)
 
 	####################
-	# - Updates
+	# - Event Methods
 	####################
+	@events.on_value_changed(
+		socket_name='Data',
+		props={'auto_plot'},
+	)
+	def on_changed_2d_data(self, props):
+		# Show Plot
+		## Don't have to un-show other plots.
+		if self.inputs['Data'].is_linked and props['auto_plot']:
+			self.trigger_action('show_plot')
+
 	@events.on_value_changed(
 		socket_name='Data',
 		props={'auto_3d_preview'},
 	)
-	def on_value_changed__data(self, props):
-		# Show Plot
-		## Don't have to un-show other plots.
-		if self.auto_plot:
-			self.trigger_action('show_plot')
+	def on_changed_3d_data(self, props):
+		# Data Not Attached
+		if not self.inputs['Data'].is_linked:
+			self.cache__data_was_unlinked = True
 
-		# Remove Anything Previewed
-		preview_collection = managed_bl_object.bl_collection(
-			managed_bl_object.PREVIEW_COLLECTION_NAME,
-			view_layer_exclude=False,
-		)
-		for bl_object in preview_collection.objects.values():
-			preview_collection.objects.unlink(bl_object)
+		# Data Just Attached
+		elif self.cache__data_was_unlinked:
+			node_tree = self.id_data
 
-		# Preview Anything that Should be Previewed (maybe)
-		if props['auto_3d_preview']:
-			self.trigger_action('show_preview')
+			# Unpreview Everything
+			node_tree.unpreview_all()
 
-	@events.on_value_changed(
-		prop_name='auto_3d_preview',
-		props={'auto_3d_preview'},
-	)
-	def on_value_changed__auto_3d_preview(self, props):
-		# Remove Anything Previewed
-		preview_collection = managed_bl_object.bl_collection(
-			managed_bl_object.PREVIEW_COLLECTION_NAME,
-			view_layer_exclude=False,
-		)
-		for bl_object in preview_collection.objects.values():
-			preview_collection.objects.unlink(bl_object)
-
-		# Preview Anything that Should be Previewed (maybe)
-		if props['auto_3d_preview']:
-			self.trigger_action('show_preview')
+			# Enable Previews in Tree
+			if props['auto_3d_preview']:
+				log.info('Enabling 3D Previews from "%s"', self.name)
+				self.trigger_action('show_preview')
+				self.cache__data_was_unlinked = False
 
 
 ####################

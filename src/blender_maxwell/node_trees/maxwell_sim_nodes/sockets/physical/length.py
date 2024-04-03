@@ -3,9 +3,13 @@ import numpy as np
 import pydantic as pyd
 import sympy.physics.units as spu
 
+from .....utils import logger
+from .....utils import extra_sympy_units as spux
 from .....utils.pydantic_sympy import SympyExpr
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 ####################
@@ -20,8 +24,8 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 	# - Properties
 	####################
 	raw_value: bpy.props.FloatProperty(
-		name='Unitless Force',
-		description='Represents the unitless part of the force',
+		name='Unitless Length',
+		description='Represents the unitless part of the length',
 		default=0.0,
 		precision=6,
 		update=(lambda self, context: self.sync_prop('raw_value', context)),
@@ -68,7 +72,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 
 	@value.setter
 	def value(self, value: SympyExpr) -> None:
-		self.raw_value = spu.convert_to(value, self.unit) / self.unit
+		self.raw_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
 
 	@property
 	def value_list(self) -> list[SympyExpr]:

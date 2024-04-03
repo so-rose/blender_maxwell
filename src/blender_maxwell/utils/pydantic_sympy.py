@@ -111,28 +111,24 @@ def ConstrSympyExpr(
 			allowed_sets
 			and isinstance(expr, sp.Expr)
 			and not any(
-				[
-					{
-						'integer': expr.is_integer,
-						'rational': expr.is_rational,
-						'real': expr.is_real,
-						'complex': expr.is_complex,
-					}[allowed_set]
-					for allowed_set in allowed_sets
-				]
+				{
+					'integer': expr.is_integer,
+					'rational': expr.is_rational,
+					'real': expr.is_real,
+					'complex': expr.is_complex,
+				}[allowed_set]
+				for allowed_set in allowed_sets
 			)
 		):
 			msgs.add(
 				f"allowed_sets={allowed_sets} does not match expression {expr} (remember to add assumptions to symbols, ex. `x = sp.Symbol('x', real=True))"
 			)
 		if allowed_structures and not any(
-			[
-				{
-					'matrix': isinstance(expr, sp.MatrixBase),
-				}[allowed_set]
-				for allowed_set in allowed_structures
-				if allowed_structures != 'scalar'
-			]
+			{
+				'matrix': isinstance(expr, sp.MatrixBase),
+			}[allowed_set]
+			for allowed_set in allowed_structures
+			if allowed_structures != 'scalar'
 		):
 			msgs.add(
 				f"allowed_structures={allowed_structures} does not match expression {expr} (remember to add assumptions to symbols, ex. `x = sp.Symbol('x', real=True))"

@@ -1,38 +1,40 @@
-import bpy
+import typing as typ
+
 import sympy.physics.units as spu
 import tidy3d as td
 
-from ......utils import analyze_geonodes
+from ......assets.import_geonodes import GeoNodes, import_geonodes
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
-
-GEONODES_STRUCTURE_SPHERE = 'structure_sphere'
 
 
 class SphereStructureNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.SphereStructure
 	bl_label = 'Sphere Structure'
+	use_sim_node_name = True
 
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'Radius': sockets.PhysicalLengthSocketDef(
 			default_value=150 * spu.nm,
 		),
 		'Medium': sockets.MaxwellMediumSocketDef(),
 	}
-	output_sockets = {
+	output_sockets: typ.ClassVar = {
 		'Structure': sockets.MaxwellStructureSocketDef(),
 	}
 
-	managed_obj_defs = {
-		'structure_sphere': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix='',
-		)
+	managed_obj_defs: typ.ClassVar = {
+		'mesh': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLMesh(name),
+		),
+		'modifier': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLModifier(name),
+		),
 	}
 
 	####################
@@ -41,21 +43,19 @@ class SphereStructureNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Structure',
 		input_sockets={'Center', 'Radius', 'Medium'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Radius': 'Tidy3DUnits',
+		},
 	)
 	def compute_structure(self, input_sockets: dict) -> td.Box:
-		medium = input_sockets['Medium']
-		_center = input_sockets['Center']
-		_radius = input_sockets['Radius']
-
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		radius = spu.convert_to(_radius, spu.um) / spu.um
-
 		return td.Structure(
 			geometry=td.Sphere(
-				radius=radius,
-				center=center,
+				radius=input_sockets['Radius'],
+				center=input_sockets['Center'],
 			),
-			medium=medium,
+			medium=input_sockets['Medium'],
 		)
 
 	####################
@@ -63,52 +63,42 @@ class SphereStructureNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		socket_name={'Center', 'Radius'},
+		prop_name='preview_active',
+		props={'preview_active'},
 		input_sockets={'Center', 'Radius'},
-		managed_objs={'structure_sphere'},
+		managed_objs={'mesh', 'modifier'},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Radius': 'Tidy3DUnits',
+		},
 	)
-	def on_value_changed__center_radius(
+	def on_inputs_changed(
 		self,
-		input_sockets: dict,
+		props: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
+		input_sockets: dict,
+		unit_systems: dict,
 	):
-		_center = input_sockets['Center']
-		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
-
-		_radius = input_sockets['Radius']
-		radius = float(spu.convert_to(_radius, spu.um) / spu.um)
-		## TODO: Preview unit system?? Presume um for now
-
-		# Retrieve Hard-Coded GeoNodes and Analyze Input
-		geo_nodes = bpy.data.node_groups[GEONODES_STRUCTURE_SPHERE]
-		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
-
-		# Sync Modifier Inputs
-		managed_objs['structure_sphere'].sync_geonodes_modifier(
-			geonodes_node_group=geo_nodes,
-			geonodes_identifier_to_value={
-				geonodes_interface['Radius'].identifier: radius,
-				## TODO: Use 'bl_socket_map.value_to_bl`!
-				## - This accounts for auto-conversion, unit systems, etc. .
-				## - We could keep it in the node base class...
-				## - ...But it needs aligning with Blender, too. Hmm.
+		# Push Input Values to GeoNodes Modifier
+		managed_objs['modifier'].bl_modifier(
+			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.PrimitiveSphere, 'link'),
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Radius': input_sockets['Radius'],
+				},
 			},
 		)
+		# Push Preview State
+		if props['preview_active']:
+			managed_objs['mesh'].show_preview()
 
-		# Sync Object Position
-		managed_objs['structure_sphere'].bl_object('MESH').location = center
-
-	####################
-	# - Preview - Show Preview
-	####################
-	@events.on_show_preview(
-		managed_objs={'structure_sphere'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		managed_objs['structure_sphere'].show_preview('MESH')
-		self.on_value_changed__center_radius()
+	@events.on_init()
+	def on_init(self):
+		self.on_inputs_changed()
 
 
 ####################

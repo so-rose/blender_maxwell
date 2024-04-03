@@ -1,16 +1,12 @@
 import math
+import typing as typ
 
-import bpy
 import sympy as sp
-import sympy.physics.units as spu
 import tidy3d as td
 
-from .....utils import analyze_geonodes
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
-
-GEONODES_PLANE_WAVE = 'source_plane_wave'
 
 
 def convert_vector_to_spherical(
@@ -50,17 +46,17 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
 		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'Direction': sockets.Real3DVectorSocketDef(default_value=sp.Matrix([0, 0, -1])),
 		'Pol Angle': sockets.PhysicalAngleSocketDef(),
 	}
-	output_sockets = {
+	output_sockets: typ.ClassVar = {
 		'Source': sockets.MaxwellSourceSocketDef(),
 	}
 
-	managed_obj_defs = {
+	managed_obj_defs: typ.ClassVar = {
 		'plane_wave_source': ct.schemas.ManagedObjDef(
 			mk=lambda name: managed_objs.ManagedBLObject(name),
 			name_prefix='',
@@ -73,26 +69,29 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Source',
 		input_sockets={'Temporal Shape', 'Center', 'Direction', 'Pol Angle'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+		},
 	)
 	def compute_source(self, input_sockets: dict):
-		temporal_shape = input_sockets['Temporal Shape']
-		_center = input_sockets['Center']
 		direction = input_sockets['Direction']
 		pol_angle = input_sockets['Pol Angle']
 
-		injection_axis, dir_sgn, theta, phi = convert_vector_to_spherical(direction)
+		injection_axis, dir_sgn, theta, phi = convert_vector_to_spherical(
+			input_sockets['Direction']
+		)
 
 		size = {
 			'x': (0, math.inf, math.inf),
 			'y': (math.inf, 0, math.inf),
 			'z': (math.inf, math.inf, 0),
 		}[injection_axis]
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
 
 		# Display the results
 		return td.PlaneWave(
-			center=center,
-			source_time=temporal_shape,
+			center=input_sockets['Center'],
+			source_time=input_sockets['Temporal Shape'],
 			size=size,
 			direction=dir_sgn,
 			angle_theta=theta,
@@ -100,54 +99,54 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 			pol_angle=pol_angle,
 		)
 
-	####################
-	# - Preview
-	####################
-	@events.on_value_changed(
-		socket_name={'Center', 'Direction'},
-		input_sockets={'Center', 'Direction'},
-		managed_objs={'plane_wave_source'},
-	)
-	def on_value_changed__center_direction(
-		self,
-		input_sockets: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		_center = input_sockets['Center']
-		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
+	#####################
+	## - Preview
+	#####################
+	# @events.on_value_changed(
+	# socket_name={'Center', 'Direction'},
+	# input_sockets={'Center', 'Direction'},
+	# managed_objs={'plane_wave_source'},
+	# )
+	# def on_value_changed__center_direction(
+	# self,
+	# input_sockets: dict,
+	# managed_objs: dict[str, ct.schemas.ManagedObj],
+	# ):
+	# _center = input_sockets['Center']
+	# center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
 
-		_direction = input_sockets['Direction']
-		direction = tuple([float(el) for el in _direction])
-		## TODO: Preview unit system?? Presume um for now
+	# _direction = input_sockets['Direction']
+	# direction = tuple([float(el) for el in _direction])
+	# ## TODO: Preview unit system?? Presume um for now
 
-		# Retrieve Hard-Coded GeoNodes and Analyze Input
-		geo_nodes = bpy.data.node_groups[GEONODES_PLANE_WAVE]
-		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
+	# # Retrieve Hard-Coded GeoNodes and Analyze Input
+	# geo_nodes = bpy.data.node_groups[GEONODES_PLANE_WAVE]
+	# geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
 
-		# Sync Modifier Inputs
-		managed_objs['plane_wave_source'].sync_geonodes_modifier(
-			geonodes_node_group=geo_nodes,
-			geonodes_identifier_to_value={
-				geonodes_interface['Direction'].identifier: direction,
-				## TODO: Use 'bl_socket_map.value_to_bl`!
-				## - This accounts for auto-conversion, unit systems, etc. .
-				## - We could keep it in the node base class...
-				## - ...But it needs aligning with Blender, too. Hmm.
-			},
-		)
+	# # Sync Modifier Inputs
+	# managed_objs['plane_wave_source'].sync_geonodes_modifier(
+	# geonodes_node_group=geo_nodes,
+	# geonodes_identifier_to_value={
+	# geonodes_interface['Direction'].identifier: direction,
+	# ## TODO: Use 'bl_socket_map.value_to_bl`!
+	# ## - This accounts for auto-conversion, unit systems, etc. .
+	# ## - We could keep it in the node base class...
+	# ## - ...But it needs aligning with Blender, too. Hmm.
+	# },
+	# )
 
-		# Sync Object Position
-		managed_objs['plane_wave_source'].bl_object('MESH').location = center
+	# # Sync Object Position
+	# managed_objs['plane_wave_source'].bl_object('MESH').location = center
 
-	@events.on_show_preview(
-		managed_objs={'plane_wave_source'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		managed_objs['plane_wave_source'].show_preview('MESH')
-		self.on_value_changed__center_direction()
+	# @events.on_show_preview(
+	# managed_objs={'plane_wave_source'},
+	# )
+	# def on_show_preview(
+	# self,
+	# managed_objs: dict[str, ct.schemas.ManagedObj],
+	# ):
+	# managed_objs['plane_wave_source'].show_preview('MESH')
+	# self.on_value_changed__center_direction()
 
 
 ####################

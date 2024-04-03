@@ -59,7 +59,6 @@ def import_geonodes(
 	- Retrieve the node group and return it.
 	"""
 	if geonodes in bpy.data.node_groups and not force_import:
-		log.info('Found Existing GeoNodes Tree (name=%s)', geonodes)
 		return bpy.data.node_groups[geonodes]
 
 	filename = geonodes

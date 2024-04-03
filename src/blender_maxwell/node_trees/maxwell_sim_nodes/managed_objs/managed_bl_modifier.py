@@ -53,6 +53,7 @@ def write_modifier_geonodes(
 	bl_modifier: bpy.types.Modifier,
 	modifier_attrs: ModifierAttrsNODES,
 ) -> bool:
+	modifier_altered = False
 	# Alter GeoNodes Group
 	if bl_modifier.node_group != modifier_attrs['node_group']:
 		log.info(
@@ -66,7 +67,7 @@ def write_modifier_geonodes(
 	# Alter GeoNodes Modifier Inputs
 	## First we retrieve the interface items by-Socket Name
 	geonodes_interface = analyze_geonodes.interface(
-		bl_modifier.node_group, direct='INPUT'
+		bl_modifier.node_group, direc='INPUT'
 	)
 	for (
 		socket_name,
@@ -74,11 +75,12 @@ def write_modifier_geonodes(
 	) in modifier_attrs['inputs'].items():
 		# Compute Writable BL Socket Value
 		## Analyzes the socket and unitsys to prep a ready-to-write value.
-		## Writte directly to the modifier dict.
+		## Write directly to the modifier dict.
 		bl_socket_value = bl_socket_map.writable_bl_socket_value(
 			geonodes_interface[socket_name],
 			value,
-			modifier_attrs['unit_system'],
+			unit_system=modifier_attrs['unit_system'],
+			allow_unit_not_in_unit_system=True,
 		)
 
 		# Compute Interface ID from Socket Name
@@ -91,6 +93,7 @@ def write_modifier_geonodes(
 			for i, bl_socket_subvalue in enumerate(bl_socket_value):
 				if bl_modifier[iface_id][i] != bl_socket_subvalue:
 					bl_modifier[iface_id][i] = bl_socket_subvalue
+					modifier_altered = True
 
 		# IF int/float Mismatch: Assign Float-Cast of Integer
 		## Blender is strict; only floats can set float vals.
@@ -104,6 +107,8 @@ def write_modifier_geonodes(
 		else:
 			bl_modifier[iface_id] = bl_socket_value
 			modifier_altered = True
+
+	return modifier_altered
 
 
 def write_modifier(
@@ -144,7 +149,7 @@ class ManagedBLModifier(ct.schemas.ManagedObj):
 	def name(self, value: str) -> None:
 		## TODO: Handle name conflict within same BLObject
 		log.info(
-			'Changing BLModifier w/Name "%s" to Name "%s"', self._bl_object_name, value
+			'Changing BLModifier w/Name "%s" to Name "%s"', self._modifier_name, value
 		)
 		self._modifier_name = value
 

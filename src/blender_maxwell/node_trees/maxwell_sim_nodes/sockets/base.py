@@ -42,7 +42,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# - Initialization
 	####################
 	def __init_subclass__(cls, **kwargs: typ.Any):
-		super().__init_subclass__(**kwargs)  ## Yucky superclass setup.
+		super().__init_subclass__(**kwargs)
 
 		# Setup Blender ID for Node
 		if not hasattr(cls, 'socket_type'):
@@ -266,15 +266,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if kind == ct.DataFlowKind.Value:
 			if self.is_list:
 				return self.value_list
-			else:
-				return self.value
-		elif kind == ct.DataFlowKind.LazyValue:
+			return self.value
+		if kind == ct.DataFlowKind.LazyValue:
 			if self.is_list:
 				return self.lazy_value_list
-			else:
-				return self.lazy_value
 			return self.lazy_value
-		elif kind == ct.DataFlowKind.Capabilities:
+		if kind == ct.DataFlowKind.Capabilities:
 			return self.capabilities
 
 		return None

@@ -12,7 +12,6 @@ with pydeps.syspath_from_bpy_prefs():
 ####################
 # - Useful Methods
 ####################
-@functools.lru_cache(maxsize=4096)
 def uses_units(expression: sp.Expr) -> bool:
 	## TODO: An LFU cache could do better than an LRU.
 	"""Checks if an expression uses any units (`Quantity`)."""
@@ -23,7 +22,6 @@ def uses_units(expression: sp.Expr) -> bool:
 
 
 # Function to return a set containing all units used in the expression
-@functools.lru_cache(maxsize=4096)
 def get_units(expression: sp.Expr):
 	## TODO: An LFU cache could do better than an LRU.
 	"""Gets all the units of an expression (as `Quantity`)."""
@@ -94,7 +92,6 @@ def parse_abbrev_symbols_to_units(expr: sp.Basic) -> sp.Basic:
 ####################
 # - Units <-> Scalars
 ####################
-@functools.lru_cache(maxsize=8192)
 def scale_to_unit(expr: sp.Expr, unit: spu.Quantity) -> typ.Any:
 	## TODO: An LFU cache could do better than an LRU.
 	unitless_expr = spu.convert_to(expr, unit) / unit
@@ -108,7 +105,6 @@ def scale_to_unit(expr: sp.Expr, unit: spu.Quantity) -> typ.Any:
 ####################
 # - Sympy <-> Scalars
 ####################
-@functools.lru_cache(maxsize=8192)
 def sympy_to_python(scalar: sp.Basic) -> int | float | complex | tuple | list:
 	"""Convert a scalar sympy expression to the directly corresponding Python type.
 
@@ -128,7 +124,7 @@ def sympy_to_python(scalar: sp.Basic) -> int | float | complex | tuple | list:
 		# Detect Row / Column Vector
 		## When it's "actually" a 1D structure, flatten and return as tuple.
 		if 1 in scalar.shape:
-			return tuple(itertools.from_iterable(list_2d))
+			return tuple(itertools.chain.from_iterable(list_2d))
 
 		return list_2d
 	if scalar.is_integer:

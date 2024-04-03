@@ -1,17 +1,17 @@
-import bpy
+import typing as typ
+
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from .....utils import analyze_geonodes, logger
+from .....assets.import_geonodes import GeoNodes, import_geonodes
 from .....utils import extra_sympy_units as spux
+from .....utils import logger
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
 
 log = logger.get(__name__)
-
-GEONODES_MONITOR_BOX = 'monitor_box'
 
 
 class EHFieldMonitorNode(base.MaxwellSimNode):
@@ -24,14 +24,14 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'Size': sockets.PhysicalSize3DSocketDef(),
 		'Samples/Space': sockets.Integer3DVectorSocketDef(
 			default_value=sp.Matrix([10, 10, 10])
 		),
 	}
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
 			'Freqs': sockets.PhysicalFreqSocketDef(
 				is_list=True,
@@ -45,15 +45,17 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			),
 		},
 	}
-	output_sockets = {
+	output_sockets: typ.ClassVar = {
 		'Monitor': sockets.MaxwellMonitorSocketDef(),
 	}
 
-	managed_obj_defs = {
-		'monitor_box': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix='',
-		)
+	managed_obj_defs: typ.ClassVar = {
+		'mesh': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLMesh(name),
+		),
+		'modifier': ct.schemas.ManagedObjDef(
+			mk=lambda name: managed_objs.ManagedBLModifier(name),
+		),
 	}
 
 	####################
@@ -61,6 +63,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Monitor',
+		props={'active_socket_set', 'sim_node_name'},
 		input_sockets={
 			'Rec Start',
 			'Rec Stop',
@@ -70,60 +73,52 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			'Samples/Time',
 			'Freqs',
 		},
-		props={'active_socket_set', 'sim_node_name'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Size': 'Tidy3DUnits',
+			'Samples/Space': 'Tidy3DUnits',
+			'Rec Start': 'Tidy3DUnits',
+			'Rec Stop': 'Tidy3DUnits',
+			'Samples/Time': 'Tidy3DUnits',
+		},
 	)
 	def compute_monitor(
-		self, input_sockets: dict, props: dict
+		self, input_sockets: dict, props: dict, unit_systems: dict,
 	) -> td.FieldMonitor | td.FieldTimeMonitor:
-		"""Computes the value of the 'Monitor' output socket, which the user can select as being either a `td.FieldMonitor` or `td.FieldTimeMonitor`."""
-		_center = input_sockets['Center']
-		_size = input_sockets['Size']
-		_samples_space = input_sockets['Samples/Space']
-
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		size = tuple(spu.convert_to(_size, spu.um) / spu.um)
-		samples_space = tuple(_samples_space)
-
 		if props['active_socket_set'] == 'Freq Domain':
 			freqs = input_sockets['Freqs']
 
 			log.info(
-				'Computing FieldMonitor (name=%s) with center=%s, size=%s',
+				'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
 				props['sim_node_name'],
-				center,
-				size,
+				input_sockets['Center'],
+				input_sockets['Size'],
 			)
 			return td.FieldMonitor(
-				center=center,
-				size=size,
+				center=input_sockets['Center'],
+				size=input_sockets['Size'],
 				name=props['sim_node_name'],
-				interval_space=samples_space,
+				interval_space=input_sockets['Samples/Space'],
 				freqs=[
 					float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
 				],
 			)
 		## Time Domain
-		_rec_start = input_sockets['Rec Start']
-		_rec_stop = input_sockets['Rec Stop']
-		samples_time = input_sockets['Samples/Time']
-
-		rec_start = spu.convert_to(_rec_start, spu.second) / spu.second
-		rec_stop = spu.convert_to(_rec_stop, spu.second) / spu.second
-
 		log.info(
 			'Computing FieldTimeMonitor (name=%s) with center=%s, size=%s',
 			props['sim_node_name'],
-			center,
-			size,
+			input_sockets['Center'],
+			input_sockets['Size'],
 		)
 		return td.FieldTimeMonitor(
-			center=center,
-			size=size,
+			center=input_sockets['Center'],
+			size=input_sockets['Size'],
 			name=props['sim_node_name'],
-			start=rec_start,
-			stop=rec_stop,
-			interval=samples_time,
-			interval_space=samples_space,
+			start=input_sockets['Rec Start'],
+			stop=input_sockets['Rec Stop'],
+			interval=input_sockets['Samples/Time'],
+			interval_space=input_sockets['Samples/Space'],
 		)
 
 	####################
@@ -131,49 +126,37 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
+		prop_name='preview_active',
+		props={'preview_active'},
 		input_sockets={'Center', 'Size'},
-		managed_objs={'monitor_box'},
+		managed_objs={'mesh', 'modifier'},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'BlenderUnits',
+		},
 	)
-	def on_value_changed__center_size(
+	def on_inputs_changed(
 		self,
-		input_sockets: dict,
+		props: dict,
 		managed_objs: dict[str, ct.schemas.ManagedObj],
+		input_sockets: dict,
+		unit_systems: dict,
 	):
-		"""Alters the managed 3D preview objects whenever the center or size input sockets are changed."""
-		_center = input_sockets['Center']
-		center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
-
-		_size = input_sockets['Size']
-		size = tuple([float(el) for el in spu.convert_to(_size, spu.um) / spu.um])
-
-		# Retrieve Hard-Coded GeoNodes and Analyze Input
-		geo_nodes = bpy.data.node_groups[GEONODES_MONITOR_BOX]
-		geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
-
-		# Sync Modifier Inputs
-		managed_objs['monitor_box'].sync_geonodes_modifier(
-			geonodes_node_group=geo_nodes,
-			geonodes_identifier_to_value={
-				geonodes_interface['Size'].identifier: size,
+		# Push Input Values to GeoNodes Modifier
+		managed_objs['modifier'].bl_modifier(
+			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.PrimitiveBox, 'link'),
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Size': input_sockets['Size'],
+				},
 			},
 		)
-
-		# Sync Object Position
-		managed_objs['monitor_box'].bl_object('MESH').location = center
-
-	####################
-	# - Preview - Show Preview
-	####################
-	@events.on_show_preview(
-		managed_objs={'monitor_box'},
-	)
-	def on_show_preview(
-		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-	):
-		"""Requests that the managed object be previewed in response to a user request to show the preview."""
-		managed_objs['monitor_box'].show_preview('MESH')
-		self.on_value_changed__center_size()
+		# Push Preview State
+		if props['preview_active']:
+			managed_objs['mesh'].show_preview()
 
 
 ####################

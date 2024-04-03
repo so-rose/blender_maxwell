@@ -1,3 +1,5 @@
+import functools
+
 import bpy
 
 from ....utils import logger
@@ -11,6 +13,7 @@ PREVIEW_COLLECTION_NAME = 'BLMaxwell Visible'
 ####################
 # - Global Collection Handling
 ####################
+@functools.cache
 def collection(collection_name: str, view_layer_exclude: bool) -> bpy.types.Collection:
 	# Init the "Managed Collection"
 	# Ensure Collection exists (and is in the Scene collection)
@@ -32,8 +35,8 @@ def collection(collection_name: str, view_layer_exclude: bool) -> bpy.types.Coll
 
 
 def managed_collection() -> bpy.types.Collection:
-	return collection(MANAGED_COLLECTION_NAME, view_layer_exclude=False)
+	return collection(MANAGED_COLLECTION_NAME, view_layer_exclude=True)
 
 
 def preview_collection() -> bpy.types.Collection:
-	return collection(PREVIEW_COLLECTION_NAME, view_layer_exclude=True)
+	return collection(PREVIEW_COLLECTION_NAME, view_layer_exclude=False)
