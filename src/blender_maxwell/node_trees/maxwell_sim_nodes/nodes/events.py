@@ -221,10 +221,10 @@ def event_decorator(
 
 		# Set Decorated Attributes and Return
 		## Fix Introspection + Documentation
-		decorated.__name__ = method.__name__
-		decorated.__module__ = method.__module__
-		decorated.__qualname__ = method.__qualname__
-		decorated.__doc__ = method.__doc__
+		#decorated.__name__ = method.__name__
+		#decorated.__module__ = method.__module__
+		#decorated.__qualname__ = method.__qualname__
+		#decorated.__doc__ = method.__doc__
 
 		## Add Spice
 		decorated.action_type = action_type

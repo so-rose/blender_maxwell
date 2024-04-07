@@ -117,7 +117,13 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 	####################
 	# - Property Sync
 	####################
-	def sync_addon_logging(self, only_sync_logger: logging.Logger | None = None):
+	def sync_addon_logging(self, logger_to_setup: logging.Logger | None = None) -> None:
+		"""Configure one, or all, active addon logger(s).
+
+		Parameters:
+			logger_to_setup:
+				When set to None, all addon loggers will be configured
+		"""
 		if pydeps.DEPS_OK:
 			log.info('Getting Logger (DEPS_OK = %s)', str(pydeps.DEPS_OK))
 			with pydeps.importable_addon_deps(self.pydeps_path):
@@ -137,19 +143,20 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		}
 
 		# Sync Single Logger / All Loggers
-		if only_sync_logger is not None:
+		if logger_to_setup is not None:
 			logger.setup_logger(
 				logger.console_handler,
 				logger.file_handler,
-				only_sync_logger,
+				logger_to_setup,
 				**log_setup_kwargs,
 			)
-			return
-		logger.sync_loggers(
-			logger.console_handler,
-			logger.file_handler,
-			**log_setup_kwargs,
-		)
+		else:
+			log.info('Re-Configuring All Loggers')
+			logger.sync_all_loggers(
+				logger.console_handler,
+				logger.file_handler,
+				**log_setup_kwargs,
+			)
 
 	def sync_use_default_pydeps_path(self, _: bpy.types.Context):
 		# Switch to Default

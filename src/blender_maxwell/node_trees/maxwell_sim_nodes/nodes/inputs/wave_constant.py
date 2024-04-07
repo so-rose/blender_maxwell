@@ -46,29 +46,17 @@ class WaveConstantNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'WL',
-		input_sockets={'WL', 'Freq'},
+		input_sockets={'WL'},
 	)
-	def compute_vac_wl(self, input_sockets: dict) -> sp.Expr:
-		if (vac_wl := input_sockets['WL']) is not None:
-			return vac_wl
-		if (freq := input_sockets['Freq']) is not None:
-			return constants.vac_speed_of_light / freq
-
-		msg = 'Vac WL and Freq are both None'
-		raise RuntimeError(msg)
+	def compute_vacwl_from_vacwl(self, input_sockets: dict) -> sp.Expr:
+		return input_sockets['WL']
 
 	@events.computes_output_socket(
-		'Freq',
-		input_sockets={'WL', 'Freq'},
+		'WL',
+		input_sockets={'Freq'},
 	)
-	def compute_freq(self, input_sockets: dict) -> sp.Expr:
-		if (vac_wl := input_sockets['WL']) is not None:
-			return constants.vac_speed_of_light / vac_wl
-		if (freq := input_sockets['Freq']) is not None:
-			return freq
-
-		msg = 'Vac WL and Freq are both None'
-		raise RuntimeError(msg)
+	def compute_freq_from_vacwl(self, input_sockets: dict) -> sp.Expr:
+		return constants.vac_speed_of_light / input_sockets['Freq']
 
 	####################
 	# - Event Methods: Listy Output

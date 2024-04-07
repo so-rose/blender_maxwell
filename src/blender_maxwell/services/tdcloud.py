@@ -14,6 +14,10 @@ from pathlib import Path
 import tidy3d as td
 import tidy3d.web as td_web
 
+from ..utils import logger
+
+log = logger.get(__name__)
+
 CloudFolderID = str
 CloudFolderName = str
 CloudFolder = td_web.core.task_core.Folder
@@ -101,6 +105,7 @@ class TidyCloudFolders:
 			cloud_folder.folder_id: cloud_folder for cloud_folder in cloud_folders
 		}
 		cls.cache_folders = folders
+		log.info("Retrieved Folders: %s", str(cls.cache_folders))
 		return folders
 
 	@classmethod
@@ -238,6 +243,7 @@ class TidyCloudTasks:
 		## Task by-Folder Cache
 		cls.cache_folder_tasks[cloud_folder.folder_id] = set(cloud_tasks)
 
+		log.info('Retrieved Tasks (folder="%s"): %s)', cloud_folder.folder_id, str(set(cloud_tasks)))
 		return cloud_tasks
 
 	####################
@@ -251,18 +257,26 @@ class TidyCloudTasks:
 		if download_sim_path is None:
 			with tempfile.NamedTemporaryFile(delete=False) as f:
 				_path_tmp = Path(f.name)
-				_path_tmp.rename(f.name + '.hdf5')
-				path_sim = Path(f.name + '.hdf5')
+				_path_tmp.rename(f.name + '.hdf5.gz')
+				path_sim = Path(f.name)
 		else:
 			path_sim = download_sim_path
 
 		# Get Sim Data (from file and/or download)
 		if path_sim.is_file():
-			sim_data = td.SimulationData.from_file(str(download_sim_path))
+			log.info('Loading Cloud Task "%s" from "%s"', cloud_task.cloud_id, path_sim)
+			sim_data = td.SimulationData.from_file(str(path_sim))
 		else:
+			log.info(
+				'Downloading & Loading Cloud Task "%s" to "%s"',
+				cloud_task.task_id,
+				path_sim,
+			)
 			sim_data = td_web.api.webapi.load(
 				cloud_task.task_id,
-				path=str(download_sim_path),
+				path=str(path_sim),
+				replace_existing=True,
+				verbose=True,
 			)
 
 		# Delete Temporary File (if used)
@@ -404,10 +418,7 @@ class TidyCloudTasks:
 		## By deleting the folder ID, all tasks within will be reloaded
 		del cls.cache_folder_tasks[folder_id]
 
-		return {
-			task_id: cls.tasks(cloud_folder)[task_id]
-			for task_id in cls.cache_folder_tasks[folder_id]
-		}
+		return dict(cls.tasks(cloud_folder).items())
 
 	@classmethod
 	def abort_task(cls, cloud_task: CloudTask) -> CloudTask:

@@ -63,6 +63,7 @@ numpy==1.24.3
     # via matplotlib
     # via scipy
     # via shapely
+    # via tidy3d
     # via trimesh
     # via xarray
 packaging==24.0
@@ -115,7 +116,7 @@ shapely==2.0.3
 six==1.16.0
     # via python-dateutil
 sympy==1.12
-tidy3d==2.6.0
+tidy3d==2.6.3
 toml==0.10.2
     # via tidy3d
 toolz==0.12.1

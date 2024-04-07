@@ -23,6 +23,8 @@ class ConsoleViewOperator(bpy.types.Operator):
 
 	def execute(self, context):
 		node = context.node
+		print('Executing Operator')
+
 		node.print_data_to_console()
 		return {'FINISHED'}
 
@@ -110,9 +112,17 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Methods
 	####################
 	def print_data_to_console(self):
-		if not (data := self._compute_input('Data')):
+		import sys
+		for module_name, module in sys.modules.copy().items():
+			if module_name == '__mp_main__':
+				print('Anything, even repr(), with this module just crashes:', module_name)
+				print(module)  ## Crash
+
+		if not self.inputs['Data'].is_linked:
 			return
 
+		log.info('Printing Data to Console')
+		data = self._compute_input('Data')
 		if isinstance(data, sp.Basic):
 			console.print(sp.pretty(data, use_unicode=True))
 		else:

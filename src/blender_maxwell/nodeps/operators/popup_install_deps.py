@@ -70,7 +70,7 @@ class InstallPyDeps(bpy.types.Operator):
 			return {'CANCELLED'}
 
 		registration.run_delayed_registration(
-			registration.EVENT__ON_DEPS_INSTALLED,
+			registration.EVENT__DEPS_SATISFIED,
 			path_addon_pydeps,
 		)
 		return {'FINISHED'}

@@ -13,7 +13,7 @@ from ..nodeps.utils.simple_logger import (
 	loggers,  # noqa: F401
 	setup_logger,  # noqa: F401
 	simple_loggers,  # noqa: F401
-	sync_loggers,  # noqa: F401
+	sync_all_loggers,  # noqa: F401
 )
 
 OUTPUT_CONSOLE = rich.console.Console(
@@ -59,7 +59,7 @@ def get(module_name):
 	if (addon_prefs := info.addon_prefs()) is None:
 		msg = 'Addon preferences not defined'
 		raise RuntimeError(msg)
-	addon_prefs.sync_addon_logging(only_sync_logger=logger)
+	addon_prefs.sync_addon_logging(logger_to_setup=logger)
 
 	return logger
 

@@ -93,6 +93,7 @@ def register():
 
 	if pydeps.check_pydeps(path_pydeps):
 		log.info('PyDeps Satisfied: Loading Addon %s', info.ADDON_NAME)
+		addon_prefs.sync_addon_logging()
 		registration.register_classes(BL_REGISTER__AFTER_DEPS(path_pydeps))
 		registration.register_keymap_items(BL_KEYMAP_ITEM_DEFS__AFTER_DEPS(path_pydeps))
 	else:

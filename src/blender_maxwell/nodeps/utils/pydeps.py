@@ -23,13 +23,20 @@ DEPS_ISSUES: list[str] | None = None
 def importable_addon_deps(path_deps: Path):
 	os_path = os.fspath(path_deps)
 
-	log.info('Adding Path to sys.path: %s', str(os_path))
-	sys.path.insert(0, os_path)
-	try:
-		yield
-	finally:
-		log.info('Removing Path from sys.path: %s', str(os_path))
-		sys.path.remove(os_path)
+	if os_path not in sys.path:
+		log.info('Adding Path to sys.path: %s', str(os_path))
+		sys.path.insert(0, os_path)
+		try:
+			yield
+		finally:
+			pass
+			#log.info('Removing Path from sys.path: %s', str(os_path))
+			#sys.path.remove(os_path)
+	else:
+		try:
+			yield
+		finally:
+			pass
 
 
 @contextlib.contextmanager

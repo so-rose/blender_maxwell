@@ -1,13 +1,20 @@
+import logging
 import tomllib
 from pathlib import Path
 
 PATH_ROOT = Path(__file__).resolve().parent.parent.parent
 PATH_SRC = PATH_ROOT / 'src'
-PATH_BL_RUN = PATH_SRC / 'scripts' / 'bl_run.py'
 
+# Scripts
+PATH_BL_DELETE_ADDON = PATH_SRC / 'scripts' / 'bl_delete_addon.py'
+PATH_BL_INSTALL_ADDON = PATH_SRC / 'scripts' / 'bl_install_addon.py'
+PATH_BL_RUN_DEV = PATH_SRC / 'scripts' / 'bl_run_dev.py'
+
+# Build Dir
 PATH_BUILD = PATH_ROOT / 'build'
 PATH_BUILD.mkdir(exist_ok=True)
 
+# Dev Dir
 PATH_DEV = PATH_ROOT / 'dev'
 PATH_DEV.mkdir(exist_ok=True)
 
@@ -19,7 +26,9 @@ SIGNAL_START_CLEAN_BLENDER = 'SIGNAL__blender_is_clean'
 ####################
 # - BL_RUN Exit Codes
 ####################
+STATUS_NOCHANGE_ADDON = 42
 STATUS_UNINSTALLED_ADDON = 42
+STATUS_INSTALLED_ADDON = 69
 STATUS_NOINSTALL_ADDON = 68
 
 ####################
@@ -39,6 +48,10 @@ PATH_ADDON_ZIP = PATH_ROOT / 'build' / (ADDON_NAME + '__' + ADDON_VERSION + '.zi
 
 PATH_ADDON_BLEND_STARTER = PATH_ADDON_PKG / 'blenders' / 'starter.blend'
 
+# Set Bootstrap Log Level
+## This will be the log-level of both console and file logs, at first...
+## ...until the addon preferences have been loaded.
+BOOTSTRAP_LOG_LEVEL = logging.DEBUG
 BOOTSTRAP_LOG_LEVEL_FILENAME = '.bootstrap_log_level'
 
 # Install the ZIPped Addon

@@ -1,11 +1,16 @@
 import typing as typ
 from pathlib import Path
 
+import tidy3d as td
+
 from ...... import info
 from ......services import tdcloud
+from ......utils import logger
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events
+
+log = logger.get(__name__)
 
 
 def _sim_data_cache_path(task_id: str) -> Path:
@@ -14,6 +19,7 @@ def _sim_data_cache_path(task_id: str) -> Path:
 	Arguments:
 		task_id: The ID of the Tidy3D cloud task.
 	"""
+	(info.ADDON_CACHE / task_id).mkdir(exist_ok=True)
 	return info.ADDON_CACHE / task_id / 'sim_data.hdf5'
 
 
@@ -38,6 +44,19 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 		input_sockets={'Cloud Task'},
 	)
 	def compute_sim_data(self, input_sockets: dict) -> str:
+		## TODO: REMOVE TEST
+		log.info('Loading SimulationData File')
+		import sys
+		for module_name, module in sys.modules.copy().items():
+			if module_name == '__mp_main__':
+				print('Problematic Module Entry', module_name)
+				print(module)
+				#print('MODULE REPR', module)
+				continue
+		#return td.SimulationData.from_file(
+		#	fname='/home/sofus/src/blender_maxwell/dev/sim_demo.hdf5'
+		#)
+
 		# Validate Task Availability
 		if (cloud_task := input_sockets['Cloud Task']) is None:
 			msg = f'"{self.bl_label}" CloudTask doesn\'t exist'

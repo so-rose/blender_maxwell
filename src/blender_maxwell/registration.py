@@ -1,3 +1,12 @@
+"""Manages the registration of Blender classes, including delayed registrations that require access to Python dependencies.
+
+Attributes:
+	BL_KEYMAP: Addon-specific keymap used to register operator hotkeys. REG__CLASSES: Currently registered Blender classes.
+	REG__KEYMAP_ITEMS: Currently registered Blender keymap items.
+	DELAYED_REGISTRATIONS: Currently pending registration operations, which can be realized with `run_delayed_registration()`.
+	EVENT__DEPS_SATISFIED: A constant representing a semantic choice of key for `DELAYED_REGISTRATIONS`.
+"""
+
 import typing as typ
 from pathlib import Path
 
@@ -9,7 +18,17 @@ log = simple_logger.get(__name__)
 
 # TODO: More types for these things!
 DelayedRegKey: typ.TypeAlias = str
-BLClass: typ.TypeAlias = typ.Any  ## TODO: Better Type
+BLClass: typ.TypeAlias = (
+	bpy.types.Panel
+	| bpy.types.UIList
+	| bpy.types.Menu
+	| bpy.types.Header
+	| bpy.types.Operator
+	| bpy.types.KeyingSetInfo
+	| bpy.types.RenderEngine
+	| bpy.types.AssetShelf
+	| bpy.types.FileHandler
+)
 BLKeymapItem: typ.TypeAlias = typ.Any  ## TODO: Better Type
 KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
 
@@ -24,15 +43,22 @@ REG__KEYMAP_ITEMS: list[BLKeymapItem] = []
 DELAYED_REGISTRATIONS: dict[DelayedRegKey, typ.Callable[[Path], None]] = {}
 
 ####################
-# - Constants
+# - Delayed Registration Keys
 ####################
-EVENT__DEPS_SATISFIED: str = 'on_deps_satisfied'
+EVENT__DEPS_SATISFIED: DelayedRegKey = 'on_deps_satisfied'
 
 
 ####################
 # - Class Registration
 ####################
-def register_classes(bl_register: list):
+def register_classes(bl_register: list[BLClass]) -> None:
+	"""Registers a Blender class, allowing it to hook into relevant Blender features.
+
+	Caches registered classes in the module global `REG__CLASSES`.
+
+	Parameters:
+		bl_register: List of Blender classes to register.
+	"""
 	log.info('Registering %s Classes', len(bl_register))
 	for cls in bl_register:
 		if cls.bl_idname in REG__CLASSES:
@@ -48,7 +74,11 @@ def register_classes(bl_register: list):
 		REG__CLASSES.append(cls)
 
 
-def unregister_classes():
+def unregister_classes() -> None:
+	"""Unregisters all previously registered Blender classes.
+
+	All previously registered Blender classes can be found in the module global variable `REG__CLASSES`.
+	"""
 	log.info('Unregistering %s Classes', len(REG__CLASSES))
 	for cls in reversed(REG__CLASSES):
 		log.debug(
@@ -123,22 +153,44 @@ def delay_registration(
 	classes_cb: typ.Callable[[Path], list[BLClass]],
 	keymap_item_defs_cb: typ.Callable[[Path], list[KeymapItemDef]],
 ) -> None:
+	"""Delays the registration of Blender classes that depend on certain Python dependencies, for which neither the location nor validity is yet known.
+
+	The function that registers is stored in the module global `DELAYED_REGISTRATIONS`, indexed by `delayed_reg_key`.
+	Once the PyDeps location and validity is determined, `run_delayed_registration()` can be used as a shorthand for accessing `DELAYED_REGISTRATIONS[delayed_reg_key]`.
+
+	Parameters:
+		delayed_reg_key: The identifier with which to index the registration callback.
+			Module-level constants like `EVENT__DEPS_SATISFIED` are a good choice.
+		classes_cb: A function that takes a `sys.path`-compatible path to Python dependencies needed by the Blender classes in question, and returns a list of Blender classes to import.
+			`register_classes()` will be used to actually register the returned Blender classes.
+		keymap_item_defs_cb: Similar, except for addon keymap items.
+
+	Returns:
+		A function that takes a `sys.path`-compatible path to the Python dependencies needed to import the given Blender classes.
+	"""
 	if delayed_reg_key in DELAYED_REGISTRATIONS:
 		msg = f'Already delayed a registration with key {delayed_reg_key}'
 		raise ValueError(msg)
 
-	def register_cb(path_deps: Path):
+	def register_cb(path_pydeps: Path):
 		log.info(
 			'Running Delayed Registration (key %s) with PyDeps: %s',
 			delayed_reg_key,
-			path_deps,
+			path_pydeps,
 		)
-		register_classes(classes_cb(path_deps))
-		register_keymap_items(keymap_item_defs_cb(path_deps))
+		register_classes(classes_cb(path_pydeps))
+		register_keymap_items(keymap_item_defs_cb(path_pydeps))
 
 	DELAYED_REGISTRATIONS[delayed_reg_key] = register_cb
 
 
-def run_delayed_registration(delayed_reg_key: DelayedRegKey, path_deps: Path) -> None:
+def run_delayed_registration(delayed_reg_key: DelayedRegKey, path_pydeps: Path) -> None:
+	"""Run a delayed registration, by using `delayed_reg_key` to lookup the correct path, passing `path_pydeps` to the registration.
+
+	Parameters:
+		delayed_reg_key: The identifier with which to index the registration callback.
+			Must match the parameter with which the delayed registration was first declared.
+		path_pydeps: The `sys.path`-compatible path to the Python dependencies that the classes need to have available in order to register.
+	"""
 	register_cb = DELAYED_REGISTRATIONS.pop(delayed_reg_key)
-	register_cb(path_deps)
+	register_cb(path_pydeps)

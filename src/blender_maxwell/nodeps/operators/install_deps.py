@@ -66,13 +66,22 @@ class InstallPyDeps(bpy.types.Operator):
 				'Running pip w/cmdline: %s',
 				' '.join(cmdline),
 			)
+			print("TRYING CRASH")
+			import sys
+			for module_name, module in sys.modules.copy().items():
+				if module_name == '__mp_main__':
+					print('Problematic Module Entry', module_name)
+					print(module)
+					#print('MODULE REPR', module)
+					continue
+			print("NO CRASH")
 			subprocess.check_call(cmdline)
 		except subprocess.CalledProcessError:
 			log.exception('Failed to install PyDeps')
 			return {'CANCELLED'}
 
 		registration.run_delayed_registration(
-			registration.EVENT__ON_DEPS_INSTALLED,
+			registration.EVENT__DEPS_SATISFIED,
 			path_addon_pydeps,
 		)
 		return {'FINISHED'}
