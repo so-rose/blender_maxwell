@@ -1,3 +1,9 @@
+# Acute Tasks
+- Implement Material Import for Maxim Data
+- Move preview GN trees to the asset library.
+
+
+
 # Nodes
 **LEGEND**:
 - [-] Exists but doesn't quite work good enough.
@@ -6,430 +12,460 @@
 - [?] Unsure whether we should do this.
 
 ## Inputs
-[x] Wave Constant
-- [x] Implement export of frequency / wavelength array/range.
-[-] Unit System
-- [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
+- [x] Wave Constant
+	- [x] Implement export of frequency / wavelength array/range.
+- [-] Unit System
+	- [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
 
-[ ] Constants / Scientific Constant
-[x] Constants / Number Constant
-[ ] Constants / Physical Constant
-- [ ] Pol: Elliptical plot viz
-- [ ] Pol: Poincare sphere viz
-[x] Constants / Blender Constant
+- [ ] Constants / Scientific Constant
+	- [ ] Create `utils.sci_constants` to map `scipy` constants to `sympy` units.
+	- [ ] Utilize `utils.sci_constants` to make it easy for the user to select appropriate constants with two-layered dropdowns.
+- [x] Constants / Number Constant
+- [ ] Constants / Physical Constant
+	- [ ] Pol: Elliptical viz as 2D plot.
+	- [ ] Pol: Poincare sphere viz as 3D GN.
+- [x] Constants / Blender Constant
 
-[x] Web / Tidy3D Web Importer
+- [-] Web / Tidy3D Web Importer
+	- [ ] Change to output only a `FilePath`, which can be plugged into a Tidy3D File Importer.
+	- [ ] Implement caching, such that the file will only download if the file doesn't already exist.
+	- [ ] Have a visual indicator for the current download status, with a manual re-download button.
 
-[ ] File Import / JSON File Import
-- [ ] Dropdown to choose various supported JSON-sourced objects incl. 
-[ ] File Import / Tidy3D File Import
-- [ ] Implement HDF-based import of Tidy3D-exported object (which includes ex. mesh data and such)
-[ ] File Import / Array File Import
-- [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
-- [ ] Implement datatype dropdown to guide format from disk, prefilled to detected.
-- [ ] Implement unit system input to guide conversion from numpy data type.
-- [ ] Implement a LazyValue to provide a data path that avoids having to load massive arrays every time always.
+- [ ] File Import / Material Import
+	- [ ] Dropdown to choose import format
+- [ ] File Import / Tidy3D File Import
+	- [ ] HDF and JSON file support, with appropriate choice of loose output socket.
+- [ ] File Import / Array File Import
+	- [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
+	- [ ] Implement unit system input to guide conversion from numpy data type.
+	- [ ] Implement datatype dropdown to guide format from disk, prefilled to detected.
+	- [ ] Implement a LazyValue to provide a data path that avoids having to load massive arrays every time always.
 
 ## Outputs
-[x] Viewer
-- [ ] **BIG ONE**: Remove image preview when disabling plots.
-- [ ] Declare Preview unit system on the viewer node.
-- [ ] Either enforce singleton, or find a way to have several viewers at the same time.
-- [ ] A setting that live-previews just a value.
-- [ ] Pop-up multiline string print as alternative to console print.
-- [x] Toggleable auto-plot, auto-3D-preview, auto-value-view, (?)auto-text-view.
+- [x] Viewer
+	- [ ] Remove image preview when disabling plots.
+	- [ ] BUG: CTRL+SHIFT+CLICK not on a node shows an error; should just do nothing.
+	- [ ] Auto-enable 3D preview when creating.
+	- [ ] Test/support multiple viewers at the same time.
+	- [ ] Pop-up w/multiline string as alternative to console print.
 
-[x] Web Export / Tidy3D Web Exporter
-- [ ] We need better ways of doing checks before uploading, like for monitor data size. Maybe a SimInfo node?
-- [ ] We need to be able to "delete and re-upload" (or maybe just delete from the interface).
-- [x] Implement estimation of monitor storage
-- [x] Implement cost estimation
-- [?] Merge with the Tidy3D File Import (since both are working with HDFs; the web one only really does downloading too).
+- [x] Web Export / Tidy3D Web Exporter
+	- This is an extraordinarily nuanced node, and will need constant adjusting if it is to be robust.
+	- [ ] We need better ways of doing checks before uploading, like for monitor data size. Maybe a SimInfo node?
+	- [ ] Implement "new folder" feature w/popup operator.
+	- [ ] Implement "delete task" feature w/popup confirmation.
+	- [ ] We need to be able to "delete and re-upload" (or maybe just delete from the interface).
 
-[x] File Export / JSON File Export
-[ ] File Import / Tidy3D File Export
-- [ ] Implement HDF-based export of Tidy3D-exported object (which includes ex. mesh data and such)
-[ ] File Export / Array File Export
-- [ ] Implement datatype dropdown to guide format on disk.
-- [ ] Implement unit system input to guide conversion to numpy data type.
-- [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
+- [x] File Export / JSON File Export
+- [ ] File Import / Tidy3D File Export
+	- [ ] Implement HDF-based export of Tidy3D-exported object (which includes ex. mesh data and such)
+	- [ ] Also JSON (but indicate somehow that ex. mesh data doesn't come along for the ride).
+- [ ] File Export / Array File Export
+	- [ ] Implement datatype dropdown to guide format on disk.
+	- [ ] Implement unit system input to guide conversion to numpy data type.
+	- [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
 
 ## Viz
-[x] Monitor Data Viz
-- [x] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
-- [ ] Project field values onto a plane object (managed)
+- [x] Monitor Data Viz
+	- [x] Implement dropdown to choose which monitor in the SimulationData should be visualized (based on which are available in the SimulationData), and implement visualization based on every kind of monitor-adjascent output data type (<https://docs.flexcompute.com/projects/tidy3d/en/latest/api/output_data.html>)
+	- [ ] Project field values onto a plane object (managed)
 
 ## Sources
-[x] Temporal Shapes / Gaussian Pulse Temporal Shape
-[x] Temporal Shapes / Continuous Wave Temporal Shape
-[ ] Temporal Shapes / Symbolic Temporal Shape
-- [ ] Specify a Sympy function to generate appropriate array based on
-[ ] Temporal Shapes / Array Temporal Shape
+- [x] Temporal Shapes / Gaussian Pulse Temporal Shape
+- [x] Temporal Shapes / Continuous Wave Temporal Shape
+- [ ] Temporal Shapes / Symbolic Temporal Shape
+	- [ ] Specify a Sympy function to generate appropriate array based on
+- [ ] Temporal Shapes / Array Temporal Shape
 
-[x] Point Dipole Source
-- [ ] Consider a "real" mesh - the empty kind of gets stuck inside of the sim domain.
-[-] Plane Wave Source
-- [ ] **IMPORTANT**: Fix the math so that an actually valid construction emerges!!
-- [x] Implement an oriented vector input with 3D preview.
-[ ] Uniform Current Source
-[ ] TFSF Source
+- [x] Point Dipole Source
+	- [ ] Use a viz mesh, not empty (empty doesn't play well with alpha hashing).
+- [-] Plane Wave Source
+	- [x] Implement an oriented vector input with 3D preview.
+	- [ ] **IMPORTANT**: Fix the math so that an actually valid construction emerges!!
+- [ ] Uniform Current Source
+- [ ] TFSF Source
 
-[ ] Gaussian Beam Source
-[ ] Astigmatic Gaussian Beam Source
+- [ ] Gaussian Beam Source
+- [ ] Astigmatic Gaussian Beam Source
 
-[ ] Mode Source
+- [ ] Mode Source
 
-[ ] Array Source / EH Array Source
-[ ] Array Source / EH Equivilance Array Source
+- [ ] Array Source / EH Array Source
+- [ ] Array Source / EH Equiv Array Source
 
 ## Mediums
-[x] Library Medium
-- [ ] Implement frequency range output
-[ ] PEC Medium
-[ ] Isotropic Medium
-[ ] Anisotropic Medium
+- [x] Library Medium
+	- [ ] Implement frequency range output (listy)
+- [ ] PEC Medium
+- [ ] Isotropic Medium
+- [ ] Anisotropic Medium
 
-[ ] Sellmeier Medium
-[ ] Drude Medium
-[ ] Drude-Lorentz Medium
-[ ] Debye Medium
-[ ] Pole-Residue Medium
+- [ ] Sellmeier Medium
+- [ ] Drude Medium
+- [ ] Drude-Lorentz Medium
+- [ ] Debye Medium
+- [ ] Pole-Residue Medium
 	
-[ ] Non-Linearity / `chi_3` Susceptibility Non-Linearity
-[ ] Non-Linearity / Two-Photon Absorption Non-Linearity
-[ ] Non-Linearity / Kerr Non-Linearity
+- [ ] Non-Linearity / `chi_3` Susceptibility Non-Linearity
+- [ ] Non-Linearity / Two-Photon Absorption Non-Linearity
+- [ ] Non-Linearity / Kerr Non-Linearity
 
-[ ] Space/Time epsilon/mu Modulation
+- [ ] Space/Time epsilon/mu Modulation
 
 ## Structures
-[ ] BLObject Structure
-[x] GeoNodes Structure
-- [x] Rewrite the `bl_socket_map.py`
-- [x] Use the modifier itself as memory, via the ManagedObj
-- [?] When GeoNodes themselves declare panels, implement a grid-like tab system to select which sockets should be exposed in the node at a given point in time.
+- [ ] BLObject Structure
+- [x] GeoNodes Structure
+	- [x] Rewrite the `bl_socket_map.py`
+	- [x] Use the modifier itself as memory, via the ManagedObj
+	- [x] Rewrite to use unit systems properly.
+	- [ ] Propertly map / implement Enum input sockets to the GN group.
+	- [ ] Implement a panel system, either based on native GN panels, or description parsing, or something like that.
+	- [?] When GeoNodes themselves declare panels, implement a grid-like tab system to select which sockets should be exposed in the node at a given point in time.
 
-[ ] Primitive Structures / Plane Structure
-[x] Primitive Structures / Box Structure
-[x] Primitive Structures / Sphere Structure
-[ ] Primitive Structures / Cylinder Structure
-[ ] Primitive Structures / Ring Structure
-[ ] Primitive Structures / Capsule Structure
-[ ] Primitive Structures / Cone Structure
+- [ ] Primitive Structures / Plane Structure
+- [x] Primitive Structures / Box Structure
+- [x] Primitive Structures / Sphere Structure
+- [ ] Primitive Structures / Cylinder Structure
+- [ ] Primitive Structures / Ring Structure
+- [ ] Primitive Structures / Capsule Structure
+- [ ] Primitive Structures / Cone Structure
 
 ## Monitors
-- **ALL**: "Steady-State" / "Time Domain" (only if relevant).
-
-[x] E/H Field Monitor
-- [x] Monitor Domain as dropdown with Frequency or Time
-- [x] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
-[ ] Field Power Flux Monitor
-- [ ] Monitor Domain as dropdown with Frequency or Time
-- [ ] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
-[ ] \epsilon Tensor Monitor
-- [ ] Axis-aligned planar 2D (pixel) and coord-aligned box 3D (voxel).
-[ ] Diffraction Monitor
+- [x] E/H Field Monitor
+- [x] Field Power Flux Monitor
+- [ ] \epsilon Tensor Monitor
+- [ ] Diffraction Monitor
 - [ ] Axis-aligned planar 2D (pixel)
 
-[ ] Projected E/H Field Monitor / Cartesian Projected E/H Field Monitor
-- [ ] Use to implement the metalens: <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/Metalens.html>
-[ ] Projected E/H Field Monitor / Angle Projected E/H Field Monitor
-[ ] Projected E/H Field Monitor / K-Space Projected E/H Field Monitor
+- [ ] Projected E/H Field Monitor / Cartesian Projected E/H Field Monitor
+	- [ ] Use to implement the metalens: <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/Metalens.html>
+- [ ] Projected E/H Field Monitor / Angle Projected E/H Field Monitor
+- [ ] Projected E/H Field Monitor / K-Space Projected E/H Field Monitor
 
-- **TODO**: "Modal" solver monitoring (seems to be some kind of spatial+frequency feature, which an EM field can be decomposed into using a specially configured solver, which can be used to look for very particular kinds of effects by constraining investigations of a solver result to filter out everything that isn't these particular modes aka. features. Kind of a fourier-based redimensionalization, almost).
+- [ ] Modal Nodes
+	- Spatial+frequency feature monitoring. An EM field can be decomposed into using a specially configured solver, which can be used to look for very particular kinds of effects by constraining investigations of a solver result to filter out everything that isn't these particular modes aka. features. Kind of a fourier-based redimensionalization, almost).
 
 ## Simulations
-[-] FDTDSim
+- [x] FDTDSim
 
-[x] Sim Domain
-- [ ] By-Medium batching of Structures when building the td.Simulation object, which can have significant performance implications.
+- [x] Sim Domain
+	- [ ] By-Medium batching of Structures when building the td.Simulation object, which can have significant performance implications.
 
-[x] Boundary Conds
-- [x] Rename from Bounds / BoundBox
-[ ] Boundary Cond / PML Bound Face
-- [ ] Implement dropdown for "Normal" and "Stable"
-[ ] Boundary Cond / PEC Bound Face
-[ ] Boundary Cond / PMC Bound Face
-[ ] Boundary Cond / Bloch Bound Face
-[ ] Boundary Cond / Periodic Bound Face
-[ ] Boundary Cond / Absorbing Bound Face
+- [x] Boundary Conds
+- [ ] Boundary Cond / PML Bound Face
+	- [ ] Dropdown for "Normal" and "Stable"
+- [ ] Boundary Cond / PEC Bound Face
+- [ ] Boundary Cond / PMC Bound Face
+- [ ] Boundary Cond / Bloch Bound Face
+- [ ] Boundary Cond / Periodic Bound Face
+- [ ] Boundary Cond / Absorbing Bound Face
 
-[ ] Sim Grid
-[ ] Sim Grid Axes / Auto Sim Grid Axis
-[ ] Sim Grid Axes / Manual Sim Grid Axis
-[ ] Sim Grid Axes / Uniform Sim Grid Axis
-[ ] Sim Grid Axes / Array Sim Grid Axis
+- [ ] Sim Grid
+- [ ] Sim Grid Axes / Auto Sim Grid Axis
+- [ ] Sim Grid Axes / Manual Sim Grid Axis
+- [ ] Sim Grid Axes / Uniform Sim Grid Axis
+- [ ] Sim Grid Axes / Array Sim Grid Axis
 
 ## Converters
-[ ] Math
-- [ ] Implement common operations w/secondary choice of socket type based on a custom internal data structure
-- [ ] Implement angfreq/frequency/vacwl conversion.
-- [ ] Implement spectral math on SDs
-- [ ] Implement easy derivation of ex. transmission and reflection.
-[ ] Separate
-[x] Combine
-- [x] Implement concatenation of sim-critical socket types into their multi-type
+- [ ] Math
+	- [ ] Implement common operations w/secondary choice of socket type based on a custom internal data structure
+	- [ ] Implement angfreq/frequency/vacwl conversion.
+	- [ ] Implement spectral math on SDs
+	- [ ] Implement easy derivation of ex. transmission and reflection.
+- [ ] Separate
+- [x] Combine
+	- [x] Implement concatenation of sim-critical socket types into their multi-type
 
 
 
 # GeoNodes
-[ ] Tests / Monkey (suzanne deserves to be simulated, she may need manifolding up though :))
-[ ] Tests / Wood Pile
+- [ ] Tests / Monkey (suzanne deserves to be simulated, she may need manifolding up though :))
+- [ ] Tests / Wood Pile
 
-[ ] Structures / Primitives / Plane
-[x] Structures / Primitives / Box
-[x] Structures / Primitives / Sphere
-[ ] Structures / Primitives / Cylinder
-[x] Structures / Primitives / Ring
-[ ] Structures / Primitives / Capsule
-[ ] Structures / Primitives / Cone
+- [ ] Structures / Primitives / Plane
+- [x] Structures / Primitives / Box
+- [x] Structures / Primitives / Sphere
+- [ ] Structures / Primitives / Cylinder
+- [x] Structures / Primitives / Ring
+- [ ] Structures / Primitives / Capsule
+- [ ] Structures / Primitives / Cone
 
-[ ] Structures / Arrays / Square
-[ ] Structures / Arrays / Square-Hole
-[ ] Structures / Arrays / Cyl
-[ ] Structures / Arrays / Cyl-Hole
-[x] Structures / Arrays / Box
-[x] Structures / Arrays / Sphere
-[ ] Structures / Arrays / Cylinder
-[-] Structures / Arrays / Ring
-[ ] Structures / Arrays / Capsule
-[ ] Structures / Arrays / Cone
+- [ ] Structures / Arrays / Square
+- [ ] Structures / Arrays / Square-Hole
+- [ ] Structures / Arrays / Cyl
+- [ ] Structures / Arrays / Cyl-Hole
+- [x] Structures / Arrays / Box
+- [x] Structures / Arrays / Sphere
+- [ ] Structures / Arrays / Cylinder
+- [-] Structures / Arrays / Ring
+- [ ] Structures / Arrays / Capsule
+- [ ] Structures / Arrays / Cone
 
-[ ] Array / Square Array **NOTE: Ring and cylinder**
-[ ] Array / Hex Array **NOTE: Ring and cylinder**
-[ ] Hole Array / Square Hole Array: Takes a primitive hole shape.
-[ ] Hole Array / Hex Hole Array: Takes a primitive hole shape.
-[ ] Cavity Array / Hex Array w/ L-Cavity
-[ ] Cavity Array / Hex Array w/ H-Cavity
+- [ ] Array / Square Array **NOTE: Ring and cylinder**
+- [ ] Array / Hex Array **NOTE: Ring and cylinder**
+- [ ] Hole Array / Square Hole Array: Takes a primitive hole shape.
+- [ ] Hole Array / Hex Hole Array: Takes a primitive hole shape.
+- [ ] Cavity Array / Hex Array w/ L-Cavity
+- [ ] Cavity Array / Hex Array w/ H-Cavity
 
-[ ] Crystal Sphere Lattice / Sphere FCC Array
-[ ] Crystal Sphere Lattice / Sphere BCC Array
+- [ ] Crystal Sphere Lattice / Sphere FCC Array
+- [ ] Crystal Sphere Lattice / Sphere BCC Array
 
 
 
 # Benchmark / Example Sims
-[ ] Research-Grade Experiment
-- Membrane 15nm thickness suspended in air
-- Square lattice of holes period 900nm (900nm between each hole, air inside holes)
-- Holes square radius 100nm
-- Square lattice
-- Analysis of transmission
-- Guided mode resonance
-[ ] Tunable Chiral Metasurface <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/TunableChiralMetasurface.html>
+- [ ] Research-Grade Experiment
+	- Membrane 15nm thickness suspended in air
+	- Square lattice of holes period 900nm (900nm between each hole, air inside holes)
+	- Holes square radius 100nm
+	- Square lattice
+	- Analysis of transmission
+	- Guided mode resonance
+- [ ] Tunable Chiral Metasurface <https://docs.flexcompute.com/projects/tidy3d/en/latest/notebooks/TunableChiralMetasurface.html>
 
 
 
 # Sockets
 ## Basic
-[x] Any
-[x] Bool
-[x] String
-- [ ] Rename from "Text"
-[x] File Path
-[x] Color
+- [x] Any
+- [x] Bool
+- [x] String
+- [x] File Path
+- [x] Color
 
 ## Number
-[x] Integer
-[x] Rational
-- [ ] Implement constrained SympyExpr check for Rational.
-[x] Real
-- [ ] Implement min/max for ex. 0..1 factor support.
-- [ ] Implement constrained SympyExpr check for Rational.
-[x] Complex
+- [x] Integer
+- [x] Rational
+- [x] Real
+	- [ ] Implement min/max for ex. 0..1 factor support.
+- [x] Complex
 
 ## Blender
-[x] Object
-- [ ] Implement default SocketDef object name
-[x] Collection
-- [ ] Implement default SocketDef collection name
+- [x] Object
+	- [ ] Implement default object name in SocketDef
+- [x] Collection
+	- [ ] Implement default collection name in SocketDef 
 
-[x] Image
-- [ ] Implement default SocketDef image name
+- [x] Image
+	- [ ] Implement default image name in SocketDef
 
-[x] GeoNodes
-- [ ] Implement default SocketDef geonodes name
-[x] Text
-- [ ] Implement default SocketDef object name
+- [x] GeoNodes
+	- [ ] Implement default SocketDef geonodes name
+- [x] Text
+	- [ ] Implement default SocketDef object name
 
 ## Maxwell
-[x] Bound Conds
-[ ] Bound Cond
+- [x] Bound Conds
+- [ ] Bound Cond
 
-[x] Medium
-[ ] Medium Non-Linearity
+- [x] Medium
+- [ ] Medium Non-Linearity
 
-[x] Source
-[ ] Temporal Shape
-- [ ] Sane-default pulses for easy access.
+- [x] Source
+- [ ] Temporal Shape
+	- [ ] Sane-default pulses for easy access.
 
-[ ] Structure
-[ ] Monitor
+- [ ] Structure
+- [ ] Monitor
 
-[ ] FDTD Sim
-[ ] Sim Domain
-- [?] Toggleable option to sync the simulation time duration to the scene end time (how to handle FPS vs time-step? Should we adjust the FPS such that there is one time step per frame, while keeping the definition of "second" aligned to a unit system?)
-[ ] Sim Grid
-[ ] Sim Grid Axis
+- [ ] FDTD Sim
+- [ ] Sim Domain
+	- [?] Toggleable option to push-sync the simulation time duration to the scene end time (how to handle FPS vs time-step? Should we adjust the FPS such that there is one time step per frame, while keeping the definition of "second" aligned to the Blender unit system?)
+- [ ] Sim Grid
+- [ ] Sim Grid Axis
 
-[ ] Simulation Data
+- [ ] Simulation Data
 
 ## Tidy3D
-[x] Cloud Task
-- [ ] Implement switcher for API-key-having config filconfig file vs. direct entry of API key. It should be auto-filled with the config file when such a thing exists.
+- [x] Cloud Task
+	- [ ] Implement switcher for API-key-having config filconfig file vs. direct entry of API key. It should be auto-filled with the config file when such a thing exists.
 
 ## Physical
-[x] Unit System
-- [ ] Implement more comprehensible UI; honestly, probably with the new panels (<https://developer.blender.org/docs/release_notes/4.1/python_api/>)
+- [x] Unit System
+	- [ ] Presets for Blender and Tidy3D
+	- [ ] Dropdowns in the socket UI
 
-[x] Time
+- [x] Time
 
-[x] Angle
-[ ] Solid Angle (steradian)
+- [x] Angle
+	- [ ] Remove superfluous units.
+- [ ] Solid Angle (steradian)
 
-[x] Frequency (hertz)
-[ ] Angular Frequency (`rad*hertz`)
+- [x] Frequency (hertz)
+- [ ] Angular Frequency (`rad*hertz`)
 ### Cartesian
-[x] Length
-[x] Area
-[x] Volume
+- [x] Length
+- [x] Area
+- [x] Volume
 
-[ ] Point 1D
-[ ] Point 2D
-[x] Point 3D
+- [ ] Point 1D
+- [ ] Point 2D
+- [x] Point 3D
 
-[ ] Size 2D
-[x] Size 3D
+- [ ] Size 2D
+- [x] Size 3D
 
-[ ] Rotation 3D
-- [ ] Implement Euler methods
-- [ ] Implement Quaternion methods
+- [ ] Rotation 3D
+	- [ ] Implement Euler methods
+	- [ ] Implement Quaternion methods
 ### Mechanical
-[ ] Mass
+- [ ] Mass
 
-[x] Speed
-[ ] Velocity 3D
-[x] Acceleration Scalar
-[ ] Acceleration 3D
-[x] Force Scalar
-[ ] Force 3D
-[ ] Pressure
+- [x] Speed
+- [ ] Velocity 3D
+- [x] Acceleration Scalar
+- [ ] Acceleration 3D
+- [x] Force Scalar
+- [ ] Force 3D
+- [ ] Pressure
 ### Energy
-[ ] Energy (joule)
-[ ] Power (watt)
-[ ] Temperature
+- [ ] Energy (joule)
+- [ ] Power (watt)
+- [ ] Temperature
 ### Electrodynamical
-[ ] Current (ampere)
-[ ] Current Density 3D
+- [ ] Current (ampere)
+- [ ] Current Density 3D
 
-[ ] Charge (coulomb)
-[ ] Voltage (volts)
-[ ] Capacitance (farad)
-[ ] Resistance (ohm)
-[ ] Electric Conductance (siemens)
+- [ ] Charge (coulomb)
+- [ ] Voltage (volts)
+- [ ] Capacitance (farad)
+- [ ] Resistance (ohm)
+- [ ] Electric Conductance (siemens)
 
-[ ] Magnetic Flux (weber)
-[ ] Magnetic Flux Density (tesla)
-[ ] Inductance (henry)
+- [ ] Magnetic Flux (weber)
+- [ ] Magnetic Flux Density (tesla)
+- [ ] Inductance (henry)
 
-[ ] Electric Field 3D (`volt*meter`)
-[ ] Magnetic Field 3D (tesla)
+- [ ] Electric Field 3D (`volt*meter`)
+- [ ] Magnetic Field 3D (tesla)
 ### Luminal
-[ ] Luminous Intensity (candela)
-[ ] Luminous Flux (lumen)
-[ ] Illuminance (lux)
+- [ ] Luminous Intensity (candela)
+- [ ] Luminous Flux (lumen)
+- [ ] Illuminance (lux)
 ### Optical
-[ ] Jones Polarization
-[ ] Polarization (Stokes)
+- [ ] Jones Polarization
+- [ ] Polarization (Stokes)
 
 
 
-# Style
-[x] Rethink the meaning of color and shapes in node sockets, including whether dynamic functionality is needed when it comes to socket shape (ex. it might be nice to know whether a socket is array-like or uses units).
-
-
-
-# Architecture
+# Internal / Architecture
 ## CRITICAL
-With these things in place, we're in tip top shape:
-[ ] Linkability / Appendability of library GeoNodes groups, including being able to semantically ask for a particular GeoNodes tree without 'magic strings' that are entirely end-user-file dependent, is completely critical. especially
-[ ] Simplify the boilerplate needed to add a particular 3D preview driven by the input sockets of a particular GeoNodes group. It's currently hard for all the wrong reasons, and greatly halts our velocity in developing useful 3D previews of any/everything.
-	[ ] Finalize Viewer node unit systems.
-	[ ] Introduce a simplified (maybe caching) method of translating sympy-enabled values, ex. 'Center', into values for external use (ex. in a Tidy3D object or in a Blender preview) based on
-	[ ] Abstract the actual unit system dict-like data structure out from the UnitSystem socket.
-[ ] Ship the addon with libraries of GeoNodes groups (with NO dependency on the addon), which are linked (internal use) or appended (end-user-selected structures) when needed for previewing.
-- I don't know that library overrides are the correct approach when it comes to structures used by the end-user. It's extremely easy to make a change to a library structure (or have one made for us by a Blender update!) that completely wrecks all end-user simulations that use it, or override it. By appending, the structure becomes 'part of' the user's simulation, which also makes it quite a bit easier for the user to alter (even drastically) for their own needs.
-[ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
+- [ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
+- [ ] Document the node tree cache semantics thoroughly; it's a VERY nuanced piece of logic, and its invariants may not survive Blender versions / the author's working memory
+- [ ] Start standardizing nodes/sockets w/individualized SemVer
+	- Perhaps keep node / socket versions in a property, so that trying to load an incompatible major version hop can error w/indicator of where to find a compatible `blender_maxwell` version.
+
+## Documentation
+- [ ] Make all modules available
+- [ ] Publish documentation site.
+- [ ] Initial user guides w/pictures.
+- [ ] Comb through and finish `__doc__`s.
+
+## Performance
+- [ ] The GN value pushing currently does an expensive from-sympy conversion for all GN attributes, making it very slow.
+	- Generally, the issue is that we can't compare the pushed value to the existing value without a conversion.
+	- Also, sympy expressions can't be hashed (by default), and `str()` may be just as slow, so a simple `@lru_cache` is no good.
+	- **One approach** is a `HashableSympyExpr` class, which would use ex. atoms and values in `SympyExpr` to let us `@lru_cache` the sympy conversion.
+	- **Another approach** is to "just" make the `scale_to_unit` function faster (we should profile).
+		- Presumably, the scaling factors between units could be eagerly cached, then the numerical part of the expression could be used to avoid `convert_to` calls.
+		- Without the list format of `(np.array, spu.Quantity)`, `sp.Matrix` can't be performantly handled like this.
+
+## Style
+- [ ] Color of nodes should be a nice blue, eh?
 
 ## Registration and Contracts
-[x] Finish the contract code converting from Blender sockets to our sockets based on dimensionality and the property description.
-[ ] Refactor the node category code; it's ugly.
-- It's maybe not that easy. And it seems to work with surprising reliability. Leave it alone for now!
-[?] Would be nice with some kind of indicator somewhere to help set good socket descriptions when using geonodes and wanting units.
+- [ ] Refactor the node category code; it's ugly.
+	- It's maybe not that easy. And it seems to work with surprising reliability. Leave it alone for now!
+- [?] Would be nice with some kind of indicator somewhere to help set good socket descriptions when making geonodes.
 
 ## Managed Objects
-[x] Implement modifier support on the managed BL object, with special attention paid to the needs of the GeoNodes socket.
-- [x] Implement preview toggling too, ex. using the relevant node tree collections
-- Remember, the managed object is "dumb". It's the node's responsibility to react to any relevant `on_value_change`, and forward all state needed by the modifier to the managed obj. It's only the managed obj's responsibility to not update any modifier value that wouldn't change anything.
-[ ] Implement loading the xarray-defined voxels into OpenVDB, saving it, and loading it as a managed BL object with the volume setting.
-[ ] Implement basic jax-driven volume voxel processing, especially cube based slicing.
-[ ] Implement jax-driven linear interpolation of volume voxels to an image texture, whose pixels are sized according to the dimensions of another managed plane object (perhaps a uniquely described Managed BL object itself).
+- [ ] Implement ManagedEmpty
+	- [ ] Implement image-based empty connected to an image (which is managed by a different ManagedImage owned by the same node instance)
+- [ ] Implement ManagedVol
+	- [ ] Implement loading the xarray-defined voxels into OpenVDB, saving it, and loading it as a managed BL object with the volume setting.
+	- [ ] Implement basic jax-driven volume voxel processing, especially cube based slicing.
+	- [ ] Implement jax-driven linear interpolation of volume voxels to an image texture, whose pixels are sized according to the dimensions of another managed plane object (perhaps a uniquely described Managed BL object itself).
 
 ## Utils or Services
-[x] Dedicated module for managing the interaction with the tidy3d cloud, to help nuke all the random caches out of existance.
+- [ ] Document the `tdcloud` service thoroughly and open a GitHub discussion about `td.web` shortcomings.
 
 ## Node Base Class
-[ ] Dedicated `draw_preview`-type draw functions for plot customizations.
-- [ ] For now, previewing isn't something I think should always be part of the node - perhaps we can use panels to keep settings, but also allow preview options to toggleably add a loose socket for driven input.
-[ ] Custom `@cache`/`@lru_cache`/`@cached_property` which caches by instance ID (possibly based on `beartype` or `pydantic`).
-[ ] When presets are used, if a preset is selected and the user alters a preset setting, then dynamically switch the preset indicator back to "Custom"  to indicate that there is no active preset
-[ ] It seems that `node.inputs` and `node.outputs` allows the use of a `move` method, which may allow reordering sockets dynamically, which we should expose to the user as user-configurable ordering rules (maybe resolved with a constraint solver).
-[?] Mechanism for dynamic names (ex. "Library Medium" becoming "Au Medium")
-[-] Mechanism for selecting a blender object managed by a particular node.
-[ ] Mechanism for ex. specially coloring a node that is currently participating in the preview.
-[ ] Custom callbacks when deleting a node (in `free()`), to ex. delete all previews with the viewer node.
+- [ ] Implement a new socket type for preview-only parameters
+	- [ ] When used, the node base class should expose a toggle 
+	- [ ] Instead of mangling props, we can instead reuse all of the socket-based code, while also enabling composability of previews.
+- [ ] Custom `@cache`/`@lru_cache`/`@cached_property` which caches by instance ID (possibly based on `beartype` or `pydantic`).
+	- The problem to solve is performance vs. persistence.
+- [ ] 
+- [ ] Implement by-category sorting of loose sockets with 'move' method on `node.inputs`/`node.outputs`.
+	- Currently order is not guaranteed
+- [ ] When presets are used, if a preset is selected and the user alters a preset setting, then dynamically switch the preset indicator back to "Custom"  to indicate that there is no active preset
+
+## Events
+- [-] Mechanism for selecting a blender object managed by a particular node.
+- [ ] Mechanism for ex. specially coloring a node that is currently participating in the preview.
+- [ ] Custom callbacks when deleting a node (in `free()`), to ex. delete all previews with the viewer node.
 
 ## Socket Base Class
-[x] A feature `use_array` which allows a socket to declare that it can be both a single value and array-like (possibly constrained to a given shape). This should also allow the SocketDef to request that the input socket be initialised as a multi-input socket, once Blender updates to support those.
-- [-] Implement a shape-selector, with a dropdown for dimensionality and an appropriate `IntegerVectorProperty` for each kind of shape (supporting also straight-up inf), which is declared to the node that supports array-likeness so it can decide how exactly to expose properties in the array-like context of things.
-	- So far, the 'method of generation' seems pretty unique to each kind of socket. It's fully manual right now, but we could let the user select from standard UIs ex. 'generate with linspace', 'generate with logspace', etc. .
-[ ] Make `to_socket`s no-consent to new links from `from_socket`s of differing type (we'll see if this controls the typing story enough for now, and how much we'll need capabilities in the long run)
-- [?] Alternatively, do exactly this, but have it be the default behavior of the capability system, to preserve the ability to extend it to more exotic capability needs.
-- [?] Alternatively, reject non matching link types, and red-mark non matching capabilities?
+- [ ] Second-generation listy, based on a `DataFlowKind.ValueListy`, `DataFlowKind.ValueRange`, etc. to encode the presence of special logic.
+	- This is key to allow special handling, as "just give me a `list[]` of `sympy` objects" is an exceptionally non-performant and brittle thing.
+- [ ] Implement capability system, which defaults to exactly matching the type.
+	- [ ] Make `to_socket`s no-consent to new links from `from_socket`s of incompatible Capability.
+	- [ ] Add Capabilities needed mainly in cases where we need `Any` currently.
 
 ## Many Nodes
-[ ] Implement LazyValue stuff, including LazyParamValue on a new class of constant-like input nodes that really just emit ex. sympy variables.
-[?] Require a Unit System for nodes that construct Tidy3D objects
-[ ] Medium Features
-- [ ] Accept spatial field. Else, spatial uniformity.
-- [ ] Accept non-linearity. Else, linear.
-- [ ] Accept space-time modulation. Else, static.
-[ ] Modal Features
-- [ ] ModeSpec, for use by ModeSource, ModeMonitor, ModeSolverMonitor. Data includes ModeSolverData, ModeData, ScalarModeFieldDataArray, ModeAmpsDataArray, ModeIndexDataArray, ModeSolver.
+- [ ] Implement "Steady-State" / "Time Domain" on all relevant Monitor nodes
+- [?] Dynamic `bl_label` where appropriate (ex. "Library Medium" becoming "Au Medium")
+- [ ] Implement LazyValue, including LazyParamValue on a new class of constant-like input nodes that really just emit ex. sympy variables.
+- [ ] Medium Features
+	- [ ] Accept spatial field. Else, spatial uniformity.
+	- [ ] Accept non-linearity. Else, linear.
+	- [ ] Accept space-time modulation. Else, static.
+- [ ] Modal Features
+	- [ ] ModeSpec, for use by ModeSource, ModeMonitor, ModeSolverMonitor. Data includes ModeSolverData, ModeData, ScalarModeFieldDataArray, ModeAmpsDataArray, ModeIndexDataArray, ModeSolver.
+
+## Many Sockets
+- [ ] Implement constrained SympyExpr checks all over the place.
 
 ## Development Tooling
-[x] Implement `rye` support
-[x] Setup neovim to be an ideal editor
+- [ ] Pass a `mypy` check
+- [ ] Pass all `ruff` checks, including `__doc__` availability.
+- [ ] Implement `pre-commit.
+- [ ] Add profiling support, so we can properly analyze performance characteristics.
+	- Without a test harness, or profile-while-logging, there may be undue noise in our analysis.
+- [ ] Simple `pytest` harnesses for unit testing of nodes, sockets.
+	- Start with the low-hanging-fruit stuff. Eventually, work towards wider code coverage w/headless Blender.
 
 ## Version Churn
-[ ] Implement real StrEnum sockets, since they appear in py3.11
-[x] Think about implementing new panels where appropriate (<https://developer.blender.org/docs/release_notes/4.1/python_api/>)
-[ ] Think about using the new bl4.1 file handler API to enable drag and drop creation of appropriate nodes (for importing files without hassle).
-[ ] Keep an eye on our manual `__annotations__` hacking; python 3.13 is apparently fucking with it.
-[x] Plan for multi-input sockets <https://projects.blender.org/blender/blender/commit/14106150797a6ce35e006ffde18e78ea7ae67598> (for now, just use the "Combine" node and have seperate socket types for both).
-- There are big benefits with respect to previewability to using combine nodes; we shouldn't play the multi-input game for now.
-[ ] Keep an eye out for volume geonodes in 4.2 (July 16, 2024), which will better allow for more complicated volume processing (we might still want/need the jax based stuff after, but let's keep it minimal just in case)
+- [ ] Migrate to StrEnum sockets (py3.11).
+- [ ] Implement drag-and-drop node-from-file via bl4.1 file handler API.
+- [-] Start thinking about ways around `__annotations__` hacking.
+- [-] Prepare for for multi-input sockets (bl4.2)
+	- PR has been merged: <https://projects.blender.org/blender/blender/commit/14106150797a6ce35e006ffde18e78ea7ae67598> (for now, just use the "Combine" node and have seperate socket types for both).
+	- The `Combine` node has its own benefits, including previewability of "only structures". Multi-input would mainly be a kind of shorthand in specific cases (like input to the `Combine` node?)
+- [-] Prepare for volume geonodes (bl4.2; July 16, 2024)
+	- Will allow for actual volume processing in GeoNodes.
+	- We might still want/need the jax based stuff after; volume geonodes aren't finalized.
 
 ## Packaging
-[x] Allow specifying custom dir for keeping pip dependencies, so we can unify prod and dev (currently we hard-code a dev dependency path).
-[x] Refactor top-level `__init__.py` to check dependencies first. If not everything is available, it should only register a minimal addon; specifically, a message telling the user that the addon requires additional dependencies (list which), and the button to install them. When the installation is done, re-check deps and register the rest of the addon.
-[ ] Popup to install dependencies after UI is available (possibly with the help of the `draw()` function of the `InstallPyDeps` operator)
-[ ] Use a Modal and multiline-text-like construction to print `pip install` as we install dependencies, so that the user has an idea that something is happening.
-[ ] Test on Windows
-
-## Node Tree Cache Semantics
+- [ ] Popup to install dependencies after UI is available (possibly with the help of the `draw()` function of the `InstallPyDeps` operator)
+- [ ] Use a Modal and multiline-text-like construction to print `pip install` as we install dependencies, so that the user has an idea that something is happening.
+- [ ] Test lockfile platform-agnosticism on Windows
 
 
 
 
 
-# TIDY3D BUGS
-- Directly running `SimulationTask.get()` is bugged - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.
+# BUGS
+We're trying to do our part by reporting bugs we find!
+This is where we keep track of them for now.
+
+## Blender Bugs
+Reported:
+- (SOLVED) <https://projects.blender.org/blender/blender/issues/119664>
+
+Unreported:
+- The `__mp_main__` bug.
+
+# Tidy3D bugs
+Unreported:
+- Directly running `SimulationTask.get()` is missing fields - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.
