@@ -1,3 +1,5 @@
+"""A managed Blender modifier, associated with some Blender object."""
+
 import typing as typ
 
 import bpy
@@ -10,22 +12,35 @@ from .. import contracts as ct
 log = logger.get(__name__)
 
 ModifierType: typ.TypeAlias = typx.Literal['NODES', 'ARRAY']
-
-
 NodeTreeInterfaceID: typ.TypeAlias = str
+UnitSystem: typ.TypeAlias = typ.Any
 
 
+####################
+# - Modifier Attributes
+####################
 class ModifierAttrsNODES(typ.TypedDict):
+	"""Describes values set on an GeoNodes modifier.
+
+	Attributes:
+		node_group: The GeoNodes group to use in the modifier.
+		unit_system: The unit system used by the GeoNodes output.
+			Generally, `ct.UNITS_BLENDER` is a good choice.
+		inputs: Values to associate with each GeoNodes interface socket.
+			Use `analyze_geonodes.interface(..., direc='INPUT')` to determine acceptable values.
+	"""
+
 	node_group: bpy.types.GeometryNodeTree
-	unit_system: bpy.types.GeometryNodeTree
+	unit_system: UnitSystem
 	inputs: dict[NodeTreeInterfaceID, typ.Any]
 
 
 class ModifierAttrsARRAY(typ.TypedDict):
-	pass
+	"""Describes values set on an Array modifier."""
 
 
 ModifierAttrs: typ.TypeAlias = ModifierAttrsNODES | ModifierAttrsARRAY
+
 MODIFIER_NAMES = {
 	'NODES': 'BLMaxwell_GeoNodes',
 	'ARRAY': 'BLMaxwell_Array',
@@ -37,6 +52,7 @@ MODIFIER_NAMES = {
 ####################
 def read_modifier(bl_modifier: bpy.types.Modifier) -> ModifierAttrs:
 	if bl_modifier.type == 'NODES':
+		## TODO: Also get GeoNodes modifier values, if the nodegroup is not-None.
 		return {
 			'node_group': bl_modifier.node_group,
 		}
@@ -50,9 +66,18 @@ def read_modifier(bl_modifier: bpy.types.Modifier) -> ModifierAttrs:
 # - Write Modifier Information
 ####################
 def write_modifier_geonodes(
-	bl_modifier: bpy.types.Modifier,
+	bl_modifier: bpy.types.NodesModifier,
 	modifier_attrs: ModifierAttrsNODES,
 ) -> bool:
+	"""Writes attributes to the GeoNodes modifier, changing only what's needed.
+
+	Parameters:
+		bl_modifier: The GeoNodes modifier to write to.
+		modifier_attrs: The attributes to write to
+
+	Returns:
+		True if the modifier was altered.
+	"""
 	modifier_altered = False
 	# Alter GeoNodes Group
 	if bl_modifier.node_group != modifier_attrs['node_group']:
@@ -163,7 +188,28 @@ class ManagedBLModifier(ct.schemas.ManagedObj):
 	# - Deallocation
 	####################
 	def free(self):
-		pass
+		"""Not needed - when the object is removed, its modifiers are also removed."""
+
+	def free_from_bl_object(
+		self,
+		bl_object: bpy.types.Object,
+	) -> None:
+		"""Remove the managed BL modifier from the passed Blender object.
+
+		Parameters:
+			bl_object: The Blender object to remove the modifier from.
+		"""
+		if (bl_modifier := bl_object.modifiers.get(self.name)) is not None:
+			log.info(
+				'Removing (recreating) BLModifier "%s" on BLObject "%s" (existing modifier_type is "%s")',
+				bl_modifier.name,
+				bl_object.name,
+				bl_modifier.type,
+			)
+			bl_modifier = bl_object.modifiers.remove(bl_modifier)
+		else:
+			msg = f'Tried to free bl_modifier "{self.name}", but bl_object "{bl_object.name}" has no modifier of that name'
+			raise ValueError(msg)
 
 	####################
 	# - Modifiers
@@ -190,7 +236,7 @@ class ManagedBLModifier(ct.schemas.ManagedObj):
 				bl_modifier.type,
 				modifier_type,
 			)
-			self.free()
+			self.free_from_bl_object(bl_object)
 			modifier_was_removed = True
 
 		# Create Modifier

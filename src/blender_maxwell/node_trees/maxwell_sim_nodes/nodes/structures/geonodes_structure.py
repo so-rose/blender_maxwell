@@ -89,15 +89,10 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		if (geonodes := input_sockets['GeoNodes']) is None:
 			if (
 				managed_objs['modifier'].name
-				in managed_objs['mesh'].bl_object().modifiers
+				in managed_objs['mesh'].bl_object().modifiers.keys().copy()
 			):
-				log.info(
-					'Removing Modifier "%s" from BLObject "%s"',
-					managed_objs['modifier'].name,
-					managed_objs['mesh'].name,
-				)
-				managed_objs['mesh'].bl_object().modifiers.remove(
-					managed_objs['modifier'].name
+				managed_objs['modifier'].free_from_bl_object(
+					managed_objs['mesh'].bl_object()
 				)
 
 				# Reset Loose Input Sockets

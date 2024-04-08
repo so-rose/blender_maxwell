@@ -12,6 +12,7 @@ from ..utils import logger
 
 log = logger.get(__name__)
 
+ImportMethod: typ.TypeAlias = typx.Literal['append', 'link']
 BLOperatorStatus: typ.TypeAlias = set[
 	typx.Literal['RUNNING_MODAL', 'CANCELLED', 'FINISHED', 'PASS_THROUGH', 'INTERFACE']
 ]
@@ -25,40 +26,143 @@ class GeoNodes(enum.StrEnum):
 
 	The value of this StrEnum is both the name of the .blend file containing the GeoNodes group, and of the GeoNodes group itself.
 	"""
+	# Node Previews
+	## Input
+	InputConstantPhysicalPol = '_input_constant_physical_pol'
+	## Source
+	SourcePointDipole = '_source_point_dipole'
+	SourcePlaneWave = '_source_plane_wave'
+	SourceUniformCurrent = '_source_uniform_current'
+	SourceTFSF = '_source_tfsf'
+	SourceGaussianBeam = '_source_gaussian_beam'
+	SourceAstigmaticGaussianBeam = '_source_astigmatic_gaussian_beam'
+	SourceMode = '_source_mode'
+	SourceEHArray = '_source_eh_array'
+	SourceEHEquivArray = '_source_eh_equiv_array'
+	## Structure
+	StructurePrimitivePlane = '_structure_primitive_plane'
+	StructurePrimitiveBox = '_structure_primitive_box'
+	StructurePrimitiveSphere = '_structure_primitive_sphere'
+	StructurePrimitiveCylinder = '_structure_primitive_cylinder'
+	StructurePrimitiveRing = '_structure_primitive_ring'
+	StructurePrimitiveCapsule = '_structure_primitive_capsule'
+	StructurePrimitiveCone = '_structure_primitive_cone'
+	## Monitor
+	MonitorEHField = '_monitor_eh_field'
+	MonitorFieldPowerFlux = '_monitor_field_power_flux'
+	MonitorEpsTensor = '_monitor_eps_tensor'
+	MonitorDiffraction = '_monitor_diffraction'
+	MonitorProjCartEHField = '_monitor_proj_eh_field'
+	MonitorProjAngEHField = '_monitor_proj_ang_eh_field'
+	MonitorProjKSpaceEHField = '_monitor_proj_k_space_eh_field'
+	## Simulation
+	SimulationSimDomain = '_simulation_sim_domain'
+	SimulationBoundConds = '_simulation_bound_conds'
+	SimulationBoundCondPML = '_simulation_bound_cond_pml'
+	SimulationBoundCondPEC = '_simulation_bound_cond_pec'
+	SimulationBoundCondPMC = '_simulation_bound_cond_pmc'
+	SimulationBoundCondBloch = '_simulation_bound_cond_bloch'
+	SimulationBoundCondPeriodic = '_simulation_bound_cond_periodic'
+	SimulationBoundCondAbsorbing = '_simulation_bound_cond_absorbing'
+	SimulationSimGrid = '_simulation_sim_grid'
+	SimulationSimGridAxisAuto = '_simulation_sim_grid_axis_auto'
+	SimulationSimGridAxisManual = '_simulation_sim_grid_axis_manual'
+	SimulationSimGridAxisUniform = '_simulation_sim_grid_axis_uniform'
+	SimulationSimGridAxisArray = '_simulation_sim_grid_axis_array'
 
+	# Structures
+	## Primitives
 	PrimitiveBox = 'box'
 	PrimitiveRing = 'ring'
 	PrimitiveSphere = 'sphere'
 
 
-# GeoNodes Path Mapping
-GN_PRIMITIVES_PATH = info.PATH_ASSETS / 'geonodes' / 'primitives'
+# GeoNodes Paths
+## Internal
+GN_INTERNAL_PATH = info.PATH_ASSETS / 'internal' / 'primitives'
+GN_INTERNAL_INPUTS_PATH = GN_INTERNAL_PATH / 'input'
+GN_INTERNAL_SOURCES_PATH = GN_INTERNAL_PATH / 'source'
+GN_INTERNAL_STRUCTURES_PATH = GN_INTERNAL_PATH / 'structure'
+GN_INTERNAL_MONITORS_PATH = GN_INTERNAL_PATH / 'monitor'
+GN_INTERNAL_SIMULATIONS_PATH = GN_INTERNAL_PATH / 'simulation'
+
+## Structures
+GN_STRUCTURES_PATH = info.PATH_ASSETS / 'structures'
+GN_STRUCTURES_PRIMITIVES_PATH = GN_STRUCTURES_PATH / 'primitives'
+
 GN_PARENT_PATHS: dict[GeoNodes, Path] = {
-	GeoNodes.PrimitiveBox: GN_PRIMITIVES_PATH,
-	GeoNodes.PrimitiveRing: GN_PRIMITIVES_PATH,
-	GeoNodes.PrimitiveSphere: GN_PRIMITIVES_PATH,
+	# Node Previews
+	## Input
+	GeoNodes.InputConstantPhysicalPol: GN_INTERNAL_INPUTS_PATH,
+	## Source
+	GeoNodes.SourcePointDipole: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourcePlaneWave: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceUniformCurrent: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceTFSF: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceGaussianBeam: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceAstigmaticGaussianBeam: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceMode: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceEHArray: GN_INTERNAL_SOURCES_PATH,
+	GeoNodes.SourceEHEquivArray: GN_INTERNAL_SOURCES_PATH,
+	## Structure
+	GeoNodes.StructurePrimitivePlane: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveBox: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveSphere: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveCylinder: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveRing: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveCapsule: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.StructurePrimitiveCone: GN_INTERNAL_STRUCTURES_PATH,
+	## Monitor
+	GeoNodes.MonitorEHField: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorFieldPowerFlux: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorEpsTensor: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorDiffraction: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorProjCartEHField: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorProjAngEHField: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorProjKSpaceEHField: GN_INTERNAL_STRUCTURES_PATH,
+	## Simulation
+	GeoNodes.SimulationSimDomain: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundConds: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondPML: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondPEC: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondPMC: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondBloch: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondPeriodic: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationBoundCondAbsorbing: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationSimGrid: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationSimGridAxisAuto: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationSimGridAxisManual: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationSimGridAxisUniform: GN_INTERNAL_SIMULATIONS_PATH,
+	GeoNodes.SimulationSimGridAxisArray: GN_INTERNAL_SIMULATIONS_PATH,
+
+	# Structures
+	GeoNodes.PrimitiveBox: GN_STRUCTURES_PRIMITIVES_PATH,
+	GeoNodes.PrimitiveRing: GN_STRUCTURES_PRIMITIVES_PATH,
+	GeoNodes.PrimitiveSphere: GN_STRUCTURES_PRIMITIVES_PATH,
 }
 
 
 ####################
 # - Import GeoNodes (Link/Append)
 ####################
-ImportMethod: typ.TypeAlias = typx.Literal['append', 'link']
-
-
 def import_geonodes(
 	geonodes: GeoNodes,
 	import_method: ImportMethod,
-	force_import: bool = False,
 ) -> bpy.types.GeometryNodeGroup:
-	"""Given a pre-defined GeoNodes group packaged with Blender Maxwell.
+	"""Given a (name of a) GeoNodes group packaged with Blender Maxwell, link/append it to the current file, and return the node group.
 
-	The procedure is as follows:
+	Parameters:
+		geonodes: The (name of the) GeoNodes group, which ships with Blender Maxwell.
+		import_method: Whether to link or append the GeoNodes group.
+			When 'link', repeated calls will not link a new group; the existing group will simply be returned.
 
-	- Link it to the current .blend file.
-	- Retrieve the node group and return it.
+	Returns:
+		A GeoNodes group available in the current .blend file, which can ex. be attached to a 'GeoNodes Structure' node.
 	"""
-	if geonodes in bpy.data.node_groups and not force_import:
+	if (
+		import_method == 'link'
+		and geonodes in bpy.data.node_groups
+	):
 		return bpy.data.node_groups[geonodes]
 
 	filename = geonodes
@@ -144,8 +248,6 @@ class AppendGeoNodes(bpy.types.Operator):
 	# - Properties
 	####################
 	_asset: bpy.types.AssetRepresentation | None = None
-	_start_drag_x: bpy.props.IntProperty()
-	_start_drag_y: bpy.props.IntProperty()
 
 	####################
 	# - UI
@@ -168,9 +270,7 @@ class AppendGeoNodes(bpy.types.Operator):
 		"""
 		return context.asset is not None
 
-	def invoke(self, context, event):
-		self._start_drag_x = event.mouse_x
-		self._start_drag_y = event.mouse_y
+	def invoke(self, context: bpy.types.Context, _):
 		return self.execute(context)
 
 	def execute(self, context: bpy.types.Context) -> BLOperatorStatus:

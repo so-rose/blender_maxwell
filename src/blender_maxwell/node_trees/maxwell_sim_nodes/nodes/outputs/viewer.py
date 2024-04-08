@@ -71,9 +71,9 @@ class ViewerNode(base.MaxwellSimNode):
 		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
 	)
 
-	cache__data_was_unlinked: bpy.props.BoolProperty(
-		name='Data Was Unlinked',
-		description="Whether the Data input was unlinked last time it was checked.",
+	cache__data_socket_linked: bpy.props.BoolProperty(
+		name='Data Is Linked',
+		description='Whether the Data input was linked last time it was checked.',
 		default=True,
 	)
 
@@ -113,9 +113,12 @@ class ViewerNode(base.MaxwellSimNode):
 	####################
 	def print_data_to_console(self):
 		import sys
+
 		for module_name, module in sys.modules.copy().items():
 			if module_name == '__mp_main__':
-				print('Anything, even repr(), with this module just crashes:', module_name)
+				print(
+					'Anything, even repr(), with this module just crashes:', module_name
+				)
 				print(module)  ## Crash
 
 		if not self.inputs['Data'].is_linked:
@@ -141,27 +144,31 @@ class ViewerNode(base.MaxwellSimNode):
 		if self.inputs['Data'].is_linked and props['auto_plot']:
 			self.trigger_action('show_plot')
 
+	####################
+	# - Event Methods: 3D Preview
+	####################
 	@events.on_value_changed(
-		socket_name='Data',
+		prop_name='auto_3d_preview',
 		props={'auto_3d_preview'},
 	)
-	def on_changed_3d_data(self, props):
-		# Data Not Attached
-		if not self.inputs['Data'].is_linked:
-			self.cache__data_was_unlinked = True
+	def on_changed_3d_preview(self, props):
+		# Unpreview Everything
+		node_tree = self.id_data
+		node_tree.unpreview_all()
 
-		# Data Just Attached
-		elif self.cache__data_was_unlinked:
-			node_tree = self.id_data
+		# Trigger Preview Action
+		if self.inputs['Data'].is_linked and props['auto_3d_preview']:
+			log.info('Enabling 3D Previews from "%s"', self.name)
+			self.trigger_action('show_preview')
 
-			# Unpreview Everything
-			node_tree.unpreview_all()
-
-			# Enable Previews in Tree
-			if props['auto_3d_preview']:
-				log.info('Enabling 3D Previews from "%s"', self.name)
-				self.trigger_action('show_preview')
-				self.cache__data_was_unlinked = False
+	@events.on_value_changed(
+		socket_name='Data',
+	)
+	def on_changed_3d_data(self):
+		# Just Linked / Just Unlinked: Preview/Unpreview
+		if self.inputs['Data'].is_linked ^ self.cache__data_socket_linked:
+			self.on_changed_3d_preview()
+			self.cache__data_socket_linked = self.inputs['Data'].is_linked
 
 
 ####################

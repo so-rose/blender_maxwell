@@ -43,10 +43,10 @@ def _size_from_bl_socket(
 	description: str,
 	bl_socket_type: BLSocketType,
 ):
-	"""Parses the `size`, aka. number of elements, contained within the `default_value` of a Blender interface socket.
+	"""Parses the number of elements contained in a Blender interface socket.
 
 	Since there are no 2D sockets in Blender, the user can specify "2D" in the Blender socket's description to "promise" that only the first two values will be used.
-	When this is done, the third value is left entirely untouched by this entire system.
+	When this is done, the third value is just never altered by the addon.
 
 	A hard-coded set of NodeSocket<Type> prefixes are used to determine which interface sockets are, in fact, 3D.
 	- For 3D sockets, a hard-coded list of Blender node socket types is used.
@@ -204,6 +204,7 @@ def _writable_bl_socket_value(
 	unit_system: dict | None = None,
 	allow_unit_not_in_unit_system: bool = False,
 ) -> typ.Any:
+	log.debug('Writing BL Socket Value (%s)', str(value))
 	socket_type = _socket_type_from_bl_socket(description, bl_socket_type)
 
 	# Retrieve Unit-System Unit
