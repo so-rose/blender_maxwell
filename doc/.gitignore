@@ -3,4 +3,4 @@ _site
 _sidebar.yml
 _site
 objects.json
-reference
+pydocs
