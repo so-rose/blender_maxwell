@@ -112,15 +112,6 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Methods
 	####################
 	def print_data_to_console(self):
-		import sys
-
-		for module_name, module in sys.modules.copy().items():
-			if module_name == '__mp_main__':
-				print(
-					'Anything, even repr(), with this module just crashes:', module_name
-				)
-				print(module)  ## Crash
-
 		if not self.inputs['Data'].is_linked:
 			return
 

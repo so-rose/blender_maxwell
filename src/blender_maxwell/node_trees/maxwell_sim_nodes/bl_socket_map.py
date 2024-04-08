@@ -204,7 +204,6 @@ def _writable_bl_socket_value(
 	unit_system: dict | None = None,
 	allow_unit_not_in_unit_system: bool = False,
 ) -> typ.Any:
-	log.debug('Writing BL Socket Value (%s)', str(value))
 	socket_type = _socket_type_from_bl_socket(description, bl_socket_type)
 
 	# Retrieve Unit-System Unit

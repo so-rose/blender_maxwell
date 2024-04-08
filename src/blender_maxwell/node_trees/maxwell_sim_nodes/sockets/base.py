@@ -6,7 +6,10 @@ import sympy as sp
 import sympy.physics.units as spu
 import typing_extensions as typx
 
+from ....utils import logger
 from .. import contracts as ct
+
+log = logger.get(__name__)
 
 
 class MaxwellSimSocket(bpy.types.NodeSocket):
@@ -280,10 +283,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		self,
 		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	):
-		"""Computes the value of this socket, including all relevant factors:
-		- If input socket, and unlinked, compute internal data.
-		- If input socket, and linked, compute linked socket data.
-		- If output socket, ask node for data.
+		"""Computes the value of this socket, including all relevant factors.
+
+		Notes:
+			- If input socket, and unlinked, compute internal data.
+			- If input socket, and linked, compute linked socket data.
+			- If output socket, ask node for data.
 		"""
 		# Compute Output Socket
 		## List-like sockets guarantee that a list of a thing is passed.
@@ -339,11 +344,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			if value == unit_sympy
 		]
 		if len(matching_unit_names) == 0:
-			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(possible.units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
+			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
 			raise ValueError(msg)
 
 		if len(matching_unit_names) > 1:
-			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(possible.units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
+			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
 			raise RuntimeError(msg)
 
 		self.active_unit = matching_unit_names[0]

@@ -42,9 +42,9 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Structure',
 		input_sockets={'Medium'},
-		managed_objs={'geometry'},
+		managed_objs={'mesh'},
 	)
-	def compute_output(
+	def compute_structure(
 		self,
 		input_sockets: dict[str, typ.Any],
 		managed_objs: dict[str, ct.schemas.ManagedObj],

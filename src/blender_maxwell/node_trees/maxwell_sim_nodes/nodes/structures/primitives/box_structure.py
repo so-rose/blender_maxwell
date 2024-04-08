@@ -50,7 +50,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			'Size': 'Tidy3DUnits',
 		},
 	)
-	def compute_output(self, input_sockets: dict, unit_systems: dict) -> td.Box:
+	def compute_structure(self, input_sockets: dict, unit_systems: dict) -> td.Box:
 		return td.Structure(
 			geometry=td.Box(
 				center=input_sockets['Center'],

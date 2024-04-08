@@ -16,8 +16,11 @@ class NodeType(BlenderTypeEnum):
 	## Inputs / Scene
 	Time = enum.auto()
 
-	## Inputs / Importers
+	## Inputs / Web Importers
 	Tidy3DWebImporter = enum.auto()
+
+	## Inputs / File Importers
+	Tidy3DFileImporter = enum.auto()
 
 	## Inputs / Parameters
 	NumberParameter = enum.auto()
@@ -34,8 +37,6 @@ class NodeType(BlenderTypeEnum):
 	RealList = enum.auto()
 	ComplexList = enum.auto()
 
-	## Inputs /
-	InputFile = enum.auto()
 
 	# Outputs
 	## Outputs / Viewers
