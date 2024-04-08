@@ -6,7 +6,10 @@ import matplotlib.axis as mpl_ax
 import numpy as np
 import typing_extensions as typx
 
+from ....utils import logger
 from .. import contracts as ct
+
+log = logger.get(__name__)
 
 AREA_TYPE = 'IMAGE_EDITOR'
 SPACE_TYPE = 'IMAGE_EDITOR'
@@ -163,6 +166,7 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		# Compute Plot Dimensions
 		aspect_ratio = _width_inches / _height_inches
 
+		log.debug('Create MPL Axes (aspect=%d, width=%d, height=%d)', aspect_ratio, _width_inches, _height_inches)
 		# Create MPL Figure, Axes, and Compute Figure Geometry
 		fig, ax = plt.subplots(
 			figsize=[_width_inches, _height_inches],
@@ -171,6 +175,7 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		ax.set_aspect(aspect_ratio)
 		cmp_width_px, cmp_height_px = fig.canvas.get_width_height()
 		## Use computed pixel w/h to preempt off-by-one size errors.
+		ax.set_aspect('auto')  ## Workaround aspect-ratio bugs
 
 		# Plot w/User Parameter
 		func_plotter(ax)

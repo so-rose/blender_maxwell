@@ -1,5 +1,5 @@
 # Acute Tasks
-- Implement Material Import for Maxim Data
+- [x] Implement Material Import for Maxim Data
 - Move preview GN trees to the asset library.
 
 

@@ -23,7 +23,6 @@ class ConsoleViewOperator(bpy.types.Operator):
 
 	def execute(self, context):
 		node = context.node
-		print('Executing Operator')
 
 		node.print_data_to_console()
 		return {'FINISHED'}
@@ -39,7 +38,7 @@ class RefreshPlotViewOperator(bpy.types.Operator):
 
 	def execute(self, context):
 		node = context.node
-		node.trigger_action('value_changed', 'Data')
+		node.on_changed_plot_preview()
 		return {'FINISHED'}
 
 
@@ -67,7 +66,7 @@ class ViewerNode(base.MaxwellSimNode):
 	auto_3d_preview: bpy.props.BoolProperty(
 		name='Auto 3D Preview',
 		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
-		default=False,
+		default=True,
 		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
 	)
 
@@ -126,18 +125,14 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Event Methods
 	####################
 	@events.on_value_changed(
-		socket_name='Data',
+		prop_name='auto_plot',
 		props={'auto_plot'},
 	)
-	def on_changed_2d_data(self, props):
-		# Show Plot
-		## Don't have to un-show other plots.
+	def on_changed_plot_preview(self, props):
 		if self.inputs['Data'].is_linked and props['auto_plot']:
+			log.info('Enabling 2D Plot from "%s"', self.name)
 			self.trigger_action('show_plot')
 
-	####################
-	# - Event Methods: 3D Preview
-	####################
 	@events.on_value_changed(
 		prop_name='auto_3d_preview',
 		props={'auto_3d_preview'},
@@ -159,6 +154,7 @@ class ViewerNode(base.MaxwellSimNode):
 		# Just Linked / Just Unlinked: Preview/Unpreview
 		if self.inputs['Data'].is_linked ^ self.cache__data_socket_linked:
 			self.on_changed_3d_preview()
+			self.on_changed_plot_preview()
 			self.cache__data_socket_linked = self.inputs['Data'].is_linked
 
 
