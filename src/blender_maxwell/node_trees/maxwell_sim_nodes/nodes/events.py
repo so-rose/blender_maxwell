@@ -69,11 +69,12 @@ PropName: typ.TypeAlias = str
 def event_decorator(
 	action_type: EventCallbackType,
 	extra_data: EventCallbackData,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	props: set[PropName] = frozenset(),
 	managed_objs: set[ManagedObjName] = frozenset(),
 	input_sockets: set[ct.SocketName] = frozenset(),
+	input_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
 	output_sockets: set[ct.SocketName] = frozenset(),
+	output_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
 	all_loose_input_sockets: bool = False,
 	all_loose_output_sockets: bool = False,
 	unit_systems: dict[UnitSystemID, UnitSystem] = MappingProxyType({}),
@@ -87,11 +88,11 @@ def event_decorator(
 			Set to `return_method.action_type`
 		extra_data: A dictionary that provides the caller with additional per-`action_type` information.
 			This might include parameters to help select the most appropriate method(s) to respond to an event with, or actions to take after running the callback.
-		kind: The `ct.DataFlowKind` used to compute all input and output socket data for methods with.
-			Only affects data passed to the decorated method; namely `input_sockets`, `output_sockets`, and their loose variants.
 		props: Set of `props` to compute, then pass to the decorated method.
 		managed_objs: Set of `managed_objs` to retrieve, then pass to the decorated method.
 		input_sockets: Set of `input_sockets` to compute, then pass to the decorated method.
+		input_socket_kinds: The `ct.DataFlowKind` to compute per-input-socket.
+			If an input socket isn't specified, it defaults to `ct.DataFlowKind.Value`.
 		output_sockets: Set of `output_sockets` to compute, then pass to the decorated method.
 		all_loose_input_sockets: Whether to compute all loose input sockets and pass them to the decorated method.
 			Used when the names of the loose input sockets are unknown, but all of their values are needed.
@@ -154,7 +155,12 @@ def event_decorator(
 			## Compute Requested Input Sockets
 			if input_sockets:
 				_input_sockets = {
-					input_socket_name: node._compute_input(input_socket_name, kind)
+					input_socket_name: node._compute_input(
+						input_socket_name,
+						kind=input_socket_kinds.get(
+							input_socket_name, ct.DataFlowKind.Value
+						),
+					)
 					for input_socket_name in input_sockets
 				}
 
@@ -163,19 +169,35 @@ def event_decorator(
 				## Then, convert the symbol-less sympy scalar to a python type.
 				for input_socket_name, unit_system_id in scale_input_sockets.items():
 					unit_system = unit_systems[unit_system_id]
-					_input_sockets[input_socket_name] = spux.sympy_to_python(
-						spux.scale_to_unit(
-							_input_sockets[input_socket_name],
-							unit_system[node.inputs[input_socket_name].socket_type],
-						)
+					kind = input_socket_kinds.get(
+						input_socket_name, ct.DataFlowKind.Value
 					)
+
+					if kind == ct.DataFlowKind.Value:
+						_input_sockets[input_socket_name] = spux.sympy_to_python(
+							spux.scale_to_unit(
+								_input_sockets[input_socket_name],
+								unit_system[node.inputs[input_socket_name].socket_type],
+							)
+						)
+					elif kind == ct.DataFlowKind.LazyValueRange:
+						_input_sockets[input_socket_name] = _input_sockets[
+							input_socket_name
+						].rescale_to_unit(
+							unit_system[node.inputs[input_socket_name].socket_type]
+						)
 
 				method_kw_args |= {'input_sockets': _input_sockets}
 
 			## Compute Requested Output Sockets
 			if output_sockets:
 				_output_sockets = {
-					output_socket_name: node.compute_output(output_socket_name, kind)
+					output_socket_name: node.compute_output(
+						output_socket_name,
+						kind=input_socket_kinds.get(
+							input_socket_name, ct.DataFlowKind.Value
+						),
+					)
 					for output_socket_name in output_sockets
 				}
 
@@ -184,19 +206,32 @@ def event_decorator(
 				## Then, convert the symbol-less sympy scalar to a python type.
 				for output_socket_name, unit_system_id in scale_output_sockets.items():
 					unit_system = unit_systems[unit_system_id]
-					_output_sockets[output_socket_name] = spux.sympy_to_python(
-						spux.scale_to_unit(
-							_output_sockets[output_socket_name],
-							unit_system[node.outputs[output_socket_name].socket_type],
-						)
+					kind = input_socket_kinds.get(
+						input_socket_name, ct.DataFlowKind.Value
 					)
+
+					if kind == ct.DataFlowKind.Value:
+						_output_sockets[output_socket_name] = spux.sympy_to_python(
+							spux.scale_to_unit(
+								_output_sockets[output_socket_name],
+								unit_system[
+									node.outputs[output_socket_name].socket_type
+								],
+							)
+						)
+					elif kind == ct.DataFlowKind.LazyValueRange:
+						_output_sockets[output_socket_name] = _output_sockets[
+							output_socket_name
+						].rescale_to_unit(
+							unit_system[node.outputs[output_socket_name].socket_type]
+						)
 				method_kw_args |= {'output_sockets': _output_sockets}
 
 			# Loose Sockets
 			## Compute All Loose Input Sockets
 			if all_loose_input_sockets:
 				_loose_input_sockets = {
-					input_socket_name: node._compute_input(input_socket_name, kind)
+					input_socket_name: node._compute_input(input_socket_name, kind=node.inputs[input_socket_name].active_kind)
 					for input_socket_name in node.loose_input_sockets
 				}
 				method_kw_args |= {'loose_input_sockets': _loose_input_sockets}
@@ -204,7 +239,7 @@ def event_decorator(
 			## Compute All Loose Output Sockets
 			if all_loose_output_sockets:
 				_loose_output_sockets = {
-					output_socket_name: node.compute_output(output_socket_name, kind)
+					output_socket_name: node.compute_output(output_socket_name, kind=node.outputs[output_socket_name].active_kind)
 					for output_socket_name in node.loose_output_sockets
 				}
 				method_kw_args |= {'loose_output_sockets': _loose_output_sockets}
@@ -221,10 +256,10 @@ def event_decorator(
 
 		# Set Decorated Attributes and Return
 		## Fix Introspection + Documentation
-		#decorated.__name__ = method.__name__
-		#decorated.__module__ = method.__module__
-		#decorated.__qualname__ = method.__qualname__
-		#decorated.__doc__ = method.__doc__
+		# decorated.__name__ = method.__name__
+		# decorated.__module__ = method.__module__
+		# decorated.__qualname__ = method.__qualname__
+		# decorated.__doc__ = method.__doc__
 
 		## Add Spice
 		decorated.action_type = action_type

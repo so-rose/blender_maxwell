@@ -1,5 +1,6 @@
 import typing as typ
 
+import bpy
 import sympy as sp
 import sympy.physics.units as spu
 
@@ -15,106 +16,92 @@ class WaveConstantNode(base.MaxwellSimNode):
 	bl_label = 'Wave Constant'
 
 	input_socket_sets: typ.ClassVar = {
-		# Single
-		'Vacuum WL': {
-			'WL': sockets.PhysicalLengthSocketDef(
-				default_value=500 * spu.nm,
-				default_unit=spu.nm,
-			),
-		},
-		'Frequency': {
-			'Freq': sockets.PhysicalFreqSocketDef(
-				default_value=500 * spux.THz,
-				default_unit=spux.THz,
-			),
-		},
-		# Listy
-		'Vacuum WLs': {
-			'WLs': sockets.PhysicalLengthSocketDef(
-				is_list=True,
-			),
-		},
-		'Frequencies': {
-			'Freqs': sockets.PhysicalFreqSocketDef(
-				is_list=True,
-			),
-		},
+		'Wavelength': {},
+		'Frequency': {},
 	}
 
+	use_range: bpy.props.BoolProperty(
+		name='Range',
+		description='Whether to use the wavelength range',
+		default=False,
+		update=lambda self, context: self.sync_prop('use_range', context),
+	)
+
+	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
+		col.prop(self, 'use_range', toggle=True)
+
 	####################
-	# - Event Methods: Listy Output
+	# - Event Methods: Wavelength Output
 	####################
 	@events.computes_output_socket(
 		'WL',
-		input_sockets={'WL'},
+		all_loose_input_sockets=True,
 	)
-	def compute_vacwl_from_vacwl(self, input_sockets: dict) -> sp.Expr:
-		return input_sockets['WL']
+	def compute_wl(self, loose_input_sockets: dict) -> sp.Expr:
+		if (wl := loose_input_sockets.get('WL')) is not None:
+			return wl
+
+		freq = loose_input_sockets.get('Freq')
+
+		if isinstance(freq, ct.LazyDataValueRange):
+			return freq.rescale_bounds(
+				lambda bound: constants.vac_speed_of_light / bound, reverse=True
+			)
+
+		return constants.vac_speed_of_light / freq
 
 	@events.computes_output_socket(
-		'WL',
-		input_sockets={'Freq'},
+		'Freq',
+		all_loose_input_sockets=True,
 	)
-	def compute_freq_from_vacwl(self, input_sockets: dict) -> sp.Expr:
-		return constants.vac_speed_of_light / input_sockets['Freq']
+	def compute_freq(self, loose_input_sockets: dict) -> sp.Expr:
+		if (freq := loose_input_sockets.get('Freq')) is not None:
+			return freq
 
-	####################
-	# - Event Methods: Listy Output
-	####################
-	@events.computes_output_socket(
-		'WLs',
-		input_sockets={'WLs', 'Freqs'},
-	)
-	def compute_vac_wls(self, input_sockets: dict) -> sp.Expr:
-		if (vac_wls := input_sockets['WLs']) is not None:
-			return vac_wls
-		if (freqs := input_sockets['Freqs']) is not None:
-			return [constants.vac_speed_of_light / freq for freq in freqs][::-1]
+		wl = loose_input_sockets.get('WL')
 
-		msg = 'Vac WL and Freq are both None'
-		raise RuntimeError(msg)
+		if isinstance(wl, ct.LazyDataValueRange):
+			return wl.rescale_bounds(
+				lambda bound: constants.vac_speed_of_light / bound, reverse=True
+			)
 
-	@events.computes_output_socket(
-		'Freqs',
-		input_sockets={'WLs', 'Freqs'},
-	)
-	def compute_freqs(self, input_sockets: dict) -> sp.Expr:
-		if (vac_wls := input_sockets['WLs']) is not None:
-			return [constants.vac_speed_of_light / vac_wl for vac_wl in vac_wls][::-1]
-		if (freqs := input_sockets['Freqs']) is not None:
-			return freqs
-
-		msg = 'Vac WL and Freq are both None'
-		raise RuntimeError(msg)
+		return constants.vac_speed_of_light / wl
 
 	####################
 	# - Event Methods
 	####################
-	@events.on_value_changed(prop_name='active_socket_set', props={'active_socket_set'})
-	def on_active_socket_set_changed(self, props: dict):
-		# Singular: Normal Output Sockets
-		if props['active_socket_set'] in {'Vacuum WL', 'Frequency'}:
-			self.loose_output_sockets = {}
-			self.loose_output_sockets = {
-				'Freq': sockets.PhysicalFreqSocketDef(),
-				'WL': sockets.PhysicalLengthSocketDef(),
+	@events.on_value_changed(
+		prop_name={'active_socket_set', 'use_range'},
+		props={'active_socket_set', 'use_range'},
+	)
+	def on_input_spec_change(self, props: dict):
+		if props['active_socket_set'] == 'Wavelength':
+			self.loose_input_sockets = {
+				'WL': sockets.PhysicalLengthSocketDef(
+					is_array=props['use_range'],
+					default_value=500 * spu.nm,
+					default_unit=spu.nm,
+				)
 			}
-
-		# Plural: Listy Output Sockets
-		elif props['active_socket_set'] in {'Vacuum WLs', 'Frequencies'}:
-			self.loose_output_sockets = {}
-			self.loose_output_sockets = {
-				'Freqs': sockets.PhysicalFreqSocketDef(is_list=True),
-				'WLs': sockets.PhysicalLengthSocketDef(is_list=True),
-			}
-
 		else:
-			msg = f"Active socket set invalid for wave constant: {props['active_socket_set']}"
-			raise RuntimeError(msg)
+			self.loose_input_sockets = {
+				'Freq': sockets.PhysicalFreqSocketDef(
+					is_array=props['use_range'],
+					default_value=600 * spux.THz,
+					default_unit=spux.THz,
+				)
+			}
 
-	@events.on_init()
-	def on_init(self):
-		self.on_active_socket_set_changed()
+		self.loose_output_sockets = {
+			'WL': sockets.PhysicalLengthSocketDef(is_array=props['use_range']),
+			'Freq': sockets.PhysicalFreqSocketDef(is_array=props['use_range']),
+		}
+
+	@events.on_init(
+		props={'active_socket_set', 'use_range'},
+	)
+	def on_init(self, props: dict):
+		self.on_input_spec_change()
 
 
 ####################

@@ -34,7 +34,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
 			'Freqs': sockets.PhysicalFreqSocketDef(
-				is_list=True,
+				is_array=True,
 			),
 		},
 		'Time Domain': {
@@ -74,10 +74,14 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 			'Freqs',
 			'Direction',
 		},
+		input_socket_kinds={
+			'Freqs': ct.LazyDataValueRange,
+		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={
 			'Center': 'Tidy3DUnits',
 			'Size': 'Tidy3DUnits',
+			'Freqs': 'Tidy3DUnits',
 			'Samples/Space': 'Tidy3DUnits',
 			'Rec Start': 'Tidy3DUnits',
 			'Rec Stop': 'Tidy3DUnits',
@@ -88,8 +92,6 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 		direction = '+' if input_sockets['Direction'] else '-'
 
 		if props['active_socket_set'] == 'Freq Domain':
-			freqs = input_sockets['Freqs']
-
 			log.info(
 				'Computing FluxMonitor (name="%s") with center="%s", size="%s"',
 				props['sim_node_name'],
@@ -101,9 +103,7 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 				size=input_sockets['Size'],
 				name=props['sim_node_name'],
 				interval_space=input_sockets['Samples/Space'],
-				freqs=[
-					float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
-				],
+				freqs=input_sockets['Freqs'].realize().values,
 				normal_dir=direction,
 			)
 

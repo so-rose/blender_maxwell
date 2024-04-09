@@ -1,10 +1,10 @@
 import bpy
-import numpy as np
 import pydantic as pyd
+import sympy as sp
 import sympy.physics.units as spu
 
-from .....utils import logger
 from .....utils import extra_sympy_units as spux
+from .....utils import logger
 from .....utils.pydantic_sympy import SympyExpr
 from ... import contracts as ct
 from .. import base
@@ -58,7 +58,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		col.prop(self, 'raw_value', text='')
 
-	def draw_value_list(self, col: bpy.types.UILayout) -> None:
+	def draw_lazy_value_range(self, col: bpy.types.UILayout) -> None:
 		col.prop(self, 'min_len', text='Min')
 		col.prop(self, 'max_len', text='Max')
 		col.prop(self, 'steps', text='Steps')
@@ -75,28 +75,21 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		self.raw_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
 
 	@property
-	def value_list(self) -> list[SympyExpr]:
-		return [
-			el * self.unit for el in np.linspace(self.min_len, self.max_len, self.steps)
-		]
+	def lazy_value_range(self) -> ct.LazyDataValueRange:
+		return ct.LazyDataValueRange(
+			symbols=set(),
+			has_unit=True,
+			start=sp.S(self.min_len) * self.unit,
+			stop=sp.S(self.max_len) * self.unit,
+			steps=self.steps,
+			scaling='lin',
+		)
 
-	@value_list.setter
-	def value_list(self, value: tuple[SympyExpr, SympyExpr, int]):
-		self.min_len, self.max_len, self.steps = [
-			spu.convert_to(el, self.unit) / self.unit for el in value[:2]
-		] + [value[2]]
-
-	def sync_unit_change(self) -> None:
-		if self.is_list:
-			self.value_list = (
-				spu.convert_to(self.min_len * self.prev_unit, self.unit),
-				spu.convert_to(self.max_len * self.prev_unit, self.unit),
-				self.steps,
-			)
-		else:
-			self.value = self.value / self.unit * self.prev_unit
-
-		self.prev_active_unit = self.active_unit
+	@lazy_value_range.setter
+	def lazy_value_range(self, value: tuple[sp.Expr, sp.Expr, int]) -> None:
+		self.min_len = spux.sympy_to_python(spux.scale_to_unit(value[0], self.unit))
+		self.max_len = spux.sympy_to_python(spux.scale_to_unit(value[1], self.unit))
+		self.steps = value[2]
 
 
 ####################
@@ -104,24 +97,24 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 ####################
 class PhysicalLengthSocketDef(pyd.BaseModel):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalLength
+	is_array: bool = False
 
 	default_value: SympyExpr = 1 * spu.um
 	default_unit: SympyExpr | None = None
-	is_list: bool = False
 
 	min_len: SympyExpr = 400.0 * spu.nm
-	max_len: SympyExpr = 600.0 * spu.nm
+	max_len: SympyExpr = 700.0 * spu.nm
 	steps: SympyExpr = 50
 
 	def init(self, bl_socket: PhysicalLengthBLSocket) -> None:
-		bl_socket.value = self.default_value
-		bl_socket.is_list = self.is_list
-
 		if self.default_unit:
 			bl_socket.unit = self.default_unit
 
-		if self.is_list:
-			bl_socket.value_list = (self.min_len, self.max_len, self.steps)
+		bl_socket.value = self.default_value
+		if self.is_array:
+			bl_socket.active_kind = ct.DataFlowKind.LazyValueRange
+			bl_socket.lazy_value_range = (self.min_len, self.max_len, self.steps)
+
 
 
 ####################

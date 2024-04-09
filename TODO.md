@@ -1,20 +1,16 @@
 # Acute Tasks
 - [x] Implement Material Import for Maxim Data
-- Move preview GN trees to the asset library.
+- [x] Implement Robust DataFlowKind for list-like / spectral-like composite types
+- [ ] Finish the "Low-Hanging Fruit" Nodes
+- [ ] Move preview GN trees to the asset library.
 
 
 
 # Nodes
-**LEGEND**:
-- [-] Exists but doesn't quite work good enough.
-- [x] Done to working degree (the standard is "good enough for the demo").
-	- See check marks underneath
-- [?] Unsure whether we should do this.
-
 ## Inputs
 - [x] Wave Constant
 	- [x] Implement export of frequency / wavelength array/range.
-- [-] Unit System
+- [x] Unit System
 	- [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
 
 - [ ] Constants / Scientific Constant
@@ -26,7 +22,7 @@
 	- [ ] Pol: Poincare sphere viz as 3D GN.
 - [x] Constants / Blender Constant
 
-- [-] Web / Tidy3D Web Importer
+- [ ] Web / Tidy3D Web Importer
 	- [ ] Change to output only a `FilePath`, which can be plugged into a Tidy3D File Importer.
 	- [ ] Implement caching, such that the file will only download if the file doesn't already exist.
 	- [ ] Have a visual indicator for the current download status, with a manual re-download button.
@@ -79,7 +75,7 @@
 
 - [x] Point Dipole Source
 	- [ ] Use a viz mesh, not empty (empty doesn't play well with alpha hashing).
-- [-] Plane Wave Source
+- [ ] Plane Wave Source
 	- [x] Implement an oriented vector input with 3D preview.
 	- [ ] **IMPORTANT**: Fix the math so that an actually valid construction emerges!!
 - [ ] Uniform Current Source
@@ -120,7 +116,6 @@
 	- [x] Rewrite to use unit systems properly.
 	- [ ] Propertly map / implement Enum input sockets to the GN group.
 	- [ ] Implement a panel system, either based on native GN panels, or description parsing, or something like that.
-	- [?] When GeoNodes themselves declare panels, implement a grid-like tab system to select which sockets should be exposed in the node at a given point in time.
 
 - [ ] Primitive Structures / Plane Structure
 - [x] Primitive Structures / Box Structure
@@ -197,7 +192,7 @@
 - [x] Structures / Arrays / Box
 - [x] Structures / Arrays / Sphere
 - [ ] Structures / Arrays / Cylinder
-- [-] Structures / Arrays / Ring
+- [x] Structures / Arrays / Ring
 - [ ] Structures / Arrays / Capsule
 - [ ] Structures / Arrays / Cone
 
@@ -270,7 +265,7 @@
 
 - [ ] FDTD Sim
 - [ ] Sim Domain
-	- [?] Toggleable option to push-sync the simulation time duration to the scene end time (how to handle FPS vs time-step? Should we adjust the FPS such that there is one time step per frame, while keeping the definition of "second" aligned to the Blender unit system?)
+	- [ ] Toggleable option to push-sync the simulation time duration to the scene end time (how to handle FPS vs time-step? Should we adjust the FPS such that there is one time step per frame, while keeping the definition of "second" aligned to the Blender unit system?)
 - [ ] Sim Grid
 - [ ] Sim Grid Axis
 
@@ -376,7 +371,7 @@
 ## Registration and Contracts
 - [ ] Refactor the node category code; it's ugly.
 	- It's maybe not that easy. And it seems to work with surprising reliability. Leave it alone for now!
-- [?] Would be nice with some kind of indicator somewhere to help set good socket descriptions when making geonodes.
+- [ ] (?) Would be nice with some kind of indicator somewhere to help set good socket descriptions when making geonodes.
 
 ## Managed Objects
 - [ ] Implement ManagedEmpty
@@ -401,7 +396,8 @@
 - [ ] When presets are used, if a preset is selected and the user alters a preset setting, then dynamically switch the preset indicator back to "Custom"  to indicate that there is no active preset
 
 ## Events
-- [-] Mechanism for selecting a blender object managed by a particular node.
+- [x] Mechanism for selecting a blender object managed by a particular node.
+	- [ ] Standard way of triggering the selection
 - [ ] Mechanism for ex. specially coloring a node that is currently participating in the preview.
 - [ ] Custom callbacks when deleting a node (in `free()`), to ex. delete all previews with the viewer node.
 
@@ -414,7 +410,7 @@
 
 ## Many Nodes
 - [ ] Implement "Steady-State" / "Time Domain" on all relevant Monitor nodes
-- [?] Dynamic `bl_label` where appropriate (ex. "Library Medium" becoming "Au Medium")
+- [ ] (?) Dynamic `bl_label` where appropriate (ex. "Library Medium" becoming "Au Medium")
 - [ ] Implement LazyValue, including LazyParamValue on a new class of constant-like input nodes that really just emit ex. sympy variables.
 - [ ] Medium Features
 	- [ ] Accept spatial field. Else, spatial uniformity.
@@ -438,11 +434,11 @@
 ## Version Churn
 - [ ] Migrate to StrEnum sockets (py3.11).
 - [ ] Implement drag-and-drop node-from-file via bl4.1 file handler API.
-- [-] Start thinking about ways around `__annotations__` hacking.
-- [-] Prepare for for multi-input sockets (bl4.2)
+- [ ] Start thinking about ways around `__annotations__` hacking.
+- [ ] Prepare for for multi-input sockets (bl4.2)
 	- PR has been merged: <https://projects.blender.org/blender/blender/commit/14106150797a6ce35e006ffde18e78ea7ae67598> (for now, just use the "Combine" node and have seperate socket types for both).
 	- The `Combine` node has its own benefits, including previewability of "only structures". Multi-input would mainly be a kind of shorthand in specific cases (like input to the `Combine` node?)
-- [-] Prepare for volume geonodes (bl4.2; July 16, 2024)
+- [ ] Prepare for volume geonodes (bl4.2; July 16, 2024)
 	- Will allow for actual volume processing in GeoNodes.
 	- We might still want/need the jax based stuff after; volume geonodes aren't finalized.
 

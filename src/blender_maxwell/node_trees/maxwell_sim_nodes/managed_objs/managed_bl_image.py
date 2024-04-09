@@ -37,9 +37,8 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 				return
 
 			# ...AND Desired Image Name is Taken
-			else:
-				msg = f'Desired name {value} for BL image is taken'
-				raise ValueError(msg)
+			msg = f'Desired name {value} for BL image is taken'
+			raise ValueError(msg)
 
 		# Object DOES Exist
 		bl_image.name = value
@@ -48,11 +47,8 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		## - `set_name` is allowed to change the name; nodes account for this.
 
 	def free(self):
-		if not (bl_image := bpy.data.images.get(self.name)):
-			msg = "Can't free BL image that doesn't exist"
-			raise ValueError(msg)
-
-		bpy.data.images.remove(bl_image)
+		if bl_image := bpy.data.images.get(self.name):
+			bpy.data.images.remove(bl_image)
 
 	####################
 	# - Managed Object Management
@@ -166,7 +162,12 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		# Compute Plot Dimensions
 		aspect_ratio = _width_inches / _height_inches
 
-		log.debug('Create MPL Axes (aspect=%d, width=%d, height=%d)', aspect_ratio, _width_inches, _height_inches)
+		log.debug(
+			'Create MPL Axes (aspect=%d, width=%d, height=%d)',
+			aspect_ratio,
+			_width_inches,
+			_height_inches,
+		)
 		# Create MPL Figure, Axes, and Compute Figure Geometry
 		fig, ax = plt.subplots(
 			figsize=[_width_inches, _height_inches],

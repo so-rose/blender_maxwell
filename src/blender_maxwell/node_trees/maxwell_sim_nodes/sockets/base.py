@@ -65,11 +65,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		cls.socket_shape = ct.SOCKET_SHAPES[cls.socket_type]
 
 		# Setup List
-		cls.__annotations__['is_list'] = bpy.props.BoolProperty(
-			name='Is List',
-			description='Whether or not a particular socket is a list type socket',
-			default=False,
-			update=lambda self, context: self.sync_is_list(context),
+		cls.__annotations__['active_kind'] = bpy.props.StringProperty(
+			name='Active Kind',
+			description='The active Data Flow Kind',
+			default=str(ct.DataFlowKind.Value),
+			update=lambda self, _: self.sync_active_kind(),
 		)
 
 		# Configure Use of Units
@@ -90,7 +90,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 					for unit_name, unit_value in socket_units['values'].items()
 				],
 				default=socket_units['default'],
-				update=lambda self, context: self.sync_unit_change(),
+				update=lambda self, _: self.sync_unit_change(),
 			)
 
 			# Previous Unit (for conversion)
@@ -103,13 +103,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	def trigger_action(
 		self,
-		action: typx.Literal[
-			'enable_lock',
-			'disable_lock',
-			'value_changed',
-			'show_preview',
-			'show_plot',
-		],
+		action: ct.DataFlowAction,
 	) -> None:
 		"""Called whenever the socket's output value has changed.
 
@@ -157,23 +151,29 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Action Chain: Event Handlers
 	####################
-	def sync_is_list(self, context: bpy.types.Context):
-		"""Called when the "is_list_ property has been updated."""
-		if self.is_list:
-			if self.use_units:
-				self.display_shape = 'SQUARE_DOT'
-			else:
-				self.display_shape = 'SQUARE'
+	def sync_active_kind(self):
+		"""Called when the active data flow kind of the socket changes.
 
-		self.trigger_action('value_changed')
+		Alters the shape of the socket to match the active DataFlowKind, then triggers `ct.DataFlowAction.DataChanged` on the current socket.
+		"""
+		self.display_shape = {
+			ct.DataFlowKind.Value: ct.SOCKET_SHAPES[self.socket_type],
+			ct.DataFlowKind.ValueArray: 'SQUARE',
+			ct.DataFlowKind.ValueSpectrum: 'SQUARE',
+			ct.DataFlowKind.LazyValue: ct.SOCKET_SHAPES[self.socket_type],
+			ct.DataFlowKind.LazyValueRange: 'SQUARE',
+			ct.DataFlowKind.LazyValueSpectrum: 'SQUARE',
+		}[self.active_kind] + ('_DOT' if self.use_units else '')
 
-	def sync_prop(self, prop_name: str, context: bpy.types.Context):
+		self.trigger_action(ct.DataFlowAction.DataChanged)
+
+	def sync_prop(self, prop_name: str, _: bpy.types.Context):
 		"""Called when a property has been updated."""
-		if not hasattr(self, prop_name):
+		if hasattr(self, prop_name):
+			self.trigger_action(ct.DataFlowAction.DataChanged)
+		else:
 			msg = f'Property {prop_name} not defined on socket {self}'
 			raise RuntimeError(msg)
-
-		self.trigger_action('value_changed')
 
 	def sync_link_added(self, link) -> bool:
 		"""Called when a link has been added to this (input) socket.
@@ -186,7 +186,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			msg = "Tried to sync 'link add' on output socket"
 			raise RuntimeError(msg)
 
-		self.trigger_action('value_changed')
+		self.trigger_action(ct.DataFlowAction.DataChanged)
 
 		return True
 
@@ -201,63 +201,78 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			msg = "Tried to sync 'link add' on output socket"
 			raise RuntimeError(msg)
 
-		self.trigger_action('value_changed')
+		self.trigger_action(ct.DataFlowAction.DataChanged)
 
 		return True
 
 	####################
 	# - Data Chain
 	####################
+	# Capabilities
 	@property
-	def value(self) -> typ.Any:
+	def capabilities(self) -> None:
+		return ct.DataCapabilities(
+			socket_type=self.socket_type,
+			active_kind=self.active_kind,
+		)
+
+	# Value
+	@property
+	def value(self) -> ct.DataValue:
 		raise NotImplementedError
 
 	@value.setter
-	def value(self, value: typ.Any) -> None:
+	def value(self, value: ct.DataValue) -> None:
 		raise NotImplementedError
 
+	# ValueArray
 	@property
-	def value_list(self) -> typ.Any:
-		return [self.value]
-
-	@value_list.setter
-	def value_list(self, value: typ.Any) -> None:
+	def value_array(self) -> ct.DataValueArray:
 		raise NotImplementedError
 
-	def value_as_unit_system(
-		self, unit_system: dict, dimensionless: bool = True
-	) -> typ.Any:
-		## TODO: Caching could speed this boi up quite a bit
+	@value_array.setter
+	def value_array(self, value: ct.DataValueArray) -> None:
+		raise NotImplementedError
 
-		unit_system_unit = unit_system[self.socket_type]
-		return (
-			spu.convert_to(
-				self.value,
-				unit_system_unit,
-			)
-			/ unit_system_unit
-		)
-
+	# ValueSpectrum
 	@property
-	def lazy_value(self) -> None:
+	def value_spectrum(self) -> ct.DataValueSpectrum:
+		raise NotImplementedError
+
+	@value_spectrum.setter
+	def value_spectrum(self, value: ct.DataValueSpectrum) -> None:
+		raise NotImplementedError
+
+	# LazyValue
+	@property
+	def lazy_value(self) -> ct.LazyDataValue:
 		raise NotImplementedError
 
 	@lazy_value.setter
-	def lazy_value(self, lazy_value: typ.Any) -> None:
+	def lazy_value(self, lazy_value: ct.LazyDataValue) -> None:
 		raise NotImplementedError
 
+	# LazyValueRange
 	@property
-	def lazy_value_list(self) -> typ.Any:
-		return [self.lazy_value]
-
-	@lazy_value_list.setter
-	def lazy_value_list(self, value: typ.Any) -> None:
+	def lazy_value_range(self) -> ct.LazyDataValueRange:
 		raise NotImplementedError
 
+	@lazy_value_range.setter
+	def lazy_value_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
+		raise NotImplementedError
+
+	# LazyValueSpectrum
 	@property
-	def capabilities(self) -> None:
+	def lazy_value_spectrum(self) -> ct.LazyDataValueSpectrum:
 		raise NotImplementedError
 
+	@lazy_value_spectrum.setter
+	def lazy_value_spectrum(self, value: ct.LazyDataValueSpectrum) -> None:
+		raise NotImplementedError
+
+	####################
+	# - Data Chain Computation
+	####################
 	def _compute_data(
 		self,
 		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
@@ -266,18 +281,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		**NOTE**: Low-level method. Use `compute_data` instead.
 		"""
-		if kind == ct.DataFlowKind.Value:
-			if self.is_list:
-				return self.value_list
-			return self.value
-		if kind == ct.DataFlowKind.LazyValue:
-			if self.is_list:
-				return self.lazy_value_list
-			return self.lazy_value
-		if kind == ct.DataFlowKind.Capabilities:
-			return self.capabilities
+		return {
+			ct.DataFlowKind.Value: lambda: self.value,
+			ct.DataFlowKind.ValueArray: lambda: self.value_array,
+			ct.DataFlowKind.ValueSpectrum: lambda: self.value_spectrum,
+			ct.DataFlowKind.LazyValue: lambda: self.lazy_value,
+			ct.DataFlowKind.LazyValueRange: lambda: self.lazy_value_range,
+			ct.DataFlowKind.LazyValueSpectrum: lambda: self.lazy_value_spectrum,
+		}[kind]()
 
-		return None
+		msg = f'socket._compute_data was called with invalid kind "{kind}"'
+		raise RuntimeError(msg)
 
 	def compute_data(
 		self,
@@ -291,22 +305,25 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			- If output socket, ask node for data.
 		"""
 		# Compute Output Socket
-		## List-like sockets guarantee that a list of a thing is passed.
 		if self.is_output:
-			res = self.node.compute_output(self.name, kind=kind)
-			if self.is_list and not isinstance(res, list):
-				return [res]
-			return res
+			return self.node.compute_output(self.name, kind=kind)
 
 		# Compute Input Socket
 		## Unlinked: Retrieve Socket Value
 		if not self.is_linked:
 			return self._compute_data(kind)
 
-		## Linked: Compute Output of Linked Sockets
+		## Linked: Check Capabilities
+		for link in self.links:
+			if not link.from_socket.capabilities.is_compatible_with(self.capabilities):
+				msg = f'Output socket "{link.from_socket.bl_label}" is linked to input socket "{self.bl_label}" with incompatible capabilities (caps_out="{link.from_socket.capabilities}", caps_in="{self.capabilities}")'
+				raise ValueError(msg)
+
+		## ...and Compute Data on Linked Socket
 		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
-		## Return Single Value / List of Values
+		# Return Single Value / List of Values
+		## Preparation for multi-input sockets.
 		if len(linked_values) == 1:
 			return linked_values[0]
 		return linked_values
@@ -361,14 +378,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Can be overridden if more specific logic is required.
 		"""
-		prev_value = self.value / self.unit * self.prev_unit
-		## After changing units, self.value is expressed in the wrong unit.
-		## - Therefore, we removing the new unit, and re-add the prev unit.
-		## - Using only self.value avoids implementation-specific details.
+		if self.active_kind == ct.DataFlowKind.Value:
+			self.value = self.value / self.unit * self.prev_unit
 
-		self.value = spu.convert_to(
-			prev_value, self.unit
-		)  ## Now, the unit conversion can be done correctly.
+		elif self.active_kind == ct.DataFlowKind.LazyValueRange:
+			lazy_value_range = self.lazy_value_range
+			self.lazy_value_range = (
+				lazy_value_range.start / self.unit * self.prev_unit,
+				lazy_value_range.stop / self.unit * self.prev_unit,
+				lazy_value_range.steps,
+			)
 
 		self.prev_active_unit = self.active_unit
 
@@ -458,12 +477,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		elif self.locked:
 			row.enabled = False
 
-		# Value Column(s)
+		# Data Column(s)
 		col = row.column(align=True)
-		if self.is_list:
-			self.draw_value_list(col)
-		else:
-			self.draw_value(col)
+		{
+			ct.DataFlowKind.Value: self.draw_value,
+			ct.DataFlowKind.ValueArray: self.draw_value_array,
+			ct.DataFlowKind.ValueSpectrum: self.draw_value_spectrum,
+			ct.DataFlowKind.LazyValue: self.draw_lazy_value,
+			ct.DataFlowKind.LazyValueRange: self.draw_lazy_value_range,
+			ct.DataFlowKind.LazyValueSpectrum: self.draw_lazy_value_spectrum,
+		}[self.active_kind](col)
 
 	def draw_output(
 		self,
@@ -489,14 +512,23 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		row.label(text=text)
 
+	####################
+	# - DataFlowKind draw() Methods
+	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		"""Called to draw the value column in unlinked input sockets.
+		pass
 
-		Can be overridden.
-		"""
+	def draw_value_array(self, col: bpy.types.UILayout) -> None:
+		pass
 
-	def draw_value_list(self, col: bpy.types.UILayout) -> None:
-		"""Called to draw the value list column in unlinked input sockets.
+	def draw_value_spectrum(self, col: bpy.types.UILayout) -> None:
+		pass
 
-		Can be overridden.
-		"""
+	def draw_lazy_value(self, col: bpy.types.UILayout) -> None:
+		pass
+
+	def draw_lazy_value_range(self, col: bpy.types.UILayout) -> None:
+		pass
+
+	def draw_lazy_value_spectrum(self, col: bpy.types.UILayout) -> None:
+		pass

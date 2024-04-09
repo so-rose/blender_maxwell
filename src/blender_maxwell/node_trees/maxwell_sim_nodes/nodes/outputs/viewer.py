@@ -131,7 +131,7 @@ class ViewerNode(base.MaxwellSimNode):
 	def on_changed_plot_preview(self, props):
 		if self.inputs['Data'].is_linked and props['auto_plot']:
 			log.info('Enabling 2D Plot from "%s"', self.name)
-			self.trigger_action('show_plot')
+			self.trigger_action(ct.DataFlowAction.ShowPlot)
 
 	@events.on_value_changed(
 		prop_name='auto_3d_preview',
@@ -145,7 +145,7 @@ class ViewerNode(base.MaxwellSimNode):
 		# Trigger Preview Action
 		if self.inputs['Data'].is_linked and props['auto_3d_preview']:
 			log.info('Enabling 3D Previews from "%s"', self.name)
-			self.trigger_action('show_preview')
+			self.trigger_action(ct.DataFlowAction.ShowPreview)
 
 	@events.on_value_changed(
 		socket_name='Data',

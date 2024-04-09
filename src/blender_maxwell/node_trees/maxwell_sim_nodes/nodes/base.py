@@ -352,11 +352,11 @@ class MaxwellSimNode(bpy.types.Node):
 		self,
 		value: dict[str, ct.schemas.SocketDef],
 	) -> None:
-		log.info(
-			'Setting Loose Input Sockets on "%s" to "%s"',
-			self.bl_label,
-			str(value),
-		)
+		# Prune Loose Sockets
+		self.ser_loose_input_sockets = _DEFAULT_LOOSE_SOCKET_SER
+		self.sync_sockets()
+
+		# Install New Sockets
 		if not value:
 			self.ser_loose_input_sockets = _DEFAULT_LOOSE_SOCKET_SER
 		else:
@@ -364,13 +364,17 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Synchronize Sockets
 		self.sync_sockets()
-		## TODO: Perhaps re-init() all loose sockets anyway?
 
 	@loose_output_sockets.setter
 	def loose_output_sockets(
 		self,
 		value: dict[str, ct.schemas.SocketDef],
 	) -> None:
+		# Prune Loose Sockets
+		self.ser_loose_output_sockets = _DEFAULT_LOOSE_SOCKET_SER
+		self.sync_sockets()
+
+		# Install New Sockets
 		if not value:
 			self.ser_loose_output_sockets = _DEFAULT_LOOSE_SOCKET_SER
 		else:
@@ -378,7 +382,6 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Synchronize Sockets
 		self.sync_sockets()
-		## TODO: Perhaps re-init() all loose sockets anyway?
 
 	####################
 	# - Socket Management
@@ -567,17 +570,11 @@ class MaxwellSimNode(bpy.types.Node):
 			msg = f'Property {prop_name} not defined on socket {self}'
 			raise RuntimeError(msg)
 
-		self.trigger_action('value_changed', prop_name=prop_name)
+		self.trigger_action(ct.DataFlowAction.DataChanged, prop_name=prop_name)
 
 	def trigger_action(
 		self,
-		action: typx.Literal[
-			'enable_lock',
-			'disable_lock',
-			'value_changed',
-			'show_preview',
-			'show_plot',
-		],
+		action: ct.DataFlowAction,
 		socket_name: ct.SocketName | None = None,
 		prop_name: ct.SocketName | None = None,
 	) -> None:
@@ -586,15 +583,15 @@ class MaxwellSimNode(bpy.types.Node):
 		Invalidates (recursively) the cache of any managed object or
 		output socket method that implicitly depends on this input socket.
 		"""
-		#log.debug(
-		#	'Action "%s" Triggered in "%s" (socket_name="%s", prop_name="%s")',
-		#	action,
-		#	self.name,
-		#	socket_name,
-		#	prop_name,
-		#)
+		# log.debug(
+		# 'Action "%s" Triggered in "%s" (socket_name="%s", prop_name="%s")',
+		# action,
+		# self.name,
+		# socket_name,
+		# prop_name,
+		# )
 		# Forwards Chains
-		if action == 'value_changed':
+		if action == ct.DataFlowAction.DataChanged:
 			# Run User Callbacks
 			## Careful with these, they run BEFORE propagation...
 			## ...because later-chain methods may rely on the results of this.
@@ -611,11 +608,11 @@ class MaxwellSimNode(bpy.types.Node):
 						and socket_name in self.loose_input_sockets
 					)
 				):
-					#log.debug(
-					#	'Running Value-Change Callback "%s" in "%s")',
-					#	method.__name__,
-					#	self.name,
-					#)
+					# log.debug(
+					# 'Running Value-Change Callback "%s" in "%s")',
+					# method.__name__,
+					# self.name,
+					# )
 					method(self)
 
 			# Propagate via Output Sockets
@@ -623,21 +620,21 @@ class MaxwellSimNode(bpy.types.Node):
 				bl_socket.trigger_action(action)
 
 		# Backwards Chains
-		elif action == 'enable_lock':
+		elif action == ct.DataFlowAction.EnableLock:
 			self.locked = True
 
 			## Propagate via Input Sockets
 			for bl_socket in self.active_bl_sockets('input'):
 				bl_socket.trigger_action(action)
 
-		elif action == 'disable_lock':
+		elif action == ct.DataFlowAction.DisableLock:
 			self.locked = False
 
 			## Propagate via Input Sockets
 			for bl_socket in self.active_bl_sockets('input'):
 				bl_socket.trigger_action(action)
 
-		elif action == 'show_preview':
+		elif action == ct.DataFlowAction.ShowPreview:
 			# Run User Callbacks
 			## "On Show Preview" callbacks are 'on_value_changed' callbacks...
 			## ...which simply hook into the 'preview_active' property.
@@ -653,7 +650,7 @@ class MaxwellSimNode(bpy.types.Node):
 			for bl_socket in self.active_bl_sockets('input'):
 				bl_socket.trigger_action(action)
 
-		elif action == 'show_plot':
+		elif action == ct.DataFlowAction.ShowPlot:
 			# Run User Callbacks
 			## These shouldn't change any data, BUT...
 			## ...because they can stop propagation, they should go first.
@@ -717,7 +714,7 @@ class MaxwellSimNode(bpy.types.Node):
 			bl_socket.is_linked and bl_socket.locked
 			for bl_socket in self.inputs.values()
 		):
-			self.trigger_action('disable_lock')
+			self.trigger_action(ct.DataFlowAction.DisableLock)
 
 		# Free Managed Objects
 		for managed_obj in self.managed_objs.values():

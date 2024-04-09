@@ -34,7 +34,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
 			'Freqs': sockets.PhysicalFreqSocketDef(
-				is_list=True,
+				is_array=True,
 			),
 		},
 		'Time Domain': {
