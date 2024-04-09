@@ -34,7 +34,11 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		self,
 		edit_text: str,
 	):
-		return [name for name in constants.SCI_CONSTANTS if edit_text in name]
+		return [
+			name
+			for name in constants.SCI_CONSTANTS
+			if edit_text.lower() in name.lower()
+		]
 
 	def on_update_sci_constant(
 		self,
