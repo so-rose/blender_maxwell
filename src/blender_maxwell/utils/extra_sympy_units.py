@@ -2,11 +2,8 @@ import functools
 import itertools
 import typing as typ
 
-from . import pydeps
-
-with pydeps.syspath_from_bpy_prefs():
-	import sympy as sp
-	import sympy.physics.units as spu
+import sympy as sp
+import sympy.physics.units as spu
 
 
 ####################
@@ -37,6 +34,20 @@ def get_units(expression: sp.Expr):
 ####################
 femtosecond = fs = spu.Quantity('femtosecond', abbrev='fs')
 femtosecond.set_global_relative_scale_factor(spu.femto, spu.second)
+
+
+####################
+# - Length
+####################
+femtometer = fm = spu.Quantity('femtometer', abbrev='fm')
+femtometer.set_global_relative_scale_factor(spu.femto, spu.meter)
+
+
+####################
+# - Lum Flux
+####################
+lumen = lm = spu.Quantity('lumen', abbrev='lm')
+lumen.set_global_relative_scale_factor(1, spu.candela * spu.steradian)
 
 
 ####################

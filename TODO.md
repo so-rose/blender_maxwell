@@ -13,9 +13,9 @@
 - [x] Unit System
 	- [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
 
-- [ ] Constants / Scientific Constant
-	- [ ] Create `utils.sci_constants` to map `scipy` constants to `sympy` units.
-	- [ ] Utilize `utils.sci_constants` to make it easy for the user to select appropriate constants with two-layered dropdowns.
+- [x] Constants / Scientific Constant
+	- [x] Create `utils.sci_constants` to map `scipy` constants to `sympy` units.
+	- [x] Utilize `utils.sci_constants` to make it easy for the user to select appropriate constants with two-layered dropdowns.
 - [x] Constants / Number Constant
 - [ ] Constants / Physical Constant
 	- [ ] Pol: Elliptical viz as 2D plot.
@@ -455,6 +455,13 @@
 We're trying to do our part by reporting bugs we find!
 This is where we keep track of them for now.
 
+## Blender Maxwell Bugs
+- [ ] Slow changing of socket sets / range on wave constant.
+- [ ] API auth shouldn't show if everything is fine in Cloud Task socket
+- [ ] Cloud task socket loads folders before its node shows, which can be slow (and error prone if offline)
+- [ ] Dispersive fit is slow, which means lag on normal operations that rely on the fit result - fit computation should be integrated into the node, and the output socket should only appear when the fit is available.
+- [ ] Numerical, Physical Constant is missing entries
+
 ## Blender Bugs
 Reported:
 - (SOLVED) <https://projects.blender.org/blender/blender/issues/119664>
@@ -462,6 +469,6 @@ Reported:
 Unreported:
 - The `__mp_main__` bug.
 
-# Tidy3D bugs
+## Tidy3D bugs
 Unreported:
 - Directly running `SimulationTask.get()` is missing fields - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.
