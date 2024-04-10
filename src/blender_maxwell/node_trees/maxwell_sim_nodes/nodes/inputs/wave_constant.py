@@ -35,9 +35,34 @@ class WaveConstantNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'WL',
+		kind=ct.DataFlowKind.Value,
 		all_loose_input_sockets=True,
 	)
-	def compute_wl(self, loose_input_sockets: dict) -> sp.Expr:
+	def compute_wl_value(self, loose_input_sockets: dict) -> sp.Expr:
+		if (wl := loose_input_sockets.get('WL')) is not None:
+			return wl
+
+		freq = loose_input_sockets.get('Freq')
+		return constants.vac_speed_of_light / freq
+
+	@events.computes_output_socket(
+		'Freq',
+		kind=ct.DataFlowKind.Value,
+		all_loose_input_sockets=True,
+	)
+	def compute_freq_value(self, loose_input_sockets: dict) -> sp.Expr:
+		if (freq := loose_input_sockets.get('Freq')) is not None:
+			return freq
+
+		wl = loose_input_sockets.get('WL')
+		return constants.vac_speed_of_light / wl
+
+	@events.computes_output_socket(
+		'WL',
+		kind=ct.DataFlowKind.LazyValueRange,
+		all_loose_input_sockets=True,
+	)
+	def compute_wl_lazyvaluerange(self, loose_input_sockets: dict) -> sp.Expr:
 		if (wl := loose_input_sockets.get('WL')) is not None:
 			return wl
 
@@ -52,9 +77,10 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Freq',
+		kind=ct.DataFlowKind.LazyValueRange,
 		all_loose_input_sockets=True,
 	)
-	def compute_freq(self, loose_input_sockets: dict) -> sp.Expr:
+	def compute_freq_lazyvaluerange(self, loose_input_sockets: dict) -> sp.Expr:
 		if (freq := loose_input_sockets.get('Freq')) is not None:
 			return freq
 

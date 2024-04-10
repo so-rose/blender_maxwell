@@ -51,7 +51,7 @@ class SimDomainNode(base.MaxwellSimNode):
 			'Size': 'Tidy3DUnits',
 		},
 	)
-	def compute_domain(self, input_sockets: dict) -> sp.Expr:
+	def compute_domain(self, input_sockets: dict, unit_systems) -> sp.Expr:
 		return {
 			'run_time': input_sockets['Duration'],
 			'center': input_sockets['Center'],
@@ -96,7 +96,7 @@ class SimDomainNode(base.MaxwellSimNode):
 
 	@events.on_init()
 	def on_init(self):
-		self.on_input_change()
+		self.on_input_changed()
 
 
 ####################

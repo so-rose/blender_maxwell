@@ -7,19 +7,21 @@ from ....utils.blender_type_enum import BlenderTypeEnum, wrap_values_in_MT
 class NodeCategory(BlenderTypeEnum):
 	MAXWELLSIM = enum.auto()
 
+	# Analysis/
+	MAXWELLSIM_ANALYSIS = enum.auto()
+	MAXWELLSIM_ANALYSIS_MATH = enum.auto()
+
 	# Inputs/
 	MAXWELLSIM_INPUTS = enum.auto()
-	MAXWELLSIM_INPUTS_IMPORTERS = enum.auto()
 	MAXWELLSIM_INPUTS_SCENE = enum.auto()
-	MAXWELLSIM_INPUTS_PARAMETERS = enum.auto()
 	MAXWELLSIM_INPUTS_CONSTANTS = enum.auto()
-	MAXWELLSIM_INPUTS_LISTS = enum.auto()
+	MAXWELLSIM_INPUTS_FILEIMPORTERS = enum.auto()
+	MAXWELLSIM_INPUTS_WEBIMPORTERS = enum.auto()
 
 	# Outputs/
 	MAXWELLSIM_OUTPUTS = enum.auto()
-	MAXWELLSIM_OUTPUTS_VIEWERS = enum.auto()
-	MAXWELLSIM_OUTPUTS_EXPORTERS = enum.auto()
-	MAXWELLSIM_OUTPUTS_PLOTTERS = enum.auto()
+	MAXWELLSIM_OUTPUTS_FILEEXPORTERS = enum.auto()
+	MAXWELLSIM_OUTPUTS_WEBEXPORTERS = enum.auto()
 
 	# Sources/
 	MAXWELLSIM_SOURCES = enum.auto()
@@ -39,19 +41,14 @@ class NodeCategory(BlenderTypeEnum):
 
 	# Monitors/
 	MAXWELLSIM_MONITORS = enum.auto()
-	MAXWELLSIM_MONITORS_NEARFIELDPROJECTIONS = enum.auto()
+	MAXWELLSIM_MONITORS_PROJECTED = enum.auto()
 
 	# Simulations/
 	MAXWELLSIM_SIMS = enum.auto()
-	MAXWELLSIM_SIMGRIDAXES = enum.auto()
+	MAXWELLSIM_SIMS_SIMGRIDAXES = enum.auto()
 
 	# Utilities/
 	MAXWELLSIM_UTILITIES = enum.auto()
-	MAXWELLSIM_UTILITIES_CONVERTERS = enum.auto()
-	MAXWELLSIM_UTILITIES_OPERATIONS = enum.auto()
-
-	# Viz/
-	MAXWELLSIM_VIZ = enum.auto()
 
 	@classmethod
 	def get_tree(cls):

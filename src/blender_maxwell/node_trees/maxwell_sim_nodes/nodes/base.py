@@ -105,12 +105,10 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Setup Callback Methods
 		cls._output_socket_methods = {
-			(method.extra_data['output_socket_name'], method.extra_data['kind']): method
+			method
 			for attr_name in dir(cls)
 			if hasattr(method := getattr(cls, attr_name), 'action_type')
 			and method.action_type == 'computes_output_socket'
-			and hasattr(method, 'extra_data')
-			and method.extra_data
 		}
 		cls._on_value_changed_methods = {
 			method
@@ -553,10 +551,21 @@ class MaxwellSimNode(bpy.types.Node):
 			The value of the output socket, as computed by the dedicated method
 			registered using the `@computes_output_socket` decorator.
 		"""
-		if output_socket_method := self._output_socket_methods.get(
-			(output_socket_name, kind)
-		):
-			return output_socket_method(self)
+		possible_output_socket_methods = [
+			output_socket_method
+			for output_socket_method in self._output_socket_methods
+			if kind == output_socket_method.extra_data['kind']
+			and (
+				output_socket_name
+				== output_socket_method.extra_data['output_socket_name']
+				or (
+					output_socket_method.extra_data['any_loose_output_socket']
+					and output_socket_name in self.loose_output_sockets
+				)
+			)
+		]
+		if len(possible_output_socket_methods) == 1:
+			return possible_output_socket_methods[0](self)
 
 		msg = f'No output method for ({output_socket_name}, {kind.value!s}'
 		raise ValueError(msg)

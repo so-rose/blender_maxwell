@@ -76,6 +76,9 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		input_sockets={'Center', 'GeoNodes'},
 		all_loose_input_sockets=True,
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'BlenderUnits'
+		}
 	)
 	def on_input_changed(
 		self,

@@ -90,27 +90,27 @@ class CombineNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Sources',
-		input_sockets={f'Source #{i}' for i in range(MAX_AMOUNT)},
+		all_loose_input_sockets=True,
 		props={'amount'},
 	)
-	def compute_sources(self, input_sockets, props) -> sp.Expr:
-		return [input_sockets[f'Source #{i}'] for i in range(props['amount'])]
+	def compute_sources(self, loose_input_sockets, props) -> sp.Expr:
+		return [loose_input_sockets[f'Source #{i}'] for i in range(props['amount'])]
 
 	@events.computes_output_socket(
 		'Structures',
-		input_sockets={f'Structure #{i}' for i in range(MAX_AMOUNT)},
+		all_loose_input_sockets=True,
 		props={'amount'},
 	)
-	def compute_structures(self, input_sockets, props) -> sp.Expr:
-		return [input_sockets[f'Structure #{i}'] for i in range(props['amount'])]
+	def compute_structures(self, loose_input_sockets, props) -> sp.Expr:
+		return [loose_input_sockets[f'Structure #{i}'] for i in range(props['amount'])]
 
 	@events.computes_output_socket(
 		'Monitors',
-		input_sockets={f'Monitor #{i}' for i in range(MAX_AMOUNT)},
+		all_loose_input_sockets=True,
 		props={'amount'},
 	)
-	def compute_monitors(self, input_sockets, props) -> sp.Expr:
-		return [input_sockets[f'Monitor #{i}'] for i in range(props['amount'])]
+	def compute_monitors(self, loose_input_sockets, props) -> sp.Expr:
+		return [loose_input_sockets[f'Monitor #{i}'] for i in range(props['amount'])]
 
 	####################
 	# - Input Socket Compilation

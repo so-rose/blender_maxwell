@@ -45,6 +45,9 @@ idna==3.3
 importlib-metadata==6.11.0
     # via dask
     # via tidy3d
+jax==0.4.26
+jaxlib==0.4.26
+    # via jax
 jmespath==1.0.1
     # via boto3
     # via botocore
@@ -54,18 +57,27 @@ locket==1.0.0
     # via partd
 matplotlib==3.8.3
     # via tidy3d
+ml-dtypes==0.4.0
+    # via jax
+    # via jaxlib
 mpmath==1.3.0
     # via sympy
 networkx==3.2
 numpy==1.24.3
     # via contourpy
     # via h5py
+    # via jax
+    # via jaxlib
     # via matplotlib
+    # via ml-dtypes
+    # via opt-einsum
     # via scipy
     # via shapely
     # via tidy3d
     # via trimesh
     # via xarray
+opt-einsum==3.3.0
+    # via jax
 packaging==24.0
     # via dask
     # via h5netcdf
@@ -110,6 +122,8 @@ rtree==1.2.0
 s3transfer==0.5.2
     # via boto3
 scipy==1.12.0
+    # via jax
+    # via jaxlib
     # via tidy3d
 shapely==2.0.3
     # via tidy3d

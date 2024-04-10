@@ -74,7 +74,10 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		},
 	)
 	def compute_source(
-		self, input_sockets: dict[str, typ.Any], props: dict[str, typ.Any]
+		self,
+		input_sockets: dict[str, typ.Any],
+		props: dict[str, typ.Any],
+		unit_systems: dict,
 	) -> td.PointDipole:
 		pol_axis = {
 			'EX': 'Ex',

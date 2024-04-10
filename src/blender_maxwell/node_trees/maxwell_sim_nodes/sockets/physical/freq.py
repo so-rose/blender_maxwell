@@ -79,6 +79,7 @@ class PhysicalFreqBLSocket(base.MaxwellSimSocket):
 		return ct.LazyDataValueRange(
 			symbols=set(),
 			has_unit=True,
+			unit=self.unit,
 			start=sp.S(self.min_freq) * self.unit,
 			stop=sp.S(self.max_freq) * self.unit,
 			steps=self.steps,

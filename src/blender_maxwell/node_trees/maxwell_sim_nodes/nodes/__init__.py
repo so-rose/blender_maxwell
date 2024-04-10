@@ -1,7 +1,7 @@
 # from . import kitchen_sink
-
 # from . import bounds
 from . import (
+	analysis,
 	inputs,
 	mediums,
 	monitors,
@@ -10,11 +10,11 @@ from . import (
 	sources,
 	structures,
 	utilities,
-	viz,
 )
 
 BL_REGISTER = [
 	# *kitchen_sink.BL_REGISTER,
+	*analysis.BL_REGISTER,
 	*inputs.BL_REGISTER,
 	*outputs.BL_REGISTER,
 	*sources.BL_REGISTER,
@@ -24,10 +24,10 @@ BL_REGISTER = [
 	*monitors.BL_REGISTER,
 	*simulations.BL_REGISTER,
 	*utilities.BL_REGISTER,
-	*viz.BL_REGISTER,
 ]
 BL_NODES = {
 	# **kitchen_sink.BL_NODES,
+	**analysis.BL_NODES,
 	**inputs.BL_NODES,
 	**outputs.BL_NODES,
 	**sources.BL_NODES,
@@ -37,5 +37,4 @@ BL_NODES = {
 	**monitors.BL_NODES,
 	**simulations.BL_NODES,
 	**utilities.BL_NODES,
-	**viz.BL_NODES,
 }

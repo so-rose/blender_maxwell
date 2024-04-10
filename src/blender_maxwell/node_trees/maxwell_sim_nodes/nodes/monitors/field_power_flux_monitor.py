@@ -15,9 +15,9 @@ from .. import base, events
 log = logger.get(__name__)
 
 
-class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
-	node_type = ct.NodeType.FieldPowerFluxMonitor
-	bl_label = 'Field Power Flux Monitor'
+class PowerFluxMonitorNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.PowerFluxMonitor
+	bl_label = 'Power Flux Monitor'
 	use_sim_node_name = True
 
 	####################
@@ -160,6 +160,6 @@ class FieldPowerFluxMonitorNode(base.MaxwellSimNode):
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	FieldPowerFluxMonitorNode,
+	PowerFluxMonitorNode,
 ]
-BL_NODES = {ct.NodeType.FieldPowerFluxMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)}
+BL_NODES = {ct.NodeType.PowerFluxMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)}

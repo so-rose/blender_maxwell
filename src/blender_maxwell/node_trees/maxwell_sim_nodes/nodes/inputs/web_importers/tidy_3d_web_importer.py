@@ -102,5 +102,5 @@ BL_REGISTER = [
 	Tidy3DWebImporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DWebImporter: (ct.NodeCategory.MAXWELLSIM_INPUTS_IMPORTERS)
+	ct.NodeType.Tidy3DWebImporter: (ct.NodeCategory.MAXWELLSIM_INPUTS_WEBIMPORTERS)
 }

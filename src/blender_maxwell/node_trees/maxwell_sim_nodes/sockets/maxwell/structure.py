@@ -19,7 +19,7 @@ class MaxwellStructureSocketDef(pyd.BaseModel):
 
 	def init(self, bl_socket: MaxwellStructureBLSocket) -> None:
 		if self.is_list:
-			bl_socket.active_kind = ct.DataValueArray
+			bl_socket.active_kind = ct.DataFlowKind.ValueArray
 
 
 ####################

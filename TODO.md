@@ -27,10 +27,11 @@
 	- [ ] Implement caching, such that the file will only download if the file doesn't already exist.
 	- [ ] Have a visual indicator for the current download status, with a manual re-download button.
 
-- [ ] File Import / Material Import
-	- [ ] Dropdown to choose import format
-- [ ] File Import / Tidy3D File Import
-	- [ ] HDF and JSON file support, with appropriate choice of loose output socket.
+- [x] File Import / Material Import
+	- [x] Dropdown to choose import format
+	- MERGED w/TIDY3D FILE IMPORT
+- [x] File Import / Tidy3D File Import
+	- [x] HDF and JSON file support, with appropriate choice of loose output socket.
 - [ ] File Import / Array File Import
 	- [ ] Standardize 1D and 2D array loading/saving on numpy's savetxt with gzip enabled.
 	- [ ] Implement unit system input to guide conversion from numpy data type.
@@ -40,8 +41,7 @@
 ## Outputs
 - [x] Viewer
 	- [ ] Remove image preview when disabling plots.
-	- [ ] BUG: CTRL+SHIFT+CLICK not on a node shows an error; should just do nothing.
-	- [ ] Auto-enable 3D preview when creating.
+	- [x] Auto-enable 3D preview when creating.
 	- [ ] Test/support multiple viewers at the same time.
 	- [ ] Pop-up w/multiline string as alternative to console print.
 
@@ -349,6 +349,7 @@
 - [ ] Document the node tree cache semantics thoroughly; it's a VERY nuanced piece of logic, and its invariants may not survive Blender versions / the author's working memory
 - [ ] Start standardizing nodes/sockets w/individualized SemVer
 	- Perhaps keep node / socket versions in a property, so that trying to load an incompatible major version hop can error w/indicator of where to find a compatible `blender_maxwell` version.
+- [ ] `log.error` should invoke `self.report` in some Blender operator - used for errors that are due to usage error (which can't simply be prevented with UX design, like text file formatting of import), not due to error in the program.
 
 ## Documentation
 - [ ] Make all modules available
@@ -456,11 +457,23 @@ We're trying to do our part by reporting bugs we find!
 This is where we keep track of them for now.
 
 ## Blender Maxwell Bugs
+- [ ] BUG: CTRL+SHIFT+CLICK not on a node shows an error; should just do nothing.
 - [ ] Slow changing of socket sets / range on wave constant.
 - [ ] API auth shouldn't show if everything is fine in Cloud Task socket
 - [ ] Cloud task socket loads folders before its node shows, which can be slow (and error prone if offline)
 - [ ] Dispersive fit is slow, which means lag on normal operations that rely on the fit result - fit computation should be integrated into the node, and the output socket should only appear when the fit is available.
 - [ ] Numerical, Physical Constant is missing entries
+
+BROKE NODES
+- [ ] Numerical constant doesn't switch types
+- [ ] Blender constant is inexplicably mega laggy
+- [ ] Web importer is just wonky in general
+- [ ] JSON File exporter is having trouble with generic types (is that bad?)
+
+- [ ] Extact Data needs flux settings
+- [ ] Point dipole still has no preview
+- [ ] Plane wave math still doesn't work and it has no preview
+- [ ] Monitors need a way of setting infinite dimensions
 
 ## Blender Bugs
 Reported:
@@ -468,6 +481,7 @@ Reported:
 
 Unreported:
 - The `__mp_main__` bug.
+- Animated properties within custom node trees don't update with the frame. See: <https://projects.blender.org/blender/blender/issues/66392>
 
 ## Tidy3D bugs
 Unreported:

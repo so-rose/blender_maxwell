@@ -1,7 +1,11 @@
 import io
+import time
 import typing as typ
 
 import bpy
+import jax
+import jax.numpy as jnp
+import matplotlib
 import matplotlib.axis as mpl_ax
 import numpy as np
 import typing_extensions as typx
@@ -13,6 +17,63 @@ log = logger.get(__name__)
 
 AREA_TYPE = 'IMAGE_EDITOR'
 SPACE_TYPE = 'IMAGE_EDITOR'
+
+# Colormap
+_MPL_CM = matplotlib.cm.get_cmap('viridis', 512)
+VIRIDIS_COLORMAP = jnp.array([_MPL_CM(i)[:3] for i in range(512)])
+
+
+def apply_colormap(normalized_data, colormap):
+	# Linear interpolation between colormap points
+	n_colors = colormap.shape[0]
+	indices = normalized_data * (n_colors - 1)
+	lower_idx = jnp.floor(indices).astype(jnp.int32)
+	upper_idx = jnp.ceil(indices).astype(jnp.int32)
+	alpha = indices - lower_idx
+
+	lower_colors = jax.vmap(lambda i: colormap[i])(lower_idx)
+	upper_colors = jax.vmap(lambda i: colormap[i])(upper_idx)
+
+	return (1 - alpha)[..., None] * lower_colors + alpha[..., None] * upper_colors
+
+
+@jax.jit
+def rgba_image_from_xyzf__viridis(xyz_freq):
+	amplitude = jnp.abs(jnp.squeeze(xyz_freq))
+	amplitude_normalized = (amplitude - amplitude.min()) / (
+		amplitude.max() - amplitude.min()
+	)
+	rgb_array = apply_colormap(amplitude_normalized, VIRIDIS_COLORMAP)
+	alpha_channel = jnp.ones_like(amplitude_normalized)
+	return jnp.dstack((rgb_array, alpha_channel))
+
+
+@jax.jit
+def rgba_image_from_xyzf__grayscale(xyz_freq):
+	amplitude = jnp.abs(jnp.squeeze(xyz_freq))
+	amplitude_normalized = (amplitude - amplitude.min()) / (
+		amplitude.max() - amplitude.min()
+	)
+	rgb_array = jnp.stack([amplitude_normalized] * 3, axis=-1)
+	alpha_channel = jnp.ones_like(amplitude_normalized)
+	return jnp.dstack((rgb_array, alpha_channel))
+
+
+def rgba_image_from_xyzf(xyz_freq, colormap: str | None = None):
+	"""RGBA Image from Squeezable XYZ-Freq w/fixed freq.
+
+	Parameters:
+		xyz_freq: Shape (xlen, ylen, zlen), one dimension has length 1.
+		width_px: Pixel width to resize the image to.
+		height: Pixel height to resize the image to.
+
+	Returns:
+		Image as a JAX array of shape (height, width, 3)
+	"""
+	if colormap == 'VIRIDIS':
+		return rgba_image_from_xyzf__viridis(xyz_freq)
+	if colormap == 'GRAYSCALE':
+		return rgba_image_from_xyzf__grayscale(xyz_freq)
 
 
 class ManagedBLImage(ct.schemas.ManagedObj):
@@ -81,6 +142,7 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 				self.name,
 				width=width_px,
 				height=height_px,
+				float_buffer=dtype == 'float32',
 			)
 
 		return bl_image
@@ -120,18 +182,14 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 			self.preview_space.image = bl_image
 
 	####################
-	# - Special Methods
+	# - Image Geometry
 	####################
-	def mpl_plot_to_image(
+	def gen_image_geometry(
 		self,
-		func_plotter: typ.Callable[[mpl_ax.Axis], None],
 		width_inches: float | None = None,
 		height_inches: float | None = None,
 		dpi: int | None = None,
-		bl_select: bool = False,
 	):
-		import matplotlib.pyplot as plt
-
 		# Compute Image Geometry
 		if preview_area := self.preview_area:
 			# Retrieve DPI from Blender Preferences
@@ -159,44 +217,103 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 			msg = 'There must either be a preview area, or defined `width_inches`, `height_inches`, and `dpi`'
 			raise ValueError(msg)
 
-		# Compute Plot Dimensions
 		aspect_ratio = _width_inches / _height_inches
 
-		log.debug(
-			'Create MPL Axes (aspect=%d, width=%d, height=%d)',
-			aspect_ratio,
-			_width_inches,
-			_height_inches,
+		return aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px
+
+	####################
+	# - Special Methods
+	####################
+	def xyzf_to_image(
+		self, xyz_freq, colormap: str | None = 'VIRIDIS', bl_select: bool = False
+	):
+		self.data_to_image(
+			lambda _: rgba_image_from_xyzf(xyz_freq, colormap=colormap),
+			bl_select=bl_select,
 		)
+
+	def data_to_image(
+		self,
+		func_image_data: typ.Callable[[int], np.array],
+		bl_select: bool = False,
+	):
+		# time_start = time.perf_counter()
+		image_data = func_image_data(4)
+		width_px = image_data.shape[1]
+		height_px = image_data.shape[0]
+		# log.debug('Computed Image Data (%f)', time.perf_counter() - time_start)
+
+		bl_image = self.bl_image(width_px, height_px, 'RGBA', 'float32')
+		bl_image.pixels.foreach_set(np.float32(image_data).ravel())
+		bl_image.update()
+		# log.debug('Set BL Image (%f)', time.perf_counter() - time_start)
+
+		if bl_select:
+			self.bl_select()
+
+	def mpl_plot_to_image(
+		self,
+		func_plotter: typ.Callable[[mpl_ax.Axis], None],
+		width_inches: float | None = None,
+		height_inches: float | None = None,
+		dpi: int | None = None,
+		bl_select: bool = False,
+	):
+		# time_start = time.perf_counter()
+		import matplotlib.pyplot as plt
+		# log.debug('Imported PyPlot (%f)', time.perf_counter() - time_start)
+
+		# Compute Plot Dimensions
+		aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (
+			self.gen_image_geometry(width_inches, height_inches, dpi)
+		)
+		# log.debug('Computed MPL Geometry (%f)', time.perf_counter() - time_start)
+
+		#log.debug(
+		#	'Creating MPL Axes (aspect=%f, width=%f, height=%f)',
+		#	aspect_ratio,
+		#	_width_inches,
+		#	_height_inches,
+		#)
 		# Create MPL Figure, Axes, and Compute Figure Geometry
 		fig, ax = plt.subplots(
 			figsize=[_width_inches, _height_inches],
 			dpi=_dpi,
 		)
+		# log.debug('Created MPL Axes (%f)', time.perf_counter() - time_start)
 		ax.set_aspect(aspect_ratio)
 		cmp_width_px, cmp_height_px = fig.canvas.get_width_height()
 		## Use computed pixel w/h to preempt off-by-one size errors.
 		ax.set_aspect('auto')  ## Workaround aspect-ratio bugs
+		# log.debug('Set MPL Aspect (%f)', time.perf_counter() - time_start)
 
 		# Plot w/User Parameter
 		func_plotter(ax)
+		# log.debug('User Plot Function (%f)', time.perf_counter() - time_start)
 
 		# Save Figure to BytesIO
 		with io.BytesIO() as buff:
+			# log.debug('Made BytesIO (%f)', time.perf_counter() - time_start)
 			fig.savefig(buff, format='raw', dpi=dpi)
+			# log.debug('Saved Figure to BytesIO (%f)', time.perf_counter() - time_start)
 			buff.seek(0)
 			image_data = np.frombuffer(
 				buff.getvalue(),
 				dtype=np.uint8,
 			).reshape([cmp_height_px, cmp_width_px, -1])
+			# log.debug('Set Image Data (%f)', time.perf_counter() - time_start)
 
 			image_data = np.flipud(image_data).astype(np.float32) / 255
+			# log.debug('Flipped Image Data (%f)', time.perf_counter() - time_start)
 		plt.close(fig)
 
 		# Optimized Write to Blender Image
 		bl_image = self.bl_image(cmp_width_px, cmp_height_px, 'RGBA', 'uint8')
+		# log.debug('Made BL Image (%f)', time.perf_counter() - time_start)
 		bl_image.pixels.foreach_set(image_data.ravel())
+		# log.debug('Set BL Image Pixels (%f)', time.perf_counter() - time_start)
 		bl_image.update()
+		# log.debug('Updated BL Image (%f)', time.perf_counter() - time_start)
 
 		if bl_select:
 			self.bl_select()

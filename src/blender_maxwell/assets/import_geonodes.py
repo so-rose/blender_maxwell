@@ -49,7 +49,7 @@ class GeoNodes(enum.StrEnum):
 	StructurePrimitiveCone = '_structure_primitive_cone'
 	## Monitor
 	MonitorEHField = '_monitor_eh_field'
-	MonitorFieldPowerFlux = '_monitor_field_power_flux'
+	MonitorPowerFlux = '_monitor_power_flux'
 	MonitorEpsTensor = '_monitor_eps_tensor'
 	MonitorDiffraction = '_monitor_diffraction'
 	MonitorProjCartEHField = '_monitor_proj_eh_field'
@@ -114,7 +114,7 @@ GN_PARENT_PATHS: dict[GeoNodes, Path] = {
 	GeoNodes.StructurePrimitiveCone: GN_INTERNAL_STRUCTURES_PATH,
 	## Monitor
 	GeoNodes.MonitorEHField: GN_INTERNAL_STRUCTURES_PATH,
-	GeoNodes.MonitorFieldPowerFlux: GN_INTERNAL_STRUCTURES_PATH,
+	GeoNodes.MonitorPowerFlux: GN_INTERNAL_STRUCTURES_PATH,
 	GeoNodes.MonitorEpsTensor: GN_INTERNAL_STRUCTURES_PATH,
 	GeoNodes.MonitorDiffraction: GN_INTERNAL_STRUCTURES_PATH,
 	GeoNodes.MonitorProjCartEHField: GN_INTERNAL_STRUCTURES_PATH,

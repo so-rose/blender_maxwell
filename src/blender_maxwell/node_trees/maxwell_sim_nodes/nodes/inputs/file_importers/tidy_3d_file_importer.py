@@ -196,9 +196,9 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 		else:
 			self.loose_output_sockets = {
 				'SIMULATION_DATA': {
-					'Sim Data': sockets.MaxwellFDTDSimSocketDef(),
+					'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
 				},
-				'SIMULATION': {'Sim': sockets.MaxwellFDTDSimDataSocketDef()},
+				'SIMULATION': {'Sim': sockets.MaxwellFDTDSimSocketDef()},
 				'MEDIUM': {'Medium': sockets.MaxwellMediumSocketDef()},
 				'EXPERIM_DISP_MEDIUM': {
 					'Experim Disp Medium': sockets.MaxwellMediumSocketDef()
@@ -245,5 +245,5 @@ BL_REGISTER = [
 	Tidy3DFileImporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DFileImporter: (ct.NodeCategory.MAXWELLSIM_INPUTS_IMPORTERS)
+	ct.NodeType.Tidy3DFileImporter: (ct.NodeCategory.MAXWELLSIM_INPUTS_FILEIMPORTERS)
 }

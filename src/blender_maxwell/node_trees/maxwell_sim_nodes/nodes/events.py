@@ -30,6 +30,7 @@ class EventCallbackData_ComputesOutputSocket(typ.TypedDict):  # noqa: N801
 	"""Extra data used to select a method to compute output sockets."""
 
 	output_socket_name: ct.SocketName
+	any_loose_output_socket: bool
 	kind: ct.DataFlowKind
 
 
@@ -194,8 +195,8 @@ def event_decorator(
 				_output_sockets = {
 					output_socket_name: node.compute_output(
 						output_socket_name,
-						kind=input_socket_kinds.get(
-							input_socket_name, ct.DataFlowKind.Value
+						kind=output_socket_kinds.get(
+							output_socket_name, ct.DataFlowKind.Value
 						),
 					)
 					for output_socket_name in output_sockets
@@ -231,7 +232,10 @@ def event_decorator(
 			## Compute All Loose Input Sockets
 			if all_loose_input_sockets:
 				_loose_input_sockets = {
-					input_socket_name: node._compute_input(input_socket_name, kind=node.inputs[input_socket_name].active_kind)
+					input_socket_name: node._compute_input(
+						input_socket_name,
+						kind=node.inputs[input_socket_name].active_kind,
+					)
 					for input_socket_name in node.loose_input_sockets
 				}
 				method_kw_args |= {'loose_input_sockets': _loose_input_sockets}
@@ -239,7 +243,10 @@ def event_decorator(
 			## Compute All Loose Output Sockets
 			if all_loose_output_sockets:
 				_loose_output_sockets = {
-					output_socket_name: node.compute_output(output_socket_name, kind=node.outputs[output_socket_name].active_kind)
+					output_socket_name: node.compute_output(
+						output_socket_name,
+						kind=node.outputs[output_socket_name].active_kind,
+					)
 					for output_socket_name in node.loose_output_sockets
 				}
 				method_kw_args |= {'loose_output_sockets': _loose_output_sockets}
@@ -274,7 +281,8 @@ def event_decorator(
 # - Simplified Event Callbacks
 ####################
 def computes_output_socket(
-	output_socket_name: ct.SocketName,
+	output_socket_name: ct.SocketName | None,
+	any_loose_output_socket: bool = False,
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	**kwargs,
 ):
@@ -282,6 +290,7 @@ def computes_output_socket(
 		action_type='computes_output_socket',
 		extra_data={
 			'output_socket_name': output_socket_name,
+			'any_loose_output_socket': any_loose_output_socket,
 			'kind': kind,
 		},
 		**kwargs,

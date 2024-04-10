@@ -176,11 +176,24 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			raise RuntimeError(msg)
 
 	def sync_link_added(self, link) -> bool:
-		"""Called when a link has been added to this (input) socket.
-
-		Returns a bool, whether or not the socket consents to the link change.
-		"""
+		"""Called when a link has been added to this (input) socket."""
 		if self.locked:
+			log.error(
+				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but input socket is locked',
+				link.from_socket.bl_label,
+				link.from_socket.capabilities,
+				self.bl_label,
+				self.capabilities,
+			)
+			return False
+		if not link.from_socket.capabilities.is_compatible_with(self.capabilities):
+			log.error(
+				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but capabilities are invalid',
+				link.from_socket.bl_label,
+				link.from_socket.capabilities,
+				self.bl_label,
+				self.capabilities,
+			)
 			return False
 		if self.is_output:
 			msg = "Tried to sync 'link add' on output socket"

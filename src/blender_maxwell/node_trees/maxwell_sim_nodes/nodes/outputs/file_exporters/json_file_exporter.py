@@ -98,5 +98,5 @@ BL_REGISTER = [
 	JSONFileExporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.JSONFileExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS)
+	ct.NodeType.JSONFileExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_FILEEXPORTERS)
 }

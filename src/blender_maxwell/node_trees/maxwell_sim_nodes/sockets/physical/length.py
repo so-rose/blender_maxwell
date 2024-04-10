@@ -79,6 +79,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		return ct.LazyDataValueRange(
 			symbols=set(),
 			has_unit=True,
+			unit=self.unit,
 			start=sp.S(self.min_len) * self.unit,
 			stop=sp.S(self.max_len) * self.unit,
 			steps=self.steps,
@@ -114,7 +115,6 @@ class PhysicalLengthSocketDef(pyd.BaseModel):
 		if self.is_array:
 			bl_socket.active_kind = ct.DataFlowKind.LazyValueRange
 			bl_socket.lazy_value_range = (self.min_len, self.max_len, self.steps)
-
 
 
 ####################

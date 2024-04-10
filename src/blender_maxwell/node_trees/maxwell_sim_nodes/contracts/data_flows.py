@@ -5,6 +5,7 @@ import typing as typ
 from types import MappingProxyType
 
 # import colour  ## TODO
+import jax
 import numpy as np
 import sympy as sp
 import sympy.physics.units as spu
@@ -105,7 +106,7 @@ class DataValueArray:
 	"""A simple, flat array of values with an optionally-attached unit.
 
 	Attributes:
-		values: A 1D array-like object of arbitrary numerical type.
+		values: An ND array-like object of arbitrary numerical type.
 		unit: A `sympy` unit.
 			None if unitless.
 	"""
@@ -181,12 +182,14 @@ class LazyDataValueRange:
 	scaling: typx.Literal['lin', 'geom', 'log'] = 'lin'
 
 	has_unit: bool = False
+	unit: spu.Quantity = False
 
 	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
 		if self.has_unit:
 			return LazyDataValueRange(
 				symbols=self.symbols,
 				has_unit=self.has_unit,
+				unit=unit,
 				start=spu.convert_to(self.start, unit),
 				stop=spu.convert_to(self.stop, unit),
 				steps=self.steps,
@@ -205,8 +208,13 @@ class LazyDataValueRange:
 		return LazyDataValueRange(
 			symbols=self.symbols,
 			has_unit=self.has_unit,
-			start=bound_cb(self.start if not reverse else self.stop),
-			stop=bound_cb(self.stop if not reverse else self.start),
+			unit=self.unit,
+			start=spu.convert_to(
+				bound_cb(self.start if not reverse else self.stop), self.unit
+			),
+			stop=spu.convert_to(
+				bound_cb(self.stop if not reverse else self.start), self.unit
+			),
 			steps=self.steps,
 			scaling=self.scaling,
 		)
@@ -276,3 +284,37 @@ class LazyDataValueSpectrum:
 			values=self.as_func(*list(symbol_values.values())),
 			values_unit=self.value_unit,
 		)
+
+
+#
+#
+#####################
+## - Data Pipeline
+#####################
+# @dataclasses.dataclass(frozen=True, kw_only=True)
+# class DataPipelineDim:
+# unit: spu.Quantity | None
+#
+# class DataPipelineDimType(enum.StrEnum):
+# # Map Inputs
+# Time = enum.auto()
+# Freq = enum.auto()
+# Space3D = enum.auto()
+# DiffOrder = enum.auto()
+#
+# # Map Inputs
+# Power = enum.auto()
+# EVec = enum.auto()
+# HVec = enum.auto()
+# RelPerm = enum.auto()
+#
+#
+# @dataclasses.dataclass(frozen=True, kw_only=True)
+# class LazyDataPipeline:
+# dims: list[DataPipelineDim]
+#
+# def _callable(self):
+# """JITs the current pipeline of functions with `jax`."""
+#
+# def __call__(self):
+# pass

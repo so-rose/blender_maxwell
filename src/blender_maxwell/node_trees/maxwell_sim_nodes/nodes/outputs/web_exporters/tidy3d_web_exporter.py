@@ -243,7 +243,6 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			task_name=new_task[0],
 			cloud_folder=new_task[1],
 			sim=sim,
-			upload_progress_cb=lambda uploaded_bytes: None,  ## TODO: Use!
 			verbose=True,
 		)
 
@@ -428,5 +427,5 @@ BL_REGISTER = [
 	Tidy3DWebExporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DWebExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_EXPORTERS)
+	ct.NodeType.Tidy3DWebExporter: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_WEBEXPORTERS)
 }

@@ -67,7 +67,7 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
-	def draw_props(self, context, layout):
+	def draw_props(self, _, layout):
 		layout.label(text='Plot Settings')
 		split = layout.split(factor=0.6)
 

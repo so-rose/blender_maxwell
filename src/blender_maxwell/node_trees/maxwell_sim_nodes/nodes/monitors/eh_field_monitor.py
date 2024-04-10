@@ -18,7 +18,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	"""Node providing for the monitoring of electromagnetic fields within a given planar region or volume."""
 
 	node_type = ct.NodeType.EHFieldMonitor
-	bl_label = 'E/H Field Monitor'
+	bl_label = 'EH Field Monitor'
 	use_sim_node_name = True
 
 	####################
@@ -45,8 +45,9 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			),
 		},
 	}
-	output_sockets: typ.ClassVar = {
-		'Monitor': sockets.MaxwellMonitorSocketDef(),
+	output_socket_sets: typ.ClassVar = {
+		'Freq Domain': {'Freq Monitor': sockets.MaxwellMonitorSocketDef()},
+		'Time Domain': {'Time Monitor': sockets.MaxwellMonitorSocketDef()},
 	}
 
 	managed_obj_defs: typ.ClassVar = {
@@ -62,63 +63,45 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	# - Output Sockets
 	####################
 	@events.computes_output_socket(
-		'Monitor',
-		props={'active_socket_set', 'sim_node_name'},
+		'Freq Monitor',
+		props={'sim_node_name'},
 		input_sockets={
-			'Rec Start',
-			'Rec Stop',
 			'Center',
 			'Size',
 			'Samples/Space',
-			'Samples/Time',
 			'Freqs',
+		},
+		input_socket_kinds={
+			'Freqs': ct.DataFlowKind.LazyValueRange,
 		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={
 			'Center': 'Tidy3DUnits',
 			'Size': 'Tidy3DUnits',
-			'Samples/Space': 'Tidy3DUnits',
-			'Rec Start': 'Tidy3DUnits',
-			'Rec Stop': 'Tidy3DUnits',
-			'Samples/Time': 'Tidy3DUnits',
+			'Freqs': 'Tidy3DUnits',
 		},
 	)
-	def compute_monitor(
-		self, input_sockets: dict, props: dict, unit_systems: dict,
-	) -> td.FieldMonitor | td.FieldTimeMonitor:
-		if props['active_socket_set'] == 'Freq Domain':
-			freqs = input_sockets['Freqs']
-
-			log.info(
-				'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
-				props['sim_node_name'],
-				input_sockets['Center'],
-				input_sockets['Size'],
-			)
-			return td.FieldMonitor(
-				center=input_sockets['Center'],
-				size=input_sockets['Size'],
-				name=props['sim_node_name'],
-				interval_space=input_sockets['Samples/Space'],
-				freqs=[
-					float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
-				],
-			)
-		## Time Domain
+	def compute_freq_monitor(
+		self,
+		input_sockets: dict,
+		props: dict,
+		unit_systems: dict,
+	) -> td.FieldMonitor:
 		log.info(
-			'Computing FieldTimeMonitor (name=%s) with center=%s, size=%s',
+			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
 			props['sim_node_name'],
 			input_sockets['Center'],
 			input_sockets['Size'],
 		)
-		return td.FieldTimeMonitor(
+		return td.FieldMonitor(
 			center=input_sockets['Center'],
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
-			start=input_sockets['Rec Start'],
-			stop=input_sockets['Rec Stop'],
-			interval=input_sockets['Samples/Time'],
-			interval_space=input_sockets['Samples/Space'],
+			interval_space=tuple(input_sockets['Samples/Space']),
+			freqs=input_sockets['Freqs'].realize().values,
+			#freqs=[
+			#	float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
+			#],
 		)
 
 	####################
