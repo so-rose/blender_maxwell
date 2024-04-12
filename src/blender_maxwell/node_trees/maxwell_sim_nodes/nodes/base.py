@@ -381,6 +381,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 		A socket is considered "inactive" when it shouldn't be defined (per `self.active_socket_defs), but is present nonetheless.
 		"""
+		node_tree = self.id_data
 		for direc in ['input', 'output']:
 			all_bl_sockets = self._bl_sockets(direc)
 			active_bl_socket_defs = self.active_socket_defs(direc)
@@ -400,6 +401,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 			# Remove Sockets
 			for bl_socket in bl_sockets_to_remove:
+				node_tree.on_node_socket_removed(bl_socket)
 				all_bl_sockets.remove(bl_socket)
 
 	def _add_new_active_sockets(self):
@@ -964,7 +966,7 @@ class MaxwellSimNode(bpy.types.Node):
 		## The NodeTree keeps caches to for optimized event triggering.
 		## However, ex. deleted nodes also deletes links, without cache update.
 		## By reporting that we're deleting the node, the cache stays happy.
-		node_tree.sync_node_removed(self)
+		node_tree.on_node_removed(self)
 
 		# Invalidate Non-Persistent Cache
 		## Prevents memory leak due to dangling cache entries for deleted nodes.

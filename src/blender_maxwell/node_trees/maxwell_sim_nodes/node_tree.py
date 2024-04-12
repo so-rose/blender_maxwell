@@ -254,8 +254,8 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	####################
 	# - Update Methods
 	####################
-	def sync_node_removed(self, node: bpy.types.Node):
-		"""Run by `Node.free()` when a node is being removed.
+	def on_node_removed(self, node: bpy.types.Node):
+		"""Run by `MaxwellSimNode.free()` when a node is being removed.
 
 		ONLY input socket links are removed from the NodeLink cache.
 		- `self.update()` handles link-removal from existing nodes.
@@ -274,6 +274,20 @@ class MaxwellSimTree(bpy.types.NodeTree):
 				for link_ptr in link_ptrs:
 					self.node_link_cache.remove_link(link_ptr)
 					self.node_link_cache.remove_sockets_by_link_ptr(link_ptr)
+
+	def on_node_socket_removed(self, bl_socket: bpy.types.NodeSocket) -> None:
+		"""Run by `MaxwellSimNode._prune_inactive_sockets()` when a socket is being removed (but not the node).
+
+		Parameters:
+			bl_socket: The node socket that's about to be removed.
+		"""
+		# Compute About-To-Be-Freed Link Ptrs
+		link_ptrs = {link.as_pointer() for link in bl_socket.links}
+
+		if link_ptrs:
+			for link_ptr in link_ptrs:
+				self.node_link_cache.remove_link(link_ptr)
+				self.node_link_cache.remove_sockets_by_link_ptr(link_ptr)
 
 	def update(self) -> None:
 		"""Monitors all changes to the node tree, potentially responding with appropriate callbacks.

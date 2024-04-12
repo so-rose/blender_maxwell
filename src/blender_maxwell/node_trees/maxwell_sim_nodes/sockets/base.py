@@ -210,7 +210,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Returns a bool, whether or not the socket consents to the link change.
 		"""
-		## TODO: Crash if deleting removing linked loose sockets.
 		if self.locked:
 			return False
 		if self.is_output:

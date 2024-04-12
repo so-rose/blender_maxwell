@@ -13,7 +13,6 @@ PREVIEW_COLLECTION_NAME = 'BLMaxwell Visible'
 ####################
 # - Global Collection Handling
 ####################
-@functools.cache
 def collection(collection_name: str, view_layer_exclude: bool) -> bpy.types.Collection:
 	# Init the "Managed Collection"
 	# Ensure Collection exists (and is in the Scene collection)

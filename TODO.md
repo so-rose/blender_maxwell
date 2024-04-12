@@ -1,7 +1,7 @@
 # Acute Tasks
 - [x] Implement Material Import for Maxim Data
 - [x] Implement Robust DataFlowKind for list-like / spectral-like composite types
-- [ ] Unify random node/socket caches.
+- [x] Unify random node/socket caches.
 - [ ] Finish the "Low-Hanging Fruit" Nodes
 - [ ] Move preview GN trees to the asset library.
 
@@ -344,6 +344,10 @@
 
 
 # Internal / Architecture
+## IDEAS
+- [ ] Socket "guarding" - let nodes influence the dynamic capabilities of sockets to prevent links (with a `self.report` explanation) to an output socket that won't yet produce a value.
+	- [ ] Prevents some uses of loose sockets (we want less loose sockets!)
+
 ## CRITICAL
 - [ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
 - [ ] Document the node tree cache semantics thoroughly; it's a VERY nuanced piece of logic, and its invariants may not survive Blender versions / the author's working memory
@@ -462,6 +466,7 @@ This is where we keep track of them for now.
 - [ ] API auth shouldn't show if everything is fine in Cloud Task socket
 - [ ] Cloud task socket loads folders before its node shows, which can be slow (and error prone if offline)
 - [ ] Dispersive fit is slow, which means lag on normal operations that rely on the fit result - fit computation should be integrated into the node, and the output socket should only appear when the fit is available.
+- [ ] Numerical, Physical Constant is missing entries
 - [ ] Numerical, Physical Constant is missing entries
 
 BROKE NODES
