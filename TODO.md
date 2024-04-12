@@ -1,12 +1,17 @@
 # Acute Tasks
 - [x] Implement Material Import for Maxim Data
 - [x] Implement Robust DataFlowKind for list-like / spectral-like composite types
+- [ ] Unify random node/socket caches.
 - [ ] Finish the "Low-Hanging Fruit" Nodes
 - [ ] Move preview GN trees to the asset library.
 
 
 
 # Nodes
+## Analysis
+- [ ] Extract
+- [ ] Viz
+
 ## Inputs
 - [x] Wave Constant
 	- [x] Implement export of frequency / wavelength array/range.
@@ -161,12 +166,7 @@
 - [ ] Sim Grid Axes / Uniform Sim Grid Axis
 - [ ] Sim Grid Axes / Array Sim Grid Axis
 
-## Converters
-- [ ] Math
-	- [ ] Implement common operations w/secondary choice of socket type based on a custom internal data structure
-	- [ ] Implement angfreq/frequency/vacwl conversion.
-	- [ ] Implement spectral math on SDs
-	- [ ] Implement easy derivation of ex. transmission and reflection.
+## Utilities
 - [ ] Separate
 - [x] Combine
 	- [x] Implement concatenation of sim-critical socket types into their multi-type

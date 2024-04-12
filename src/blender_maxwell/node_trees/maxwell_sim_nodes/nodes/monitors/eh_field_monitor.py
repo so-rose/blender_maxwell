@@ -99,9 +99,6 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			name=props['sim_node_name'],
 			interval_space=tuple(input_sockets['Samples/Space']),
 			freqs=input_sockets['Freqs'].realize().values,
-			#freqs=[
-			#	float(spu.convert_to(freq, spu.hertz) / spu.hertz) for freq in freqs
-			#],
 		)
 
 	####################

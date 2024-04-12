@@ -57,6 +57,7 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
+	## TODO: More automatic determination of which file type is in use :)
 	tidy3d_type: bpy.props.EnumProperty(
 		name='Tidy3D Type',
 		description='Type of Tidy3D object to load',
@@ -228,7 +229,6 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 				disp_fitter = CACHE[self.bl_label]['fitter']
 
 			# Plot
-			log.debug(disp_fitter)
 			managed_objs['plot'].mpl_plot_to_image(
 				lambda ax: disp_fitter.plot(
 					medium=model_medium,

@@ -13,14 +13,15 @@ CACHE_SIM_DATA = {}
 
 
 class ExtractDataNode(base.MaxwellSimNode):
-	"""Node for visualizing simulation data, by querying its monitors."""
+	"""Node for extracting data from other objects."""
 
 	node_type = ct.NodeType.ExtractData
-	bl_label = 'Extract Data'
+	bl_label = 'Extract'
 
 	input_socket_sets: typ.ClassVar = {
 		'Sim Data': {'Sim Data': sockets.MaxwellFDTDSimDataSocketDef()},
 		'Field Data': {'Field Data': sockets.AnySocketDef()},
+		'Flux Data': {'Flux Data': sockets.AnySocketDef()},
 	}
 	output_sockets: typ.ClassVar = {
 		'Data': sockets.AnySocketDef(),
@@ -193,6 +194,20 @@ class ExtractDataNode(base.MaxwellSimNode):
 			self.cache__components = ''
 
 	####################
+	# - Flux Data
+	####################
+
+	def draw_props__flux_data(
+		self, _: bpy.types.Context, col: bpy.types.UILayout
+	) -> None:
+		pass
+
+	def draw_info__flux_data(
+		self, _: bpy.types.Context, col: bpy.types.UILayout
+	) -> None:
+		pass
+
+	####################
 	# - Global
 	####################
 	def draw_props(self, context: bpy.types.Context, col: bpy.types.UILayout) -> None:
@@ -200,12 +215,16 @@ class ExtractDataNode(base.MaxwellSimNode):
 			self.draw_props__sim_data(context, col)
 		if self.active_socket_set == 'Field Data':
 			self.draw_props__field_data(context, col)
+		if self.active_socket_set == 'Flux Data':
+			self.draw_props__flux_data(context, col)
 
 	def draw_info(self, context: bpy.types.Context, col: bpy.types.UILayout) -> None:
 		if self.active_socket_set == 'Sim Data':
 			self.draw_info__sim_data(context, col)
 		if self.active_socket_set == 'Field Data':
 			self.draw_info__field_data(context, col)
+		if self.active_socket_set == 'Flux Data':
+			self.draw_info__flux_data(context, col)
 
 	@events.computes_output_socket(
 		'Data',
@@ -225,6 +244,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 		elif self.active_socket_set == 'Field Data':  # noqa: RET505
 			field_data = self._compute_input('Field Data')
 			return getattr(field_data, props['field_data__component'])
+
+		elif self.active_socket_set == 'Flux Data':  # noqa: RET505
+			flux_data = self._compute_input('Flux Data')
+			return getattr(flux_data, 'flux')
 
 		msg = f'Tried to get data from unknown output socket in "{self.bl_label}"'
 		raise RuntimeError(msg)

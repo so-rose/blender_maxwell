@@ -130,6 +130,7 @@ def write_modifier_geonodes(
 			bl_modifier[iface_id] = float(bl_socket_value)
 			modifier_altered = True
 		else:
+			## TODO: Whitelist what can be here. I'm done with the TypeErrors.
 			bl_modifier[iface_id] = bl_socket_value
 			modifier_altered = True
 

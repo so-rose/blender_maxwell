@@ -64,6 +64,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		socket_name={'Center', 'Radius'},
 		prop_name='preview_active',
+		run_on_init=True,
 		props={'preview_active'},
 		input_sockets={'Center', 'Radius'},
 		managed_objs={'mesh', 'modifier'},
@@ -95,10 +96,6 @@ class SphereStructureNode(base.MaxwellSimNode):
 		# Push Preview State
 		if props['preview_active']:
 			managed_objs['mesh'].show_preview()
-
-	@events.on_init()
-	def on_init(self):
-		self.on_inputs_changed()
 
 
 ####################

@@ -71,14 +71,14 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		socket_name='GeoNodes',
 		prop_name='preview_active',
 		any_loose_input_socket=True,
+		run_on_init=True,
+		# Pass Data
 		props={'preview_active'},
 		managed_objs={'mesh', 'modifier'},
 		input_sockets={'Center', 'GeoNodes'},
 		all_loose_input_sockets=True,
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
-		scale_input_sockets={
-			'Center': 'BlenderUnits'
-		}
+		scale_input_sockets={'Center': 'BlenderUnits'},
 	)
 	def on_input_changed(
 		self,

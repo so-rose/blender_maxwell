@@ -1,3 +1,5 @@
+import typing as typ
+
 import bpy
 import sympy as sp
 
@@ -5,18 +7,15 @@ from ... import contracts as ct
 from ... import sockets
 from .. import base, events
 
-MAX_AMOUNT = 20
-
 
 class CombineNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.Combine
 	bl_label = 'Combine'
-	# bl_icon = ...
 
 	####################
 	# - Sockets
 	####################
-	input_socket_sets = {
+	input_socket_sets: typ.ClassVar = {
 		'Maxwell Sources': {},
 		'Maxwell Structures': {},
 		'Maxwell Monitors': {},
@@ -69,7 +68,7 @@ class CombineNode(base.MaxwellSimNode):
 		description='Amount of Objects to Combine',
 		default=1,
 		min=1,
-		max=MAX_AMOUNT,
+		# max=MAX_AMOUNT,
 		update=lambda self, context: self.sync_prop('amount', context),
 	)
 
@@ -118,6 +117,7 @@ class CombineNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		prop_name='active_socket_set',
 		props={'active_socket_set', 'amount'},
+		run_on_init=True,
 	)
 	def on_value_changed__active_socket_set(self, props):
 		if props['active_socket_set'] == 'Maxwell Sources':
@@ -142,10 +142,6 @@ class CombineNode(base.MaxwellSimNode):
 		prop_name='amount',
 	)
 	def on_value_changed__amount(self):
-		self.on_value_changed__active_socket_set()
-
-	@events.on_init()
-	def on_init(self):
 		self.on_value_changed__active_socket_set()
 
 

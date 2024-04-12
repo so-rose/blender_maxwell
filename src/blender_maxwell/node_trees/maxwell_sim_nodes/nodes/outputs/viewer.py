@@ -70,12 +70,6 @@ class ViewerNode(base.MaxwellSimNode):
 		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
 	)
 
-	cache__data_socket_linked: bpy.props.BoolProperty(
-		name='Data Is Linked',
-		description='Whether the Data input was linked last time it was checked.',
-		default=True,
-	)
-
 	####################
 	# - UI
 	####################
@@ -125,41 +119,26 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Event Methods
 	####################
 	@events.on_value_changed(
+		socket_name='Data',
 		prop_name='auto_plot',
 		props={'auto_plot'},
 	)
 	def on_changed_plot_preview(self, props):
 		if self.inputs['Data'].is_linked and props['auto_plot']:
-			# log.debug('Enabling 2D Plot from "%s"', self.name)
 			self.trigger_action(ct.DataFlowAction.ShowPlot)
 
 	@events.on_value_changed(
+		socket_name='Data',
 		prop_name='auto_3d_preview',
 		props={'auto_3d_preview'},
 	)
 	def on_changed_3d_preview(self, props):
-		# Unpreview Everything
-		if props['auto_3d_preview']:
-			node_tree = self.id_data
-			node_tree.unpreview_all()
+		node_tree = self.id_data
 
-		# Trigger Preview Action
-		if self.inputs['Data'].is_linked and props['auto_3d_preview']:
-			# log.debug('Enabling 3D Previews from "%s"', self.name)
-			self.trigger_action(ct.DataFlowAction.ShowPreview)
-
-	@events.on_value_changed(
-		socket_name='Data',
-	)
-	def on_changed_3d_data(self):
-		# Is Linked: Re-Preview
-		if self.inputs['Data'].is_linked:
-			self.on_changed_3d_preview()
-			self.on_changed_plot_preview()
-
-		# Just Linked / Just Unlinked: Preview/Unpreview All
-		if self.inputs['Data'].is_linked ^ self.cache__data_socket_linked:
-			self.cache__data_socket_linked = self.inputs['Data'].is_linked
+		# Remove Non-Repreviewed Previews on Close
+		with node_tree.repreview_all():
+			if self.inputs['Data'].is_linked and props['auto_3d_preview']:
+				self.trigger_action(ct.DataFlowAction.ShowPreview)
 
 
 ####################

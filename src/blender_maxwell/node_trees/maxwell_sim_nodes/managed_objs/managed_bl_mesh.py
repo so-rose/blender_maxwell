@@ -31,6 +31,13 @@ class ManagedBLMesh(ct.schemas.ManagedObj):
 			'Changing BLMesh w/Name "%s" to Name "%s"', self._bl_object_name, value
 		)
 
+		if self._bl_object_name == value:
+			## TODO: This is a workaround.
+			## Really, we can't tell if a name is valid by searching objects.
+			## Since, after all, other managedobjs may have taken a name..
+			## ...but not yet made an object that has it.
+			return
+
 		if (bl_object := bpy.data.objects.get(value)) is None:
 			log.info(
 				'Desired BLMesh Name "%s" Not Taken',

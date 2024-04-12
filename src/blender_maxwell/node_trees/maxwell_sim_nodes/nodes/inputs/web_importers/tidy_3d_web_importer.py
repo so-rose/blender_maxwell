@@ -47,15 +47,16 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 		## TODO: REMOVE TEST
 		log.info('Loading SimulationData File')
 		import sys
+
 		for module_name, module in sys.modules.copy().items():
 			if module_name == '__mp_main__':
 				print('Problematic Module Entry', module_name)
 				print(module)
-				#print('MODULE REPR', module)
+				# print('MODULE REPR', module)
 				continue
-		#return td.SimulationData.from_file(
-		#	fname='/home/sofus/src/blender_maxwell/dev/sim_demo.hdf5'
-		#)
+		# return td.SimulationData.from_file(
+		# fname='/home/sofus/src/blender_maxwell/dev/sim_demo.hdf5'
+		# )
 
 		# Validate Task Availability
 		if (cloud_task := input_sockets['Cloud Task']) is None:
@@ -77,7 +78,9 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 			cloud_task, _sim_data_cache_path(cloud_task.task_id)
 		)
 
-	@events.on_value_changed(socket_name='Cloud Task', input_sockets={'Cloud Task'})
+	@events.on_value_changed(
+		socket_name='Cloud Task', run_on_init=True, input_sockets={'Cloud Task'}
+	)
 	def on_cloud_task_changed(self, input_sockets: dict):
 		if (
 			(cloud_task := input_sockets['Cloud Task']) is not None
@@ -89,10 +92,6 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 			}
 		else:
 			self.loose_output_sockets = {}
-
-	@events.on_init()
-	def on_init(self):
-		self.on_cloud_task_changed()
 
 
 ####################

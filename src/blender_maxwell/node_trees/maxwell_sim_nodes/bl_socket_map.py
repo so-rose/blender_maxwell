@@ -220,7 +220,7 @@ def _writable_bl_socket_value(
 		_bl_socket_value = value
 
 	# Compute Blender Socket Value
-	if isinstance(_bl_socket_value, sp.Basic):
+	if isinstance(_bl_socket_value, sp.Basic | sp.MatrixBase):
 		bl_socket_value = spux.sympy_to_python(_bl_socket_value)
 	else:
 		bl_socket_value = _bl_socket_value

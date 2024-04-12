@@ -63,6 +63,7 @@ class SimDomainNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		prop_name='preview_active',
+		run_on_init=True,
 		props={'preview_active'},
 		input_sockets={'Center', 'Size'},
 		managed_objs={'mesh', 'modifier'},
@@ -93,10 +94,6 @@ class SimDomainNode(base.MaxwellSimNode):
 		# Push Preview State
 		if props['preview_active']:
 			managed_objs['mesh'].show_preview()
-
-	@events.on_init()
-	def on_init(self):
-		self.on_input_changed()
 
 
 ####################

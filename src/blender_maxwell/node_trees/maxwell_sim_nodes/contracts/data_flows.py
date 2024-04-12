@@ -5,7 +5,6 @@ import typing as typ
 from types import MappingProxyType
 
 # import colour  ## TODO
-import jax
 import numpy as np
 import sympy as sp
 import sympy.physics.units as spu
@@ -76,6 +75,21 @@ class DataFlowKind(enum.StrEnum):
 	LazyValue = enum.auto()
 	LazyValueRange = enum.auto()
 	LazyValueSpectrum = enum.auto()
+
+	@classmethod
+	def scale_to_unit_system(cls, kind: typ.Self, value, socket_type, unit_system):
+		if kind == cls.Value:
+			return spux.sympy_to_python(
+				spux.scale_to_unit(
+					value,
+					unit_system[socket_type],
+				)
+			)
+		if kind == cls.LazyValueRange:
+			return value.rescale_to_unit(unit_system[socket_type])
+
+		msg = 'Tried to scale unknown kind'
+		raise ValueError(msg)
 
 
 ####################

@@ -116,7 +116,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		`trigger_action` method will be called.
 		"""
 		# Forwards Chains
-		if action in {'value_changed'}:
+		if action in {ct.DataFlowAction.DataChanged}:
 			## Input Socket
 			if not self.is_output:
 				self.node.trigger_action(action, socket_name=self.name)
@@ -128,15 +128,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Backwards Chains
 		elif action in {
-			'enable_lock',
-			'disable_lock',
-			'show_preview',
-			'show_plot',
+			ct.DataFlowAction.EnableLock,
+			ct.DataFlowAction.DisableLock,
+			ct.DataFlowAction.OutputRequested,
+			ct.DataFlowAction.DataChanged,
+			ct.DataFlowAction.ShowPreview,
+			ct.DataFlowAction.ShowPlot,
 		}:
-			if action == 'enable_lock':
+			if action == ct.DataFlowAction.EnableLock:
 				self.locked = True
 
-			if action == 'disable_lock':
+			if action == ct.DataFlowAction.DisableLock:
 				self.locked = False
 
 			## Output Socket
@@ -208,6 +210,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Returns a bool, whether or not the socket consents to the link change.
 		"""
+		## TODO: Crash if deleting removing linked loose sockets.
 		if self.locked:
 			return False
 		if self.is_output:

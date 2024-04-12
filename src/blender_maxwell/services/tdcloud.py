@@ -105,7 +105,7 @@ class TidyCloudFolders:
 			cloud_folder.folder_id: cloud_folder for cloud_folder in cloud_folders
 		}
 		cls.cache_folders = folders
-		log.info("Retrieved Folders: %s", str(cls.cache_folders))
+		log.info('Retrieved Folders: %s', str(cls.cache_folders))
 		return folders
 
 	@classmethod
@@ -243,7 +243,11 @@ class TidyCloudTasks:
 		## Task by-Folder Cache
 		cls.cache_folder_tasks[cloud_folder.folder_id] = set(cloud_tasks)
 
-		log.info('Retrieved Tasks (folder="%s"): %s)', cloud_folder.folder_id, str(set(cloud_tasks)))
+		log.info(
+			'Retrieved Tasks (folder="%s"): %s)',
+			cloud_folder.folder_id,
+			str(set(cloud_tasks)),
+		)
 		return cloud_tasks
 
 	####################

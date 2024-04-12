@@ -45,8 +45,9 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			),
 		},
 	}
-	output_sockets: typ.ClassVar = {
-		'Monitor': sockets.MaxwellMonitorSocketDef(),
+	output_socket_sets: typ.ClassVar = {
+		'Freq Domain': {'Freq Monitor': sockets.MaxwellMonitorSocketDef()},
+		'Time Domain': {'Time Monitor': sockets.MaxwellMonitorSocketDef()},
 	}
 
 	managed_obj_defs: typ.ClassVar = {
@@ -62,60 +63,44 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 	# - Event Methods: Computation
 	####################
 	@events.computes_output_socket(
-		'Monitor',
-		props={'active_socket_set', 'sim_node_name'},
+		'Freq Monitor',
+		props={'sim_node_name'},
 		input_sockets={
-			'Rec Start',
-			'Rec Stop',
 			'Center',
 			'Size',
 			'Samples/Space',
-			'Samples/Time',
 			'Freqs',
 			'Direction',
 		},
 		input_socket_kinds={
-			'Freqs': ct.LazyDataValueRange,
+			'Freqs': ct.DataFlowKind.LazyValueRange,
 		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={
 			'Center': 'Tidy3DUnits',
 			'Size': 'Tidy3DUnits',
 			'Freqs': 'Tidy3DUnits',
-			'Samples/Space': 'Tidy3DUnits',
-			'Rec Start': 'Tidy3DUnits',
-			'Rec Stop': 'Tidy3DUnits',
-			'Samples/Time': 'Tidy3DUnits',
 		},
 	)
-	def compute_monitor(self, input_sockets: dict, props: dict) -> td.FieldTimeMonitor:
-		direction = '+' if input_sockets['Direction'] else '-'
-
-		if props['active_socket_set'] == 'Freq Domain':
-			log.info(
-				'Computing FluxMonitor (name="%s") with center="%s", size="%s"',
-				props['sim_node_name'],
-				input_sockets['Center'],
-				input_sockets['Size'],
-			)
-			return td.FluxMonitor(
-				center=input_sockets['Center'],
-				size=input_sockets['Size'],
-				name=props['sim_node_name'],
-				interval_space=input_sockets['Samples/Space'],
-				freqs=input_sockets['Freqs'].realize().values,
-				normal_dir=direction,
-			)
-
-		return td.FluxTimeMonitor(
+	def compute_freq_monitor(
+		self,
+		input_sockets: dict,
+		props: dict,
+		unit_systems: dict,
+	) -> td.FieldMonitor:
+		log.info(
+			'Computing FluxMonitor (name="%s") with center="%s", size="%s"',
+			props['sim_node_name'],
+			input_sockets['Center'],
+			input_sockets['Size'],
+		)
+		return td.FluxMonitor(
 			center=input_sockets['Center'],
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
-			start=input_sockets['Rec Start'],
-			stop=input_sockets['Rec Stop'],
-			interval=input_sockets['Samples/Time'],
-			interval_space=input_sockets['Samples/Space'],
-			normal_dir=direction,
+			interval_space=(1,1,1),
+			freqs=input_sockets['Freqs'].realize().values,
+			normal_dir='+' if input_sockets['Direction'] else '-',
 		)
 
 	####################

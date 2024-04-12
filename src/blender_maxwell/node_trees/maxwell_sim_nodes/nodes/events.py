@@ -1,12 +1,10 @@
-import enum
+import dataclasses
 import inspect
 import typing as typ
 from types import MappingProxyType
 
-from ....utils import extra_sympy_units as spux
 from ....utils import logger
 from .. import contracts as ct
-from .base import MaxwellSimNode
 
 log = logger.get(__name__)
 
@@ -14,50 +12,35 @@ UnitSystemID = str
 UnitSystem = dict[ct.SocketType, typ.Any]
 
 
-class EventCallbackType(enum.StrEnum):
-	"""Names of actions that support callbacks."""
-
-	computes_output_socket = enum.auto()
-	on_value_changed = enum.auto()
-	on_show_plot = enum.auto()
-	on_init = enum.auto()
-
-
 ####################
 # - Event Callback Information
 ####################
-class EventCallbackData_ComputesOutputSocket(typ.TypedDict):  # noqa: N801
-	"""Extra data used to select a method to compute output sockets."""
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class InfoDataChanged:
+	run_on_init: bool
+	on_changed_sockets: set[ct.SocketName]
+	on_changed_props: set[str]
+	on_any_changed_loose_input: set[str]
 
+
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class InfoOutputRequested:
 	output_socket_name: ct.SocketName
 	any_loose_output_socket: bool
 	kind: ct.DataFlowKind
 
+	depon_props: set[str]
 
-class EventCallbackData_OnValueChanged(typ.TypedDict):  # noqa: N801
-	"""Extra data used to select a method to compute output sockets."""
+	depon_input_sockets: set[ct.SocketName]
+	depon_input_socket_kinds: dict[ct.SocketName, ct.DataFlowKind]
+	depon_all_loose_input_sockets: bool
 
-	changed_sockets: set[ct.SocketName]
-	changed_props: set[str]
-	changed_loose_input: set[str]
-
-
-class EventCallbackData_OnShowPlot(typ.TypedDict):  # noqa: N801
-	"""Extra data in the callback, used when showing a plot."""
-
-	stop_propagation: bool
+	depon_output_sockets: set[ct.SocketName]
+	depon_output_socket_kinds: dict[ct.SocketName, ct.DataFlowKind]
+	depon_all_loose_output_sockets: bool
 
 
-class EventCallbackData_OnInit(typ.TypedDict):  # noqa: D101, N801
-	pass
-
-
-EventCallbackData: typ.TypeAlias = (
-	EventCallbackData_ComputesOutputSocket
-	| EventCallbackData_OnValueChanged
-	| EventCallbackData_OnShowPlot
-	| EventCallbackData_OnInit
-)
+EventCallbackInfo: typ.TypeAlias = InfoDataChanged | InfoOutputRequested
 
 
 ####################
@@ -68,16 +51,21 @@ PropName: typ.TypeAlias = str
 
 
 def event_decorator(
-	action_type: EventCallbackType,
-	extra_data: EventCallbackData,
-	props: set[PropName] = frozenset(),
+	action_type: ct.DataFlowAction,
+	callback_info: EventCallbackInfo | None,
+	stop_propagation: bool = False,
+	# Request Data for Callback
 	managed_objs: set[ManagedObjName] = frozenset(),
+	props: set[PropName] = frozenset(),
 	input_sockets: set[ct.SocketName] = frozenset(),
+	input_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
 	input_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
 	output_sockets: set[ct.SocketName] = frozenset(),
+	output_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
 	output_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
 	all_loose_input_sockets: bool = False,
 	all_loose_output_sockets: bool = False,
+	# Request Unit System Scaling
 	unit_systems: dict[UnitSystemID, UnitSystem] = MappingProxyType({}),
 	scale_input_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
 	scale_output_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
@@ -87,9 +75,11 @@ def event_decorator(
 	Parameters:
 		action_type: A name describing which event the decorator should respond to.
 			Set to `return_method.action_type`
-		extra_data: A dictionary that provides the caller with additional per-`action_type` information.
+		callback_info: A dictionary that provides the caller with additional per-`action_type` information.
 			This might include parameters to help select the most appropriate method(s) to respond to an event with, or actions to take after running the callback.
 		props: Set of `props` to compute, then pass to the decorated method.
+		stop_propagation: Whether or stop propagating the event through the graph after encountering this method.
+			Other methods defined on the same node will still run.
 		managed_objs: Set of `managed_objs` to retrieve, then pass to the decorated method.
 		input_sockets: Set of `input_sockets` to compute, then pass to the decorated method.
 		input_socket_kinds: The `ct.DataFlowKind` to compute per-input-socket.
@@ -104,7 +94,7 @@ def event_decorator(
 		A decorator, which can be applied to a method of `MaxwellSimNode`.
 		When a `MaxwellSimNode` subclass initializes, such a decorated method will be picked up on.
 
-		When the `action_type` action passes through the node, then `extra_data` is used to determine
+		When the `action_type` action passes through the node, then `callback_info` is used to determine
 	"""
 	req_params = (
 		{'self'}
@@ -119,6 +109,8 @@ def event_decorator(
 
 	# TODO: Check that all Unit System IDs referenced are also defined in 'unit_systems'.
 	## TODO: More ex. introspective checks and such, to make it really hard to write invalid methods.
+	# TODO: Check Function Annotation Validity
+	## - socket capabilities
 
 	def decorator(method: typ.Callable) -> typ.Callable:
 		# Check Function Signature Validity
@@ -133,127 +125,126 @@ def event_decorator(
 			msg = f'Decorated method {method.__name__} has superfluous arguments {func_sig - req_params}'
 			raise ValueError(msg)
 
-		# TODO: Check Function Annotation Validity
-		## - socket capabilities
-
-		def decorated(node: MaxwellSimNode):
+		def decorated(node):
 			method_kw_args = {}  ## Keyword Arguments for Decorated Method
 
-			# Compute Requested Props
-			if props:
-				_props = {prop_name: getattr(node, prop_name) for prop_name in props}
-				method_kw_args |= {'props': _props}
+			# Unit Systems
+			method_kw_args |= {'unit_systems': unit_systems} if unit_systems else {}
 
-			# Retrieve Requested Managed Objects
-			if managed_objs:
-				_managed_objs = {
-					managed_obj_name: node.managed_objs[managed_obj_name]
-					for managed_obj_name in managed_objs
+			# Properties
+			method_kw_args |= (
+				{'props': {prop_name: getattr(node, prop_name) for prop_name in props}}
+				if props
+				else {}
+			)
+
+			# Managed Objects
+			method_kw_args |= (
+				{
+					'managed_objs': {
+						managed_obj_name: node.managed_objs[managed_obj_name]
+						for managed_obj_name in managed_objs
+					}
 				}
-				method_kw_args |= {'managed_objs': _managed_objs}
+				if managed_objs
+				else {}
+			)
 
-			# Requested Sockets
-			## Compute Requested Input Sockets
-			if input_sockets:
-				_input_sockets = {
-					input_socket_name: node._compute_input(
-						input_socket_name,
-						kind=input_socket_kinds.get(
-							input_socket_name, ct.DataFlowKind.Value
-						),
-					)
-					for input_socket_name in input_sockets
+			# Sockets
+			## Input Sockets
+			method_kw_args |= (
+				{
+					'input_sockets': {
+						input_socket_name: node._compute_input(
+							input_socket_name,
+							kind=input_socket_kinds.get(
+								input_socket_name, ct.DataFlowKind.Value
+							),
+							unit_system=(
+								unit_system := unit_systems.get(
+									scale_input_sockets.get(input_socket_name)
+								)
+							),
+							optional=input_sockets_optional.get(
+								input_socket_name, False
+							),
+						)
+						for input_socket_name in input_sockets
+					}
 				}
+				if input_sockets
+				else {}
+			)
 
-				# Scale Specified Input Sockets to Unit System
-				## First, scale the input socket value to the given unit system
-				## Then, convert the symbol-less sympy scalar to a python type.
-				for input_socket_name, unit_system_id in scale_input_sockets.items():
-					unit_system = unit_systems[unit_system_id]
-					kind = input_socket_kinds.get(
-						input_socket_name, ct.DataFlowKind.Value
-					)
-
-					if kind == ct.DataFlowKind.Value:
-						_input_sockets[input_socket_name] = spux.sympy_to_python(
-							spux.scale_to_unit(
-								_input_sockets[input_socket_name],
-								unit_system[node.inputs[input_socket_name].socket_type],
-							)
+			## Output Sockets
+			method_kw_args |= (
+				{
+					'output_sockets': {
+						output_socket_name: ct.DataFlowKind.scale_to_unit_system(
+							(
+								output_socket_kind := output_socket_kinds.get(
+									output_socket_name, ct.DataFlowKind.Value
+								)
+							),
+							node.compute_output(
+								output_socket_name,
+								kind=output_socket_kind,
+								optional=output_sockets_optional.get(
+									output_socket_name, False
+								),
+							),
+							node.outputs[output_socket_name].socket_type,
+							unit_systems.get(
+								scale_output_sockets.get(output_socket_name)
+							),
 						)
-					elif kind == ct.DataFlowKind.LazyValueRange:
-						_input_sockets[input_socket_name] = _input_sockets[
-							input_socket_name
-						].rescale_to_unit(
-							unit_system[node.inputs[input_socket_name].socket_type]
+						if scale_output_sockets.get(output_socket_name) is not None
+						else node.compute_output(
+							output_socket_name,
+							kind=output_socket_kinds.get(
+								output_socket_name, ct.DataFlowKind.Value
+							),
+							optional=output_sockets_optional.get(
+								output_socket_name, False
+							),
 						)
-
-				method_kw_args |= {'input_sockets': _input_sockets}
-
-			## Compute Requested Output Sockets
-			if output_sockets:
-				_output_sockets = {
-					output_socket_name: node.compute_output(
-						output_socket_name,
-						kind=output_socket_kinds.get(
-							output_socket_name, ct.DataFlowKind.Value
-						),
-					)
-					for output_socket_name in output_sockets
+						for output_socket_name in output_sockets
+					}
 				}
-
-				# Scale Specified Output Sockets to Unit System
-				## First, scale the output socket value to the given unit system
-				## Then, convert the symbol-less sympy scalar to a python type.
-				for output_socket_name, unit_system_id in scale_output_sockets.items():
-					unit_system = unit_systems[unit_system_id]
-					kind = input_socket_kinds.get(
-						input_socket_name, ct.DataFlowKind.Value
-					)
-
-					if kind == ct.DataFlowKind.Value:
-						_output_sockets[output_socket_name] = spux.sympy_to_python(
-							spux.scale_to_unit(
-								_output_sockets[output_socket_name],
-								unit_system[
-									node.outputs[output_socket_name].socket_type
-								],
-							)
-						)
-					elif kind == ct.DataFlowKind.LazyValueRange:
-						_output_sockets[output_socket_name] = _output_sockets[
-							output_socket_name
-						].rescale_to_unit(
-							unit_system[node.outputs[output_socket_name].socket_type]
-						)
-				method_kw_args |= {'output_sockets': _output_sockets}
+				if output_sockets
+				else {}
+			)
 
 			# Loose Sockets
 			## Compute All Loose Input Sockets
-			if all_loose_input_sockets:
-				_loose_input_sockets = {
-					input_socket_name: node._compute_input(
-						input_socket_name,
-						kind=node.inputs[input_socket_name].active_kind,
-					)
-					for input_socket_name in node.loose_input_sockets
+			method_kw_args |= (
+				{
+					'loose_input_sockets': {
+						input_socket_name: node._compute_input(
+							input_socket_name,
+							kind=node.inputs[input_socket_name].active_kind,
+						)
+						for input_socket_name in node.loose_input_sockets
+					}
 				}
-				method_kw_args |= {'loose_input_sockets': _loose_input_sockets}
+				if all_loose_input_sockets
+				else {}
+			)
 
 			## Compute All Loose Output Sockets
-			if all_loose_output_sockets:
-				_loose_output_sockets = {
-					output_socket_name: node.compute_output(
-						output_socket_name,
-						kind=node.outputs[output_socket_name].active_kind,
-					)
-					for output_socket_name in node.loose_output_sockets
+			method_kw_args |= (
+				{
+					'loose_output_sockets': {
+						output_socket_name: node.compute_output(
+							output_socket_name,
+							kind=node.outputs[output_socket_name].active_kind,
+						)
+						for output_socket_name in node.loose_output_sockets
+					}
 				}
-				method_kw_args |= {'loose_output_sockets': _loose_output_sockets}
-
-			# Unit Systems
-			if unit_systems:
-				method_kw_args |= {'unit_systems': unit_systems}
+				if all_loose_output_sockets
+				else {}
+			)
 
 			# Call Method
 			return method(
@@ -270,7 +261,8 @@ def event_decorator(
 
 		## Add Spice
 		decorated.action_type = action_type
-		decorated.extra_data = extra_data
+		decorated.callback_info = callback_info
+		decorated.stop_propagation = stop_propagation
 
 		return decorated
 
@@ -280,19 +272,22 @@ def event_decorator(
 ####################
 # - Simplified Event Callbacks
 ####################
-def computes_output_socket(
-	output_socket_name: ct.SocketName | None,
-	any_loose_output_socket: bool = False,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+def on_enable_lock(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type='computes_output_socket',
-		extra_data={
-			'output_socket_name': output_socket_name,
-			'any_loose_output_socket': any_loose_output_socket,
-			'kind': kind,
-		},
+		action_type=ct.DataFlowAction.EnableLock,
+		callback_info=None,
+		**kwargs,
+	)
+
+
+def on_disable_lock(
+	**kwargs,
+):
+	return event_decorator(
+		action_type=ct.DataFlowAction.DisableLock,
+		callback_info=None,
 		**kwargs,
 	)
 
@@ -302,37 +297,67 @@ def on_value_changed(
 	socket_name: set[ct.SocketName] | ct.SocketName | None = None,
 	prop_name: set[str] | str | None = None,
 	any_loose_input_socket: bool = False,
+	run_on_init: bool = False,
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=EventCallbackType.on_value_changed,
-		extra_data={
-			'changed_sockets': (
+		action_type=ct.DataFlowAction.DataChanged,
+		callback_info=InfoDataChanged(
+			run_on_init=run_on_init,
+			on_changed_sockets=(
 				socket_name if isinstance(socket_name, set) else {socket_name}
 			),
-			'changed_props': (prop_name if isinstance(prop_name, set) else {prop_name}),
-			'changed_loose_input': any_loose_input_socket,
-		},
+			on_changed_props=(prop_name if isinstance(prop_name, set) else {prop_name}),
+			on_any_changed_loose_input=any_loose_input_socket,
+		),
+		**kwargs,
+	)
+
+
+## TODO: Change name to 'on_output_requested'
+def computes_output_socket(
+	output_socket_name: ct.SocketName | None,
+	any_loose_output_socket: bool = False,
+	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+	**kwargs,
+):
+	return event_decorator(
+		action_type=ct.DataFlowAction.OutputRequested,
+		callback_info=InfoOutputRequested(
+			output_socket_name=output_socket_name,
+			any_loose_output_socket=any_loose_output_socket,
+			kind=kind,
+			depon_props=kwargs.get('props', set()),
+			depon_input_sockets=kwargs.get('input_sockets', set()),
+			depon_input_socket_kinds=kwargs.get('input_socket_kinds', set()),
+			depon_output_sockets=kwargs.get('output_sockets', set()),
+			depon_output_socket_kinds=kwargs.get('output_socket_kinds', set()),
+			depon_all_loose_input_sockets=kwargs.get('all_loose_input_sockets', set()),
+			depon_all_loose_output_sockets=kwargs.get(
+				'all_loose_output_sockets', set()
+			),
+		),
+		**kwargs,  ## stop_propagation has no effect.
+	)
+
+
+def on_show_preview(
+	**kwargs,
+):
+	return event_decorator(
+		action_type=ct.DataFlowAction.ShowPreview,
+		callback_info={},
 		**kwargs,
 	)
 
 
 def on_show_plot(
-	stop_propagation: bool = False,
+	stop_propagation: bool = True,
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=EventCallbackType.on_show_plot,
-		extra_data={
-			'stop_propagation': stop_propagation,
-		},
-		**kwargs,
-	)
-
-
-def on_init(**kwargs):
-	return event_decorator(
-		action_type=EventCallbackType.on_init,
-		extra_data={},
+		action_type=ct.DataFlowAction.ShowPlot,
+		callback_info={},
+		stop_propagation=stop_propagation,
 		**kwargs,
 	)
