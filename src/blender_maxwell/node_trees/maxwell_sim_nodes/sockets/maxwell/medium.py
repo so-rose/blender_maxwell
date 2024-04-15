@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td

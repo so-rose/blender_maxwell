@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 
 from .....services import tdcloud
 from ... import contracts as ct

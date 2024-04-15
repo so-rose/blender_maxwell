@@ -1,8 +1,6 @@
-"""
-
-Attributes:
-	NaiveEncodableType:
-		See <https://jcristharif.com/msgspec/supported-types.html> for details.
+"""Attributes:
+NaiveEncodableType:
+See <https://jcristharif.com/msgspec/supported-types.html> for details.
 """
 
 import dataclasses

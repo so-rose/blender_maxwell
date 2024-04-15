@@ -1,7 +1,6 @@
 import typing as typ
 
 import sympy as sp
-import sympy.physics.units as spu
 import tidy3d as td
 
 from .....assets.import_geonodes import GeoNodes, import_geonodes

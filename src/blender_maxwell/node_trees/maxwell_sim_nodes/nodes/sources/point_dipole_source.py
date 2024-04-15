@@ -1,7 +1,6 @@
 import typing as typ
 
 import bpy
-import sympy.physics.units as spu
 import tidy3d as td
 
 from ... import contracts as ct

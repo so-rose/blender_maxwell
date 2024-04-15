@@ -1,8 +1,6 @@
 import typing as typ
 from pathlib import Path
 
-import tidy3d as td
-
 from ...... import info
 from ......services import tdcloud
 from ......utils import logger

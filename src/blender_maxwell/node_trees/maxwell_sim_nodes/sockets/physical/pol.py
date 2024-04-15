@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 import sympy as sp
 import sympy.physics.optics.polarization as spo_pol
 import sympy.physics.units as spu

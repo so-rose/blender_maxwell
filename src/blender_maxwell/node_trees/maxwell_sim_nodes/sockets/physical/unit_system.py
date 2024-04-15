@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 
 from .....utils.pydantic_sympy import SympyExpr
 from ... import contracts as ct

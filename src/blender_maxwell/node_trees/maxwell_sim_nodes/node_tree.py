@@ -5,7 +5,6 @@ import bpy
 
 from ...utils import logger
 from . import contracts as ct
-from .managed_objs.managed_bl_collection import preview_collection
 
 log = logger.get(__name__)
 

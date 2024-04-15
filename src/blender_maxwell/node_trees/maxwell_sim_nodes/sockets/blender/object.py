@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 
 from ... import contracts as ct
 from .. import base

@@ -9,7 +9,6 @@ import bpy
 PATH_SCRIPT = str(Path(__file__).resolve().parent)
 sys.path.insert(0, str(PATH_SCRIPT))
 import info  # noqa: E402
-import pack  # noqa: E402
 
 sys.path.remove(str(PATH_SCRIPT))
 

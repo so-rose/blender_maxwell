@@ -1,4 +1,3 @@
-import enum
 import pydantic as pyd
 import typing_extensions as pytypes_ext
 

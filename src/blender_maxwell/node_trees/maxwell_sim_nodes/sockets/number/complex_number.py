@@ -1,7 +1,6 @@
 import typing as typ
 
 import bpy
-import pydantic as pyd
 import sympy as sp
 
 from .....utils.pydantic_sympy import SympyExpr

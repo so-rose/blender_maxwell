@@ -6,7 +6,6 @@ import sympy as sp
 from .....utils import logger
 from ... import contracts as ct
 from ... import sockets
-from ...managed_objs.managed_bl_collection import preview_collection
 from .. import base, events
 
 log = logger.get(__name__)

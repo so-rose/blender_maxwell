@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 import tidy3d as td
 
 from ... import contracts as ct

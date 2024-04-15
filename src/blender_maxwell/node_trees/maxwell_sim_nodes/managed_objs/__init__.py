@@ -1,4 +1,3 @@
-import typing as typ
 
 from .base import ManagedObj
 

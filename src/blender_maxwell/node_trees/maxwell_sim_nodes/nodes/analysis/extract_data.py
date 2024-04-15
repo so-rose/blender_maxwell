@@ -4,7 +4,7 @@ import bpy
 
 from .....utils import logger
 from ... import contracts as ct
-from ... import managed_objs, sockets
+from ... import sockets
 from .. import base, events
 
 log = logger.get(__name__)
@@ -245,9 +245,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 			field_data = self._compute_input('Field Data')
 			return getattr(field_data, props['field_data__component'])
 
-		elif self.active_socket_set == 'Flux Data':  # noqa: RET505
+		elif self.active_socket_set == 'Flux Data':
 			flux_data = self._compute_input('Flux Data')
-			return getattr(flux_data, 'flux')
+			return flux_data.flux
 
 		msg = f'Tried to get data from unknown output socket in "{self.bl_label}"'
 		raise RuntimeError(msg)

@@ -6,8 +6,8 @@ import numpy as np
 
 from ....utils import logger
 from .. import contracts as ct
-from .managed_bl_collection import managed_collection, preview_collection
 from . import base
+from .managed_bl_collection import managed_collection, preview_collection
 
 log = logger.get(__name__)
 

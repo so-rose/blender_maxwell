@@ -1,5 +1,4 @@
 import bpy
-import pydantic as pyd
 import sympy.physics.units as spu
 
 from .....utils.pydantic_sympy import SympyExpr
