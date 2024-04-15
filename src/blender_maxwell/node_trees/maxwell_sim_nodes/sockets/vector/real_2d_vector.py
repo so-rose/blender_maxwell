@@ -55,7 +55,7 @@ class Real2DVectorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Real2DVectorSocketDef(pyd.BaseModel):
+class Real2DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Real2DVector
 
 	default_value: Real2DVector = sp.Matrix([0.0, 0.0])

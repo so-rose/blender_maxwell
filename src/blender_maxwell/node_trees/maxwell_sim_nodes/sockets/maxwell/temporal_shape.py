@@ -12,7 +12,7 @@ class MaxwellTemporalShapeBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellTemporalShapeSocketDef(pyd.BaseModel):
+class MaxwellTemporalShapeSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellTemporalShape
 
 	def init(self, bl_socket: MaxwellTemporalShapeBLSocket) -> None:

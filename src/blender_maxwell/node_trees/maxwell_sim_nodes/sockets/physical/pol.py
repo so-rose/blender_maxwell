@@ -237,7 +237,7 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalPolSocketDef(pyd.BaseModel):
+class PhysicalPolSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalPol
 
 	def init(self, bl_socket: PhysicalPolBLSocket) -> None:

@@ -15,7 +15,7 @@ class Complex2DVectorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Complex2DVectorSocketDef(pyd.BaseModel):
+class Complex2DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Complex2DVector
 
 	def init(self, bl_socket: Complex2DVectorBLSocket) -> None:

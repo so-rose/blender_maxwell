@@ -43,7 +43,7 @@ class BlenderImageBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BlenderImageSocketDef(pyd.BaseModel):
+class BlenderImageSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.BlenderImage
 
 	def init(self, bl_socket: BlenderImageBLSocket) -> None:

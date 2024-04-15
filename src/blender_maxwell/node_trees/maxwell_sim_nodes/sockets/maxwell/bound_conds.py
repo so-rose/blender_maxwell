@@ -124,7 +124,7 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellBoundCondsSocketDef(pyd.BaseModel):
+class MaxwellBoundCondsSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundConds
 
 	def init(self, bl_socket: MaxwellBoundCondsBLSocket) -> None:

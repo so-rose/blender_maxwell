@@ -12,7 +12,7 @@ class MaxwellMediumNonLinearityBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellMediumNonLinearitySocketDef(pyd.BaseModel):
+class MaxwellMediumNonLinearitySocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellMediumNonLinearity
 
 	def init(self, bl_socket: MaxwellMediumNonLinearityBLSocket) -> None:

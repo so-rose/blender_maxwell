@@ -49,7 +49,7 @@ class RealNumberBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class RealNumberSocketDef(pyd.BaseModel):
+class RealNumberSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.RealNumber
 
 	default_value: float = 0.0

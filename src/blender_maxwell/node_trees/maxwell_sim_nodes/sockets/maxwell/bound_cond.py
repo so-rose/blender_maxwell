@@ -53,7 +53,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellBoundCondSocketDef(pyd.BaseModel):
+class MaxwellBoundCondSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundCond
 
 	default_choice: typx.Literal['PML', 'PEC', 'PMC', 'PERIODIC'] = 'PML'

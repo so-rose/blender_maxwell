@@ -48,7 +48,7 @@ class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellSimGridSocketDef(pyd.BaseModel):
+class MaxwellSimGridSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSimGrid
 
 	min_steps_per_wl: float = 10.0

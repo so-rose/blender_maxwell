@@ -48,7 +48,7 @@ class PhysicalPoint3DBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalPoint3DSocketDef(pyd.BaseModel):
+class PhysicalPoint3DSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalPoint3D
 
 	default_unit: typ.Any | None = None

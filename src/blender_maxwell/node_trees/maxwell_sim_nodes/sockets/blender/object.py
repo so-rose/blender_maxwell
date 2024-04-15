@@ -88,7 +88,7 @@ class BlenderObjectBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BlenderObjectSocketDef(pyd.BaseModel):
+class BlenderObjectSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.BlenderObject
 
 	def init(self, bl_socket: BlenderObjectBLSocket) -> None:

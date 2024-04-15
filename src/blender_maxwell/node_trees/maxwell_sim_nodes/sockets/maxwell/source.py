@@ -12,7 +12,7 @@ class MaxwellSourceBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellSourceSocketDef(pyd.BaseModel):
+class MaxwellSourceSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSource
 
 	is_list: bool = False

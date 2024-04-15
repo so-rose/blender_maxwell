@@ -40,7 +40,7 @@ class BlenderMaterialBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BlenderMaterialSocketDef(pyd.BaseModel):
+class BlenderMaterialSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.BlenderMaterial
 
 	def init(self, bl_socket: BlenderMaterialBLSocket) -> None:

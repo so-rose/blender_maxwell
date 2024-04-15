@@ -44,7 +44,7 @@ class IntegerNumberBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class IntegerNumberSocketDef(pyd.BaseModel):
+class IntegerNumberSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.IntegerNumber
 
 	default_value: int = 0

@@ -319,7 +319,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Tidy3DCloudTaskSocketDef(pyd.BaseModel):
+class Tidy3DCloudTaskSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Tidy3DCloudTask
 
 	should_exist: bool

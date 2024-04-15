@@ -47,7 +47,7 @@ class PhysicalSpeedBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalSpeedSocketDef(pyd.BaseModel):
+class PhysicalSpeedSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalSpeed
 
 	default_unit: SympyExpr | None = None

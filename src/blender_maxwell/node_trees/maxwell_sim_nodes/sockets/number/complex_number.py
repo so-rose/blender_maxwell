@@ -119,7 +119,7 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class ComplexNumberSocketDef(pyd.BaseModel):
+class ComplexNumberSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.ComplexNumber
 
 	default_value: SympyExpr = sp.S(0 + 0j)

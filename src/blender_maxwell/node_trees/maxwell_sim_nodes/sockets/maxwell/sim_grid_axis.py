@@ -12,7 +12,7 @@ class MaxwellSimGridAxisBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellSimGridAxisSocketDef(pyd.BaseModel):
+class MaxwellSimGridAxisSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSimGridAxis
 
 	def init(self, bl_socket: MaxwellSimGridAxisBLSocket) -> None:

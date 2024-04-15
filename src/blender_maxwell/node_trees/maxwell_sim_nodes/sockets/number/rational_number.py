@@ -55,7 +55,7 @@ class RationalNumberBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class RationalNumberSocketDef(pyd.BaseModel):
+class RationalNumberSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.RationalNumber
 
 	default_value: SympyExpr = sp.Rational(0, 1)

@@ -43,7 +43,7 @@ class BlenderCollectionBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BlenderCollectionSocketDef(pyd.BaseModel):
+class BlenderCollectionSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.BlenderCollection
 
 	def init(self, bl_socket: BlenderCollectionBLSocket) -> None:

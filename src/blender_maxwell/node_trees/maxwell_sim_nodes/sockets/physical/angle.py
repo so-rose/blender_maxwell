@@ -47,7 +47,7 @@ class PhysicalAngleBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalAngleSocketDef(pyd.BaseModel):
+class PhysicalAngleSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalAngle
 
 	default_unit: SympyExpr | None = None

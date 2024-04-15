@@ -82,7 +82,7 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BlenderGeoNodesSocketDef(pyd.BaseModel):
+class BlenderGeoNodesSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.BlenderGeoNodes
 
 	def init(self, bl_socket: BlenderGeoNodesBLSocket) -> None:

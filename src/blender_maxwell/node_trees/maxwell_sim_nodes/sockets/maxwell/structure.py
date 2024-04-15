@@ -12,7 +12,7 @@ class MaxwellStructureBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellStructureSocketDef(pyd.BaseModel):
+class MaxwellStructureSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellStructure
 
 	is_list: bool = False

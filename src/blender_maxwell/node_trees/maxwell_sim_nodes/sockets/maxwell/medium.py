@@ -98,7 +98,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellMediumSocketDef(pyd.BaseModel):
+class MaxwellMediumSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellMedium
 
 	default_permittivity_real: float = 1.0

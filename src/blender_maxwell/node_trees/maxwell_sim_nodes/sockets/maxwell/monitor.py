@@ -12,7 +12,7 @@ class MaxwellMonitorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellMonitorSocketDef(pyd.BaseModel):
+class MaxwellMonitorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellMonitor
 
 	is_list: bool = False

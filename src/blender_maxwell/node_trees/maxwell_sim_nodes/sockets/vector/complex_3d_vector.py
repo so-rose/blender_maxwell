@@ -15,7 +15,7 @@ class Complex3DVectorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Complex3DVectorSocketDef(pyd.BaseModel):
+class Complex3DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Complex3DVector
 
 	def init(self, bl_socket: Complex3DVectorBLSocket) -> None:

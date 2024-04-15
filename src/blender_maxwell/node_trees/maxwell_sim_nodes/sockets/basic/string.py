@@ -43,7 +43,7 @@ class StringBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class StringSocketDef(pyd.BaseModel):
+class StringSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.String
 
 	default_text: str = ''

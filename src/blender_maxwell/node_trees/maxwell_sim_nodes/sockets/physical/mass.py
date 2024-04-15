@@ -47,7 +47,7 @@ class PhysicalMassBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalMassSocketDef(pyd.BaseModel):
+class PhysicalMassSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalMass
 
 	default_unit: SympyExpr | None = None

@@ -54,7 +54,7 @@ class Integer3DVectorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Integer3DVectorSocketDef(pyd.BaseModel):
+class Integer3DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Integer3DVector
 
 	default_value: Integer3DVector = sp.Matrix([0, 0, 0])

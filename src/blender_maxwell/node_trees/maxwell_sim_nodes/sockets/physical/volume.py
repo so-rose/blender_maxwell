@@ -44,7 +44,7 @@ class PhysicalVolumeBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalVolumeSocketDef(pyd.BaseModel):
+class PhysicalVolumeSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalVolume
 
 	default_unit: SympyExpr | None = None

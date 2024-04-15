@@ -46,7 +46,7 @@ class FilePathBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class FilePathSocketDef(pyd.BaseModel):
+class FilePathSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.FilePath
 
 	default_path: Path = Path()

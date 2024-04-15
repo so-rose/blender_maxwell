@@ -12,7 +12,7 @@ class MaxwellSimDomainBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellSimDomainSocketDef(pyd.BaseModel):
+class MaxwellSimDomainSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSimDomain
 
 	def init(self, bl_socket: MaxwellSimDomainBLSocket) -> None:

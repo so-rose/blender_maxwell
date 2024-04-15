@@ -97,7 +97,7 @@ class PhysicalFreqBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalFreqSocketDef(pyd.BaseModel):
+class PhysicalFreqSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalFreq
 	is_array: bool = False
 

@@ -55,7 +55,7 @@ class PhysicalAreaBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalAreaSocketDef(pyd.BaseModel):
+class PhysicalAreaSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalArea
 
 	default_unit: typ.Any | None = None

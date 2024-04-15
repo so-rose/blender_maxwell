@@ -55,7 +55,7 @@ class Real3DVectorBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class Real3DVectorSocketDef(pyd.BaseModel):
+class Real3DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Real3DVector
 
 	default_value: Real3DVector = sp.Matrix([0.0, 0.0, 0.0])

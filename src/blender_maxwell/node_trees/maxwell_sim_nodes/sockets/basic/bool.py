@@ -44,7 +44,7 @@ class BoolBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class BoolSocketDef(pyd.BaseModel):
+class BoolSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Bool
 
 	default_value: bool = False

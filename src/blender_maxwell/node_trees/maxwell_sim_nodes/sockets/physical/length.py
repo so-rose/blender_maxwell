@@ -96,7 +96,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalLengthSocketDef(pyd.BaseModel):
+class PhysicalLengthSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalLength
 	is_array: bool = False
 

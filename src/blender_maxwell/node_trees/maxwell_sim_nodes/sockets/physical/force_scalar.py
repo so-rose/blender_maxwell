@@ -47,7 +47,7 @@ class PhysicalForceScalarBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalForceScalarSocketDef(pyd.BaseModel):
+class PhysicalForceScalarSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalForceScalar
 
 	default_unit: SympyExpr | None = None

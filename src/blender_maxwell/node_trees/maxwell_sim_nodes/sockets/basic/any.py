@@ -23,7 +23,7 @@ class AnyBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class AnySocketDef(pyd.BaseModel):
+class AnySocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Any
 
 	def init(self, bl_socket: AnyBLSocket) -> None:

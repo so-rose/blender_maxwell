@@ -47,7 +47,7 @@ class PhysicalAccelScalarBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalAccelScalarSocketDef(pyd.BaseModel):
+class PhysicalAccelScalarSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalAccelScalar
 
 	default_unit: SympyExpr | None = None

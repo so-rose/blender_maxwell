@@ -46,7 +46,7 @@ class PhysicalSize3DBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalSize3DSocketDef(pyd.BaseModel):
+class PhysicalSize3DSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalSize3D
 
 	default_value: SympyExpr = sp.Matrix([1, 1, 1]) * spu.um

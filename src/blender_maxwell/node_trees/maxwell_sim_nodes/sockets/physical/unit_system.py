@@ -273,7 +273,7 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalUnitSystemSocketDef(pyd.BaseModel):
+class PhysicalUnitSystemSocketDef(base.SocketDef):
 	socket_type: ST = ST.PhysicalUnitSystem
 
 	show_by_default: bool = False

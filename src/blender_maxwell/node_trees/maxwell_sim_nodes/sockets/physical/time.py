@@ -49,7 +49,7 @@ class PhysicalTimeBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class PhysicalTimeSocketDef(pyd.BaseModel):
+class PhysicalTimeSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.PhysicalTime
 
 	default_value: SympyExpr | None = None

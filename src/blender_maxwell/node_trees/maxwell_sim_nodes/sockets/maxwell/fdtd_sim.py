@@ -16,7 +16,7 @@ class MaxwellFDTDSimBLSocket(base.MaxwellSimSocket):
 ####################
 # - Socket Configuration
 ####################
-class MaxwellFDTDSimSocketDef(pyd.BaseModel):
+class MaxwellFDTDSimSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellFDTDSim
 
 	def init(self, bl_socket: MaxwellFDTDSimBLSocket) -> None:
