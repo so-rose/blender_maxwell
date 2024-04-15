@@ -510,7 +510,7 @@ Unreported:
 
 
 ## Keyed Cache
-- [ ] Implement `bl_cache.KeyedCache` for, especially, abstracting the caches underlying the input and output sockets.
+- [x] Implement `bl_cache.KeyedCache` for, especially, abstracting the caches underlying the input and output sockets.
 
 
 
@@ -546,7 +546,7 @@ We need support for arbitrary objects, but still backed by the persistance seman
 - [ ] Similarly, a field method that gets the 'blfield__' prop data as a dictionary.
 
 ### Parallel Features
-- [ ] Move serialization work to a `utils`.
+- [x] Move serialization work to a `utils`.
 - [ ] Also make ENCODER a function that can shortcut the easy cases.
 - [ ] For serializeability, let the encoder/decoder be able to make use of an optional `.msgspec_encodable()` and similar decoder respectively, and add support for these in the ENCODER/DECODER functions.
 - [ ] Define a superclass for `SocketDef` and make everyone inherit from it
