@@ -73,7 +73,7 @@ class NodeLinkCache:
 			- Failure to do so may result in a segmentation fault at arbitrary future time.
 
 		Parameters:
-			link_ptrs: Pointers to remove from the cache.
+			link_ptr: Pointer to remove from the cache.
 		"""
 		self.link_ptrs.remove(link_ptr)
 		self.link_ptrs_as_links.pop(link_ptr)

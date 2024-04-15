@@ -26,7 +26,6 @@ class InfoDataChanged:
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class InfoOutputRequested:
 	output_socket_name: ct.SocketName
-	any_loose_output_socket: bool
 	kind: ct.DataFlowKind
 
 	depon_props: set[str]
@@ -317,7 +316,6 @@ def on_value_changed(
 ## TODO: Change name to 'on_output_requested'
 def computes_output_socket(
 	output_socket_name: ct.SocketName | None,
-	any_loose_output_socket: bool = False,
 	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
 	**kwargs,
 ):
@@ -325,7 +323,6 @@ def computes_output_socket(
 		action_type=ct.DataFlowAction.OutputRequested,
 		callback_info=InfoOutputRequested(
 			output_socket_name=output_socket_name,
-			any_loose_output_socket=any_loose_output_socket,
 			kind=kind,
 			depon_props=kwargs.get('props', set()),
 			depon_input_sockets=kwargs.get('input_sockets', set()),

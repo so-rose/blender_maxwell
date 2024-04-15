@@ -1,3 +1,9 @@
+"""Defines a special base class, `MaxwellSimNode`, from which all nodes inherit.
+
+Attributes:
+	MANDATORY_PROPS: Properties that must be defined on the `MaxwellSimNode`.
+"""
+
 import typing as typ
 import uuid
 from types import MappingProxyType
@@ -6,7 +12,6 @@ import bpy
 import sympy as sp
 import typing_extensions as typx
 
-from ....utils import extra_sympy_units as spux
 from ....utils import logger
 from .. import bl_cache
 from .. import contracts as ct
@@ -15,7 +20,7 @@ from . import events
 
 log = logger.get(__name__)
 
-MANDATORY_PROPS = {'node_type', 'bl_label'}
+MANDATORY_PROPS: set[str] = {'node_type', 'bl_label'}
 
 
 class MaxwellSimNode(bpy.types.Node):
@@ -147,6 +152,9 @@ class MaxwellSimNode(bpy.types.Node):
 			if output_socket_set_name not in _input_socket_set_names
 		]
 
+	####################
+	# - Subclass Initialization
+	####################
 	@classmethod
 	def __init_subclass__(cls, **kwargs) -> None:
 		"""Initializes node properties and attributes for use.
@@ -210,16 +218,8 @@ class MaxwellSimNode(bpy.types.Node):
 			cls.active_preset = None
 
 	####################
-	# - Events: Class Properties
+	# - Events: Default
 	####################
-	@events.on_value_changed(prop_name='active_socket_set')
-	def _on_socket_set_changed(self):
-		log.info(
-			'Changed Sim Node Socket Set to "%s"',
-			self.active_socket_set,
-		)
-		self._sync_sockets()
-
 	@events.on_value_changed(
 		prop_name='sim_node_name',
 		props={'sim_node_name', 'managed_objs', 'managed_obj_defs'},
@@ -236,6 +236,14 @@ class MaxwellSimNode(bpy.types.Node):
 		for mobj_id, mobj in props['managed_objs'].items():
 			mobj_def = props['managed_obj_defs'][mobj_id]
 			mobj.name = mobj_def.name_prefix + props['sim_node_name']
+
+	@events.on_value_changed(prop_name='active_socket_set')
+	def _on_socket_set_changed(self):
+		log.info(
+			'Changed Sim Node Socket Set to "%s"',
+			self.active_socket_set,
+		)
+		self._sync_sockets()
 
 	@events.on_value_changed(
 		prop_name='active_preset', props=['presets', 'active_preset']
@@ -293,7 +301,7 @@ class MaxwellSimNode(bpy.types.Node):
 		self.locked = False
 
 	####################
-	# - Loose Sockets
+	# - Loose Sockets w/Events
 	####################
 	loose_input_sockets: dict[str, ct.schemas.SocketDef] = bl_cache.BLField({})
 	loose_output_sockets: dict[str, ct.schemas.SocketDef] = bl_cache.BLField({})
@@ -312,7 +320,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 		Only use internally, when `node.inputs`/`node.outputs` is too much of a mouthful to use directly.
 
-		Note:
+		Notes:
 			You should probably use `node.inputs` or `node.outputs` directly.
 
 		Parameters:
@@ -329,7 +337,7 @@ class MaxwellSimNode(bpy.types.Node):
 	) -> dict[ct.SocketName, ct.schemas.SocketDef]:
 		"""Retrieve all socket definitions for sockets that should be defined, according to the `self.active_socket_set`.
 
-		Note:
+		Notes:
 			You should probably use `self.active_socket_defs()`
 
 		Parameters:
@@ -442,7 +450,7 @@ class MaxwellSimNode(bpy.types.Node):
 		- Any existing active socket will not be changed.
 		- Any existing inactive socket will be removed.
 
-		Note:
+		Notes:
 			Must be called after any change to socket definitions, including loose
 		sockets.
 		"""
@@ -483,6 +491,271 @@ class MaxwellSimNode(bpy.types.Node):
 		return {}
 
 	####################
+	# - Event Methods
+	####################
+	@property
+	def _event_method_filter_by_action(self) -> dict[ct.DataFlowAction, typ.Callable]:
+		"""Compute a map of DataFlowActions, to a function that filters its event methods.
+
+		The returned filter functions are hard-coded, and must always return a `bool`.
+		They may use attributes of `self`, always return `True` or `False`, or something different.
+
+		Notes:
+			This is an internal method; you probably want `self.filtered_event_methods_by_action`.
+
+		Returns:
+			The map of `ct.DataFlowAction` to a function that can determine whether any `event_method` should be run.
+		"""
+		return {
+			ct.DataFlowAction.EnableLock: lambda *_: True,
+			ct.DataFlowAction.DisableLock: lambda *_: True,
+			ct.DataFlowAction.DataChanged: lambda event_method,
+			socket_name,
+			prop_name,
+			_: (
+				(
+					socket_name
+					and socket_name in event_method.callback_info.on_changed_sockets
+				)
+				or (
+					prop_name
+					and prop_name in event_method.callback_info.on_changed_props
+				)
+				or (
+					socket_name
+					and event_method.callback_info.on_any_changed_loose_input
+					and socket_name in self.loose_input_sockets
+				)
+			),
+			ct.DataFlowAction.OutputRequested: lambda output_socket_method,
+			output_socket_name,
+			_,
+			kind: (
+				kind == output_socket_method.callback_info.kind
+				and (
+					output_socket_name
+					== output_socket_method.callback_info.output_socket_name
+				)
+			),
+			ct.DataFlowAction.ShowPreview: lambda *_: True,
+			ct.DataFlowAction.ShowPlot: lambda *_: True,
+		}
+
+	def filtered_event_methods_by_action(
+		self,
+		action: ct.DataFlowAction,
+		_filter: tuple[ct.SocketName, str],
+	) -> list[typ.Callable]:
+		"""Return all event methods that should run, given the context provided by `_filter`.
+
+		The inclusion decision is made by the internal property `self._event_method_filter_by_action`.
+
+		Returns:
+			All `event_method`s that should run, as callable objects (they can be run using `event_method(self)`).
+		"""
+		return [
+			event_method
+			for event_method in self.event_methods_by_action[action]
+			if self._event_method_filter_by_action[action](event_method, *_filter)
+		]
+
+	####################
+	# - Compute: Input Socket
+	####################
+	@bl_cache.keyed_cache(
+		exclude={'self', 'optional'},
+		serialize={'unit_system'},
+	)
+	def _compute_input(
+		self,
+		input_socket_name: ct.SocketName,
+		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		unit_system: dict[ct.SocketType, sp.Expr] | None = None,
+		optional: bool = False,
+	) -> typ.Any:
+		"""Computes the data of an input socket, following links if needed.
+
+		Notes:
+			The semantics derive entirely from `sockets.MaxwellSimSocket.compute_data()`.
+
+		Parameters:
+			input_socket_name: The name of the input socket to compute the value of.
+				It must be currently active.
+			kind: The data flow kind to compute.
+		"""
+		if (bl_socket := self.inputs.get(input_socket_name)) is not None:
+			return (
+				ct.DataFlowKind.scale_to_unit_system(
+					kind,
+					bl_socket.compute_data(kind=kind),
+					bl_socket.socket_type,
+					unit_system,
+				)
+				if unit_system is not None
+				else bl_socket.compute_data(kind=kind)
+			)
+
+		if optional:
+			return None
+
+		msg = f'Input socket "{input_socket_name}" on "{self.bl_idname}" is not an active input socket'
+		raise ValueError(msg)
+
+	####################
+	# - Compute Action: Output Socket
+	####################
+	@bl_cache.keyed_cache(
+		exclude={'self', 'optional'},
+	)
+	def compute_output(
+		self,
+		output_socket_name: ct.SocketName,
+		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		optional: bool = False,
+	) -> typ.Any:
+		"""Computes the value of an output socket.
+
+		Parameters:
+			output_socket_name: The name declaring the output socket, for which this method computes the output.
+			kind: The DataFlowKind to use when computing the output socket value.
+
+		Returns:
+			The value of the output socket, as computed by the dedicated method
+			registered using the `@computes_output_socket` decorator.
+		"""
+		if self.outputs.get(output_socket_name) is None:
+			if optional:
+				return None
+
+			msg = f"Can't compute nonexistent output socket name {output_socket_name}, as it's not currently active"
+			raise RuntimeError(msg)
+
+		output_socket_methods = self.filtered_event_methods_by_action(
+			ct.DataFlowAction.OutputRequested,
+			(output_socket_name, None, kind),
+		)
+
+		# Run (=1) Method
+		if output_socket_methods:
+			if len(output_socket_methods) > 1:
+				msg = f'More than one method found for ({output_socket_name}, {kind.value!s}.'
+				raise RuntimeError(msg)
+
+			return output_socket_methods[0](self)
+
+		msg = f'No output method for ({output_socket_name}, {kind.value!s}'
+		raise ValueError(msg)
+
+	####################
+	# - Action Trigger
+	####################
+	def _should_recompute_output_socket(
+		self,
+		method_info: events.InfoOutputRequested,
+		input_socket_name: ct.SocketName,
+		prop_name: str,
+	) -> bool:
+		return (
+			prop_name is not None
+			and prop_name in method_info.depon_props
+			or input_socket_name is not None
+			and (
+				input_socket_name in method_info.depon_input_sockets
+				or (
+					method_info.depon_all_loose_input_sockets
+					and input_socket_name in self.loose_input_sockets
+				)
+			)
+		)
+
+	def trigger_action(
+		self,
+		action: ct.DataFlowAction,
+		socket_name: ct.SocketName | None = None,
+		prop_name: ct.SocketName | None = None,
+	) -> None:
+		"""Recursively triggers actions/events forwards or backwards along the node tree, allowing nodes in the update path to react.
+
+		Use `events` decorators to define methods that react to particular `ct.DataFlowAction`s.
+
+		Notes:
+			This can be an unpredictably heavy function, depending on the node graph topology.
+
+		Parameters:
+			action: The action/event to report forwards/backwards along the node tree.
+			socket_name: The input socket that was altered, if any, in order to trigger this event.
+			pop_name: The property that was altered, if any, in order to trigger this event.
+		"""
+		if action == ct.DataFlowAction.DataChanged:
+			input_socket_name = socket_name  ## Trigger direction is forwards
+
+			# Invalidate Input Socket Cache
+			if input_socket_name is not None:
+				self._compute_input.invalidate(
+					input_socket_name=input_socket_name,
+					kind=...,
+					unit_system=...,
+				)
+
+			# Invalidate Output Socket Cache
+			for output_socket_method in self.event_methods_by_action[
+				ct.DataFlowAction.OutputRequested
+			]:
+				method_info = output_socket_method.callback_info
+				if self._should_recompute_output_socket(
+					method_info, socket_name, prop_name
+				):
+					self.compute_output.invalidate(
+						output_socket_name=method_info.output_socket_name,
+						kind=method_info.kind,
+					)
+
+		# Run Triggered Event Methods
+		stop_propagation = False
+		triggered_event_methods = self.filtered_event_methods_by_action(
+			action, (socket_name, prop_name, None)
+		)
+		for event_method in triggered_event_methods:
+			stop_propagation |= event_method.stop_propagation
+			event_method(self)
+
+		# Stop Propagation (maybe)
+		if (
+			ct.DataFlowAction.stop_if_no_event_methods(action)
+			and len(triggered_event_methods) == 0
+		):
+			return
+
+		# Propagate Action to All Sockets in "Trigger Direction"
+		## The trigger chain goes node/socket/node/socket/...
+		if not stop_propagation:
+			triggered_sockets = self._bl_sockets(
+				direc=ct.DataFlowAction.trigger_direction(action)
+			)
+			for bl_socket in triggered_sockets:
+				bl_socket.trigger_action(action)
+
+	####################
+	# - Property Action: On Update
+	####################
+	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
+		"""Report that a particular property has changed, which may cause certain caches to regenerate.
+
+		Notes:
+			Called by **all** valid `bpy.prop.Property` definitions in the addon, via their update methods.
+
+			May be called in a threaded context - careful!
+
+		Parameters:
+			prop_name: The name of the property that changed.
+		"""
+		if hasattr(self, prop_name):
+			self.trigger_action(ct.DataFlowAction.DataChanged, prop_name=prop_name)
+		else:
+			msg = f'Property {prop_name} not defined on node {self}'
+			raise RuntimeError(msg)
+
+	####################
 	# - UI Methods
 	####################
 	def draw_buttons(
@@ -514,9 +787,7 @@ class MaxwellSimNode(bpy.types.Node):
 			layout.prop(self, 'active_preset', text='')
 
 		# Draw Name
-		# col = layout.column(align=False)
 		if self.use_sim_node_name:
-			# row = col.row(align=True)
 			row = layout.row(align=True)
 			row.label(text='', icon='FILE_TEXT')
 			row.prop(self, 'sim_node_name', text='')
@@ -525,389 +796,83 @@ class MaxwellSimNode(bpy.types.Node):
 		self.draw_props(context, layout)
 		self.draw_operators(context, layout)
 		self.draw_info(context, layout)
-		# self.draw_props(context, col)
-		# self.draw_operators(context, col)
-		# self.draw_info(context, col)
 
-	def draw_props(self, context, layout):
-		pass
-
-	def draw_operators(self, context, layout):
-		pass
-
-	def draw_info(self, context, layout):
-		pass
-
-	####################
-	# - Special Compute Input / Output Caches
-	####################
-
-	## Compute Output Cache
-	## -> KEY: output socket name, kind
-	## -> INV: When DataChanged triggers with one of the event_method dependencies:
-	##      - event_method.dependencies.input_sockets has DataChanged socket_name
-	##      - event_method.dependencies.input_socket_kinds has DataChanged kind
-	##      - DataChanged socket_name is loose and event_method wants all-loose
-	##      - event_method.dependencies.props has DataChanged prop_name
-	def _hit_cached_output_socket_value(
-		self,
-		compute_output_socket_cb: typ.Callable[[], typ.Any],
-		output_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind,
-	) -> typ.Any | None:
-		"""Retrieve a cached output socket value by `output_socket_name, kind`."""
-		# Create Non-Persistent Cache Entry
-		if bl_cache.CACHE_NOPERSIST.get(self.instance_id) is None:
-			bl_cache.CACHE_NOPERSIST[self.instance_id] = {}
-		cache_nopersist = bl_cache.CACHE_NOPERSIST[self.instance_id]
-
-		# Create Output Socket Cache Entry
-		if cache_nopersist.get('_cached_output_sockets') is None:
-			cache_nopersist['_cached_output_sockets'] = {}
-		cached_output_sockets = cache_nopersist['_cached_output_sockets']
-
-		# Try Hit on Cached Output Sockets
-		cached_value = cached_output_sockets.get((output_socket_name, kind))
-		if cached_value is None:
-			value = compute_output_socket_cb()
-			cached_output_sockets[(output_socket_name, kind)] = value
-		else:
-			value = cached_value
-
-		return value
-
-	def _invalidate_cached_output_socket_value(
-		self, output_socket_name: ct.SocketName, kind: ct.DataFlowKind
+	def draw_props(
+		self, context: bpy.types.Context, layout: bpy.types.UILayout
 	) -> None:
-		# Create Non-Persistent Cache Entry
-		if bl_cache.CACHE_NOPERSIST.get(self.instance_id) is None:
-			return
-		cache_nopersist = bl_cache.CACHE_NOPERSIST[self.instance_id]
+		"""Draws any properties of the node.
 
-		# Create Output Socket Cache Entry
-		if cache_nopersist.get('_cached_output_sockets') is None:
-			return
-		cached_output_sockets = cache_nopersist['_cached_output_sockets']
+		Notes:
+			Should be overriden by individual node classes, if they have properties to expose.
 
-		# Try Hit & Delete
-		cached_output_sockets.pop((output_socket_name, kind), None)
+		Parameters:
+			context: The current Blender context.
+			layout: Target for defining UI elements.
+		"""
 
-	## Input Cache
-	## -> KEY: input socket name, kind, unit system
-	## -> INV: DataChanged w/socket name
-	def _hit_cached_input_socket_value(
-		self,
-		compute_input_socket_cb: typ.Callable[[typ.Self], typ.Any],
-		input_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind,
-		unit_system: dict[ct.SocketType, sp.Expr],
-	) -> typ.Any | None:
-		# Create Non-Persistent Cache Entry
-		if bl_cache.CACHE_NOPERSIST.get(self.instance_id) is None:
-			bl_cache.CACHE_NOPERSIST[self.instance_id] = {}
-		cache_nopersist = bl_cache.CACHE_NOPERSIST[self.instance_id]
-
-		# Create Output Socket Cache Entry
-		if cache_nopersist.get('_cached_input_sockets') is None:
-			cache_nopersist['_cached_input_sockets'] = {}
-		cached_input_sockets = cache_nopersist['_cached_input_sockets']
-
-		# Try Hit on Cached Output Sockets
-		encoded_unit_system = bl_cache.ENCODER.encode(unit_system).decode('utf-8')
-		cached_value = cached_input_sockets.get(
-			(input_socket_name, kind, encoded_unit_system),
-		)
-		if cached_value is None:
-			value = compute_input_socket_cb()
-			cached_input_sockets[(input_socket_name, kind, encoded_unit_system)] = value
-		else:
-			value = cached_value
-		return value
-
-	def _invalidate_cached_input_socket_value(
-		self,
-		input_socket_name: ct.SocketName,
+	def draw_operators(
+		self, context: bpy.types.Context, layout: bpy.types.UILayout
 	) -> None:
-		# Create Non-Persistent Cache Entry
-		if bl_cache.CACHE_NOPERSIST.get(self.instance_id) is None:
-			return
-		cache_nopersist = bl_cache.CACHE_NOPERSIST[self.instance_id]
+		"""Draws any operators associated with the node.
 
-		# Create Output Socket Cache Entry
-		if cache_nopersist.get('_cached_input_sockets') is None:
-			return
-		cached_input_sockets = cache_nopersist['_cached_input_sockets']
-
-		# Try Hit & Delete
-		for cached_input_socket in list(cached_input_sockets.keys()):
-			if cached_input_socket[0] == input_socket_name:
-				cached_input_sockets.pop(cached_input_socket, None)
-
-	####################
-	# - Data Flow
-	####################
-	## TODO: Lazy input socket list in events.py callbacks, to replace random scattered `_compute_input` calls.
-	def _compute_input(
-		self,
-		input_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-		unit_system: dict[ct.SocketType, sp.Expr] | None = None,
-		optional: bool = False,
-	) -> typ.Any:
-		"""Computes the data of an input socket, following links if needed.
-
-		Note:
-			The semantics derive entirely from `sockets.MaxwellSimSocket.compute_data()`.
+		Notes:
+			Should be overriden by individual node classes, if they have operators to expose.
 
 		Parameters:
-			input_socket_name: The name of the input socket to compute the value of.
-				It must be currently active.
-			kind: The data flow kind to compute.
+			context: The current Blender context.
+			layout: Target for defining UI elements.
 		"""
-		if (bl_socket := self.inputs.get(input_socket_name)) is not None:
-			return self._hit_cached_input_socket_value(
-				lambda: (
-					ct.DataFlowKind.scale_to_unit_system(
-						kind,
-						bl_socket.compute_data(kind=kind),
-						bl_socket.socket_type,
-						unit_system,
-					)
-					if unit_system is not None
-					else bl_socket.compute_data(kind=kind)
-				),
-				input_socket_name,
-				kind,
-				unit_system,
-			)
-		if optional:
-			return None
 
-		msg = f'Input socket "{input_socket_name}" on "{self.bl_idname}" is not an active input socket'
-		raise ValueError(msg)
+	def draw_info(self, context: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Draws any runtime information associated with the node.
 
-	def compute_output(
-		self,
-		output_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
-		optional: bool = False,
-	) -> typ.Any:
-		"""Computes the value of an output socket.
+		Notes:
+			Should be overriden by individual node classes, if they have runtime information to show.
 
 		Parameters:
-			output_socket_name: The name declaring the output socket, for which this method computes the output.
-			kind: The DataFlowKind to use when computing the output socket value.
-
-		Returns:
-			The value of the output socket, as computed by the dedicated method
-			registered using the `@computes_output_socket` decorator.
+			context: The current Blender context.
+			layout: Target for defining UI elements.
 		"""
-		if self.outputs.get(output_socket_name) is None:
-			if optional:
-				return None
-			msg = f"Can't compute nonexistent output socket name {output_socket_name}, as it's not currently active"
-			raise RuntimeError(msg)
-
-		output_socket_methods = self.event_methods_by_action[
-			ct.DataFlowAction.OutputRequested
-		]
-		possible_output_socket_methods = [
-			output_socket_method
-			for output_socket_method in output_socket_methods
-			if kind == output_socket_method.callback_info.kind
-			and (
-				output_socket_name
-				== output_socket_method.callback_info.output_socket_name
-				or (
-					output_socket_method.callback_info.any_loose_output_socket
-					and output_socket_name in self.loose_output_sockets
-				)
-			)
-		]
-		if len(possible_output_socket_methods) == 1:
-			return self._hit_cached_output_socket_value(
-				lambda: possible_output_socket_methods[0](self),
-				output_socket_name,
-				kind,
-			)
-			return possible_output_socket_methods[0](self)
-
-		if len(possible_output_socket_methods) == 0:
-			msg = f'No output method for ({output_socket_name}, {kind.value!s}'
-			raise ValueError(msg)
-
-		if len(possible_output_socket_methods) > 1:
-			msg = (
-				f'More than one method found for ({output_socket_name}, {kind.value!s}.'
-			)
-			raise RuntimeError(msg)
-
-		msg = 'Somehow, a length is negative. Call NASA.'
-		raise SystemError(msg)
-
-	####################
-	# - Action Chain
-	####################
-	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
-		"""Report that a particular property has changed, which may cause certain caches to regenerate.
-
-		Note:
-			Called by **all** valid `bpy.prop.Property` definitions in the addon, via their update methods.
-
-			May be called in a threaded context - careful!
-
-		Parameters:
-			prop_name: The name of the property that changed.
-		"""
-		if hasattr(self, prop_name):
-			self.trigger_action(ct.DataFlowAction.DataChanged, prop_name=prop_name)
-		else:
-			msg = f'Property {prop_name} not defined on node {self}'
-			raise RuntimeError(msg)
-
-	@bl_cache.cached_bl_property(persist=False)
-	def event_method_filter_by_action(self) -> dict[ct.DataFlowAction, typ.Callable]:
-		"""Compute a map of DataFlowActions, to a function that filters its event methods.
-
-		The filter expression may use attributes of `self`, or return `True` if no filtering should occur, or return `False` if methods should never run.
-		"""
-		return {
-			ct.DataFlowAction.EnableLock: lambda *_: True,
-			ct.DataFlowAction.DisableLock: lambda *_: True,
-			ct.DataFlowAction.DataChanged: lambda event_method,
-			socket_name,
-			prop_name: (
-				(
-					socket_name
-					and socket_name in event_method.callback_info.on_changed_sockets
-				)
-				or (
-					prop_name
-					and prop_name in event_method.callback_info.on_changed_props
-				)
-				or (
-					socket_name
-					and event_method.callback_info.on_any_changed_loose_input
-					and socket_name in self.loose_input_sockets
-				)
-			),
-			ct.DataFlowAction.OutputRequested: lambda *_: False,
-			ct.DataFlowAction.ShowPreview: lambda *_: True,
-			ct.DataFlowAction.ShowPlot: lambda *_: True,
-		}
-
-	def trigger_action(
-		self,
-		action: ct.DataFlowAction,
-		socket_name: ct.SocketName | None = None,
-		prop_name: ct.SocketName | None = None,
-	) -> None:
-		"""Recursively triggers actions/events forwards or backwards along the node tree, allowing nodes in the update path to react.
-
-		Use `events` decorators to define methods that react to particular `ct.DataFlowAction`s.
-
-		Note:
-			This can be an unpredictably heavy function, depending on the node graph topology.
-
-		Parameters:
-			action: The action/event to report forwards/backwards along the node tree.
-			socket_name: The input socket that was altered, if any, in order to trigger this event.
-			pop_name: The property that was altered, if any, in order to trigger this event.
-		"""
-		if action == ct.DataFlowAction.DataChanged:
-			# Invalidate Input/Output Socket Caches
-			all_output_method_infos = [
-				event_method.callback_info
-				for event_method in self.event_methods_by_action[
-					ct.DataFlowAction.OutputRequested
-				]
-			]
-			input_sockets_to_invalidate_cached_values_of = set()
-			output_sockets_to_invalidate_cached_values_of = set()
-
-			# Invalidate by Dependent Input Socket
-			if socket_name is not None:
-				input_sockets_to_invalidate_cached_values_of.add(socket_name)
-
-				## Output Socket: Invalidate if an Output Method Depends on Us
-				output_sockets_to_invalidate_cached_values_of |= {
-					(method_info.output_socket_name, method_info.kind)
-					for method_info in all_output_method_infos
-					if socket_name in method_info.depon_input_sockets
-					or (
-						socket_name in self.loose_input_sockets
-						and method_info.depon_all_loose_input_sockets
-					)
-				}
-
-			# Invalidate by Dependent Property
-			if prop_name is not None:
-				output_sockets_to_invalidate_cached_values_of |= {
-					(method_info.output_socket_name, method_info.kind)
-					for method_info in all_output_method_infos
-					if prop_name in method_info.depon_props
-				}
-
-			# Invalidate Output Socket Values
-			for key in input_sockets_to_invalidate_cached_values_of:
-				# log.debug('Invalidating Input Socket Cache: %s', key)
-				self._invalidate_cached_input_socket_value(key)
-
-			for key in output_sockets_to_invalidate_cached_values_of:
-				# log.debug('Invalidating Output Socket Cache: %s', key)
-				self._invalidate_cached_output_socket_value(*key)
-
-		# Run Triggered Event Methods
-		stop_propagation = False  ## A method wants us to not continue
-		event_methods_to_run = [
-			event_method
-			for event_method in self.event_methods_by_action[action]
-			if self.event_method_filter_by_action[action](
-				event_method, socket_name, prop_name
-			)
-		]
-		for event_method in event_methods_to_run:
-			stop_propagation |= event_method.stop_propagation
-			event_method(self)
-
-		# Trigger Action on Input/Output Sockets
-		## The trigger chain goes node/socket/node/socket/...
-		if (
-			ct.DataFlowAction.stop_if_no_event_methods(action)
-			and len(event_methods_to_run) == 0
-		):
-			return
-		if not stop_propagation:
-			triggered_sockets = self._bl_sockets(
-				direc=ct.DataFlowAction.trigger_direction(action)
-			)
-			for bl_socket in triggered_sockets:
-				bl_socket.trigger_action(action)
 
 	####################
 	# - Blender Node Methods
 	####################
 	@classmethod
 	def poll(cls, node_tree: bpy.types.NodeTree) -> bool:
-		"""Run (by Blender) to determine instantiability.
+		"""Render the node exlusively instantiable within a Maxwell Sim nodetree.
 
-		Restricted to the MaxwellSimTreeType.
+		Notes:
+			Run by Blender when determining instantiability of a node.
+
+		Parameters:
+			node_tree: The node tree within which the instantiability of this node should be determined.
+
+		Returns:
+			Whether or not the node can be instantiated within the given node tree.
 		"""
 		return node_tree.bl_idname == ct.TreeType.MaxwellSim.value
 
-	def init(self, context: bpy.types.Context):
-		"""Run (by Blender) on node creation."""
-		# Initialize Cache and Instance ID
+	def init(self, _: bpy.types.Context) -> None:
+		"""Initialize the node instance, including ID, name, socket, presets, and the execution of any `on_value_changed` methods with the `run_on_init` keyword set.
+
+		Notes:
+			Run by Blender when a new instance of a node is added to a tree.
+		"""
+		# Initialize Instance ID
+		## This is used by various caches from 'bl_cache'.
 		self.instance_id = str(uuid.uuid4())
 
 		# Initialize Name
+		## This is used whenever a unique name pointing to this node is needed.
+		## Contrary to self.name, it can be altered by the user as a property.
 		self.sim_node_name = self.name
-		## Only shown in draw_buttons if 'self.use_sim_node_name'
 
 		# Initialize Sockets
+		## This initializes any nodes that need initializing
 		self._sync_sockets()
 
-		# Apply Default Preset
+		# Apply Preset
+		## This applies the default preset, if any.
 		if self.active_preset:
 			self._on_active_preset_changed()
 
@@ -925,26 +890,38 @@ class MaxwellSimNode(bpy.types.Node):
 			event_method(self)
 
 	def update(self) -> None:
-		pass
+		"""Explicitly do nothing per-node on tree changes.
+
+		For responding to changes affecting only this node, use decorators from `events`.
+
+		Notes:
+			Run by Blender on all node instances whenever anything **in the entire node tree** changes.
+		"""
 
 	def copy(self, _: bpy.types.Node) -> None:
-		"""Generate a new instance ID and Sim Node Name.
+		"""Generate a new instance ID and Sim Node Name on the duplicated node.
 
-		Note:
+		Notes:
 			Blender runs this when instantiating this node from an existing node.
-
-		Parameters:
-			node: The existing node from which this node was copied.
 		"""
 		# Generate New Instance ID
 		self.instance_id = str(uuid.uuid4())
 
-		# Generate New Name
+		# Generate New Sim Node Name
 		## Blender will automatically add .001 so that `self.name` is unique.
 		self.sim_node_name = self.name
 
 	def free(self) -> None:
-		"""Run (by Blender) when deleting the node."""
+		"""Cleans various instance-associated data up, so the node can be cleanly deleted.
+
+		- **Locking**: The entire input chain will be unlocked. Since we can't prevent the deletion, this is one way to prevent "dangling locks".
+		- **Managed Objects**: `.free()` will be run on all managed objects.
+		- **`NodeLinkCache`**: `.on_node_removed(self)` will be run on the node tree, so it can correctly adjust the `NodeLinkCache`. **This is essential for avoiding "use-after-free" crashes.**
+		- **Non-Persistent Cache**: `bl_cache.invalidate_nonpersist_instance_id` will be run, so that any caches indexed by the instance ID of the to-be-deleted node will be cleared away.
+
+		Notes:
+			Run by Blender **before** executing user-requested deletion of a node.
+		"""
 		node_tree = self.id_data
 
 		# Unlock

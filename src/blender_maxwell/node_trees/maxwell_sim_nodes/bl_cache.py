@@ -28,6 +28,16 @@ class BLInstance(typ.Protocol):
 
 	instance_id: InstanceID
 
+	@classmethod
+	def set_prop(
+		cls,
+		prop_name: str,
+		prop: bpy.types.Property,
+		no_update: bool = False,
+		update_with_name: str | None = None,
+		**kwargs,
+	) -> None: ...
+
 
 EncodableValue: typ.TypeAlias = typ.Any  ## msgspec-compatible
 PropGetMethod: typ.TypeAlias = typ.Callable[[BLInstance], EncodableValue]
@@ -183,7 +193,7 @@ CACHE_NOPERSIST: dict[InstanceID, dict[typ.Any, typ.Any]] = {}
 def invalidate_nonpersist_instance_id(instance_id: InstanceID) -> None:
 	"""Invalidate any `instance_id` that might be utilizing cache space in `CACHE_NOPERSIST`.
 
-	Note:
+	Notes:
 		This should be run by the `instance_id` owner in its `free()` method.
 
 	Parameters:
@@ -195,10 +205,132 @@ def invalidate_nonpersist_instance_id(instance_id: InstanceID) -> None:
 ####################
 # - Property Descriptor
 ####################
+class KeyedCache:
+	def __init__(
+		self,
+		func: typ.Callable,
+		exclude: set[str],
+		serialize: set[str],
+	):
+		# Function Information
+		self.func: typ.Callable = func
+		self.func_sig: inspect.Signature = inspect.signature(self.func)
+
+		# Arg -> Key Information
+		self.exclude: set[str] = exclude
+		self.include: set[str] = set(self.func_sig.parameters.keys()) - exclude
+		self.serialize: set[str] = serialize
+
+		# Cache Information
+		self.key_schema: tuple[str, ...] = tuple(
+			[
+				arg_name
+				for arg_name in self.func_sig.parameters
+				if arg_name not in exclude
+			]
+		)
+		self.caches: dict[str | None, dict[tuple[typ.Any, ...], typ.Any]] = {}
+
+	@property
+	def is_method(self):
+		return 'self' in self.exclude
+
+	def cache(self, instance_id: str | None) -> dict[tuple[typ.Any, ...], typ.Any]:
+		if self.caches.get(instance_id) is None:
+			self.caches[instance_id] = {}
+
+		return self.caches[instance_id]
+
+	def _encode_key(self, arguments: dict[str, typ.Any]):
+		## WARNING: Order of arguments matters. Arguments may contain 'exclude'd elements.
+		return tuple(
+			[
+				(
+					arg_value
+					if arg_name not in self.serialize
+					else ENCODER.encode(arg_value)
+				)
+				for arg_name, arg_value in arguments.items()
+				if arg_name in self.include
+			]
+		)
+
+	def __get__(
+		self, bl_instance: BLInstance | None, owner: type[BLInstance]
+	) -> typ.Callable:
+		_func = functools.partial(self, bl_instance)
+		_func.invalidate = functools.partial(
+			self.__class__.invalidate, self, bl_instance
+		)
+		return _func
+
+	def __call__(self, *args, **kwargs):
+		# Test Argument Bindability to Decorated Function
+		try:
+			bound_args = self.func_sig.bind(*args, **kwargs)
+		except TypeError as ex:
+			msg = f'Can\'t bind arguments (args={args}, kwargs={kwargs}) to @keyed_cache-decorated function "{self.func.__name__}" (signature: {self.func_sig})"'
+			raise ValueError(msg) from ex
+
+		# Check that Parameters for Keying the Cache are Available
+		bound_args.apply_defaults()
+		all_arg_keys = set(bound_args.arguments.keys())
+		if not self.include <= (all_arg_keys - self.exclude):
+			msg = f'Arguments spanning the keyed cached ({self.include}) are not available in the non-excluded arguments passed to "{self.func.__name__}": {all_arg_keys - self.exclude}'
+			raise ValueError(msg)
+
+		# Create Keyed Cache Entry
+		key = self._encode_key(bound_args.arguments)
+		cache = self.cache(args[0].instance_id if self.is_method else None)
+		if (value := cache.get(key)) is None:
+			value = self.func(*args, **kwargs)
+			cache[key] = value
+
+		return value
+
+	def invalidate(
+		self, bl_instance: BLInstance | None, **arguments: dict[str, typ.Any]
+	) -> dict[str, typ.Any]:
+		# Determine Wildcard Arguments
+		wildcard_arguments = {
+			arg_name for arg_name, arg_value in arguments.items() if arg_value is ...
+		}
+
+		# Compute Keys to Invalidate
+		arguments_hashable = {
+			arg_name: ENCODER.encode(arg_value)
+			if arg_name in self.serialize and arg_name not in wildcard_arguments
+			else arg_value
+			for arg_name, arg_value in arguments.items()
+		}
+		cache = self.cache(bl_instance.instance_id if self.is_method else None)
+		for key in list(cache.keys()):
+			if all(
+				arguments_hashable.get(arg_name) == arg_value
+				for arg_name, arg_value in zip(self.key_schema, key, strict=True)
+				if arg_name not in wildcard_arguments
+			):
+				cache.pop(key)
+
+
+def keyed_cache(exclude: set[str], serialize: set[str] = frozenset()) -> typ.Callable:
+	def decorator(func: typ.Callable) -> typ.Callable:
+		return KeyedCache(
+			func,
+			exclude=exclude,
+			serialize=serialize,
+		)
+
+	return decorator
+
+
+####################
+# - Property Descriptor
+####################
 class CachedBLProperty:
 	"""A descriptor that caches a computed attribute of a Blender node/socket/... instance (`bl_instance`), with optional cache persistence.
 
-	Note:
+	Notes:
 		**Accessing the internal `_*` attributes is likely an anti-pattern**.
 
 		`CachedBLProperty` does not own the data; it only provides a convenient interface of running user-provided getter/setters.
@@ -279,6 +411,7 @@ class CachedBLProperty:
 		"""
 		if bl_instance is None:
 			return None
+
 		# Create Non-Persistent Cache Entry
 		## Prefer explicit cache management to 'defaultdict'
 		if CACHE_NOPERSIST.get(bl_instance.instance_id) is None:
@@ -371,7 +504,7 @@ class CachedBLProperty:
 
 		This is invoked by `__set__`.
 
-		Note:
+		Notes:
 			Will not delete the `bpy.props.StringProperty`; instead, it will be set to ''.
 
 		Parameters:
@@ -416,14 +549,12 @@ def cached_bl_property(persist: bool = ...):
 	Examples:
 	```python
 		class CustomNode(bpy.types.Node):
-			@bl_cache.cached(persist=True|False)
+			@bl_cache.cached(persist=True)
 			def computed_prop(self) -> ...: return ...
 
 		print(bl_instance.prop)  ## Computes first time
-		print(bl_instance.prop)  ## Cached (maybe persistently in a property, maybe not)
+		print(bl_instance.prop)  ## Cached (after restart, will read from persistent cache)
 	```
-
-	When
 	"""
 
 	def decorator(getter_method: typ.Callable[[BLInstance], None]) -> type:
@@ -438,12 +569,14 @@ def cached_bl_property(persist: bool = ...):
 class BLField:
 	"""A descriptor that allows persisting arbitrary types in Blender objects, with cached reads."""
 
-	def __init__(self, default_value: typ.Any, triggers_prop_update: bool = True):
+	def __init__(
+		self, default_value: typ.Any, triggers_prop_update: bool = True
+	) -> typ.Self:
 		"""Initializes and sets the attribute to a given default value.
 
 		Parameters:
 			default_value: The default value to use if the value is read before it's set.
-			trigger_prop_update: Whether to run `bl_instance.sync_prop(attr_name)` whenever value is set.
+			triggers_prop_update: Whether to run `bl_instance.sync_prop(attr_name)` whenever value is set.
 
 		"""
 		log.debug(
@@ -462,7 +595,7 @@ class BLField:
 		and use them as user-provided getter/setter to internally define a normal non-persistent `CachedBLProperty`.
 		As a result, we can reuse almost all of the logic in `CachedBLProperty`
 
-		Note:
+		Notes:
 			Run by Python when setting an instance of this class to an attribute.
 
 		Parameters:

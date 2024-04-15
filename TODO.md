@@ -2,6 +2,7 @@
 - [x] Implement Material Import for Maxim Data
 - [x] Implement Robust DataFlowKind for list-like / spectral-like composite types
 - [x] Unify random node/socket caches.
+- [x] Revalidate cache logic
 - [ ] Finish the "Low-Hanging Fruit" Nodes
 - [ ] Move preview GN trees to the asset library.
 
@@ -349,11 +350,11 @@
 	- [ ] Prevents some uses of loose sockets (we want less loose sockets!)
 
 ## CRITICAL
+- [ ] `log.error` should invoke `self.report` in some Blender operator - used for errors that are due to usage error (which can't simply be prevented with UX design, like text file formatting of import), not due to error in the program.
 - [ ] License header UI for MaxwellSimTrees, to clarify the AGPL-compatible potentially user-selected license that trees must be distributed under.
-- [ ] Document the node tree cache semantics thoroughly; it's a VERY nuanced piece of logic, and its invariants may not survive Blender versions / the author's working memory
+- [x] Document the node tree cache semantics thoroughly; it's a VERY nuanced piece of logic, and its invariants may not survive Blender versions / the author's working memory
 - [ ] Start standardizing nodes/sockets w/individualized SemVer
 	- Perhaps keep node / socket versions in a property, so that trying to load an incompatible major version hop can error w/indicator of where to find a compatible `blender_maxwell` version.
-- [ ] `log.error` should invoke `self.report` in some Blender operator - used for errors that are due to usage error (which can't simply be prevented with UX design, like text file formatting of import), not due to error in the program.
 
 ## Documentation
 - [ ] Make all modules available
@@ -491,3 +492,70 @@ Unreported:
 ## Tidy3D bugs
 Unreported:
 - Directly running `SimulationTask.get()` is missing fields - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.
+
+
+
+# Designs / Proposals
+
+## Coolness Things
+- Let's have operator `poll_message_set`: https://projects.blender.org/blender/blender/commit/ebe04bd3cafaa1f88bd51eee5b3e7bef38ae69bc
+- Careful, Python uses user site packages: <https://projects.blender.org/blender/blender/commit/72c012ab4a3d2a7f7f59334f4912402338c82e3c>
+- Our modifier obj can see execution time: <https://projects.blender.org/blender/blender/commit/8adebaeb7c3c663ec775fda239fdfe5ddb654b06>
+- We found the translation callback! https://projects.blender.org/blender/blender/commit/8564e03cdf59fb2a71d545e81871411b82f561d9
+    - This can update the node center!!
+
+- [ ] Optimize the `DataChanged` invalidator.
+- [ ] Optimize unit stripping.
+
+
+
+## Keyed Cache
+- [ ] Implement `bl_cache.KeyedCache` for, especially, abstracting the caches underlying the input and output sockets.
+
+
+
+## BLField as Property Abstraction
+We need Python properties to work together with Blender properties.
+- Blender Pros: Altered via UI. Options control UI usage. `update()` is a perfect inflection point for callback logic.
+- Blender Cons: Extremely limited supported types. A lot of manual labor that duplicates work done elsewhere in a Python program
+
+`BLField` seeks to bridge the two worlds in an elegant way.
+
+### Type Support
+We need support for arbitrary objects, but still backed by the persistance semantics of native Blender properties.
+- [ ] Add logic that matches appropriate types to native IntProperty, FloatProperty, IntVectorProperty, FloatVectorProperty.
+	- We want absolute minimal overhead for types that actually already do work in Blender.
+	- **REMEMBER8* they can do matrices too! https://developer.blender.org/docs/release_notes/3.0/python_api/#other-additions
+- [ ] Add logic that matches any bpy.types.ID subclass to a PointerProperty.
+	- This is important for certain kinds of properties ex. "select a Blender object".
+- [ ] Implement Enum property, (also see <https://developer.blender.org/docs/release_notes/4.1/python_api/#enum-id-properties>)
+	- Use this to bridge the enum UI to actual StrEnum objects.
+	- This also maybe enables some very interesting use cases when it comes to ex. static verifiability of data provided to event callbacks.
+- [ ] Ensure certain options, namely `name` (as `ui_name`), `default`, `subtype`, (numeric) `min`, `max`, `step`, `precision`, (string) `maxlen`, `search`, and `search_options`, can be passed down via the `BLField()` constructor.
+	- [ ] Make a class method that parses the docstring.
+	- [ ] `description`: Use the docstring parser to extract the first description sentence of the attribute name from the subclass docstring, so we are both encouraged to document our nodes/sockets, and so we're not documenting twice.
+
+### Niceness
+- [ ] Rename the internal property to 'blfield__'.
+- [ ] Add a method that extracts the internal property name, for places where we need the Blender property name.
+	- **Key use case**: `draw.prop(self, self.field_name._bl_prop_name)`, which is also nice b/c no implicit string-based reference.
+	- The work done above with types makes this as fast and useful as internal props. Just make sure we validate that the type can be usefully accessed like this.
+- [ ] Add a field method (called w/instance) that updates min/max/etc. on the 'blfield__' prop, in a native property type compatible manner: https://developer.blender.org/docs/release_notes/3.0/python_api/#idproperty-ui-data-api
+    - Should also throw appropriate errors for invalid access from Python, while Blender handles access from the inside.
+    - This allows us
+- [ ] Similarly, a field method that gets the 'blfield__' prop data as a dictionary.
+
+### Parallel Features
+- [ ] Move serialization work to a `utils`.
+- [ ] Also make ENCODER a function that can shortcut the easy cases.
+- [ ] For serializeability, let the encoder/decoder be able to make use of an optional `.msgspec_encodable()` and similar decoder respectively, and add support for these in the ENCODER/DECODER functions.
+- [ ] Define a superclass for `SocketDef` and make everyone inherit from it
+	- [ ] Collect with a `BL_SOCKET_DEFS` object, instead of manually from `__init__.py`s
+	- [ ] Add support for `.msgspec_*()` methods, so that we remove the dependency on sockets from the serialization module.
+
+### Sweeping Features
+- [ ] Replace all raw Blender properties with `BLField`.
+    - Benefit: update= is taken care of automatically, preventing an entire class of nasty bug.
+    - Benefit: Any serializable object can be "simply used", at almost native speed (due to the aggressive read-cache).
+    - Benefit: Better error properties for updating, access, setting, etc. .
+	- Benefit: Validate usage in a vastly greater amount of contexts.

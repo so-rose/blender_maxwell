@@ -50,6 +50,9 @@ quartodoc:
     signature_name: "short"
 
   sections:
+    ####################
+    # - scripts
+    ####################
     - title: "`scripts`"
       desc: Build/packaging scripts for developing and publishing the addon.
       package: scripts
@@ -65,6 +68,9 @@ quartodoc:
         - name: bl_install_addon
           children: embedded
 
+    ####################
+    # - bl_maxwell
+    ####################
     - title: "`bl_maxwell`"
       desc: Root package for the addon.
       contents:
@@ -117,7 +123,9 @@ quartodoc:
         - name: operators.connect_viewer
           children: embedded
 
-    # Node Tree
+    ####################
+    # - ..maxwell_sim_nodes
+    ####################
     - title: "`..maxwell_sim_nodes`"
       desc: Maxwell Simulation Design/Viz Node Tree.
       package: blender_maxwell.node_trees.maxwell_sim_nodes
@@ -125,6 +133,8 @@ quartodoc:
         - name: bl_socket_map
           children: embedded
         - name: categories
+          children: embedded
+        - name: bl_cache
           children: embedded
         - name: node_tree
           children: embedded
@@ -186,4 +196,28 @@ quartodoc:
         - name: managed_bl_mesh
           children: embedded
         - name: managed_bl_modifier
+          children: embedded
+
+    ####################
+    # - ..maxwell_sim_nodes.nodes
+    ####################
+    - title: "`...sockets`"
+      desc: Maxwell Simulation Node Sockets
+      package: blender_maxwell.node_trees.maxwell_sim_nodes.sockets
+      contents:
+        - name: base
+          children: embedded
+        - name: scan_socket_defs
+          children: embedded
+
+    ####################
+    # - ..maxwell_sim_nodes.nodes
+    ####################
+    - title: "`...nodes`"
+      desc: Maxwell Simulation Nodes
+      package: blender_maxwell.node_trees.maxwell_sim_nodes.nodes
+      contents:
+        - name: base
+          children: embedded
+        - name: events
           children: embedded
