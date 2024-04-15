@@ -547,9 +547,9 @@ We need support for arbitrary objects, but still backed by the persistance seman
 
 ### Parallel Features
 - [x] Move serialization work to a `utils`.
-- [ ] Also make ENCODER a function that can shortcut the easy cases.
-- [ ] For serializeability, let the encoder/decoder be able to make use of an optional `.msgspec_encodable()` and similar decoder respectively, and add support for these in the ENCODER/DECODER functions.
-- [ ] Define a superclass for `SocketDef` and make everyone inherit from it
+- [x] Also make ENCODER a function that can shortcut the easy cases.
+- [x] For serializeability, let the encoder/decoder be able to make use of an optional `.msgspec_encodable()` and similar decoder respectively, and add support for these in the ENCODER/DECODER functions.
+- [x] Define a superclass for `SocketDef` and make everyone inherit from it
 	- [ ] Collect with a `BL_SOCKET_DEFS` object, instead of manually from `__init__.py`s
 	- [ ] Add support for `.msgspec_*()` methods, so that we remove the dependency on sockets from the serialization module.
 

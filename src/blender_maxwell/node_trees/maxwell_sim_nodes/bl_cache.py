@@ -65,7 +65,7 @@ class KeyedCache:
 		self,
 		func: typ.Callable,
 		exclude: set[str],
-		serialize: set[str],
+		encode: set[str],
 	):
 		# Function Information
 		self.func: typ.Callable = func
@@ -74,7 +74,7 @@ class KeyedCache:
 		# Arg -> Key Information
 		self.exclude: set[str] = exclude
 		self.include: set[str] = set(self.func_sig.parameters.keys()) - exclude
-		self.serialize: set[str] = serialize
+		self.encode: set[str] = encode
 
 		# Cache Information
 		self.key_schema: tuple[str, ...] = tuple(
@@ -102,8 +102,8 @@ class KeyedCache:
 			[
 				(
 					arg_value
-					if arg_name not in self.serialize
-					else ENCODER.encode(arg_value)
+					if arg_name not in self.encode
+					else serialize.encode(arg_value)
 				)
 				for arg_name, arg_value in arguments.items()
 				if arg_name in self.include
@@ -153,8 +153,8 @@ class KeyedCache:
 
 		# Compute Keys to Invalidate
 		arguments_hashable = {
-			arg_name: ENCODER.encode(arg_value)
-			if arg_name in self.serialize and arg_name not in wildcard_arguments
+			arg_name: serialize.encode(arg_value)
+			if arg_name in self.encode and arg_name not in wildcard_arguments
 			else arg_value
 			for arg_name, arg_value in arguments.items()
 		}
@@ -168,12 +168,12 @@ class KeyedCache:
 				cache.pop(key)
 
 
-def keyed_cache(exclude: set[str], serialize: set[str] = frozenset()) -> typ.Callable:
+def keyed_cache(exclude: set[str], encode: set[str] = frozenset()) -> typ.Callable:
 	def decorator(func: typ.Callable) -> typ.Callable:
 		return KeyedCache(
 			func,
 			exclude=exclude,
-			serialize=serialize,
+			encode=encode,
 		)
 
 	return decorator
@@ -218,9 +218,6 @@ class CachedBLProperty:
 		self._type: type | None = (
 			inspect.signature(getter_method).return_annotation if persist else None
 		)
-
-		# Check Non-Empty Type Annotation
-		## For now, just presume that all types can be encoded/decoded.
 
 		# Check Non-Empty Type Annotation
 		## For now, just presume that all types can be encoded/decoded.
@@ -283,7 +280,7 @@ class CachedBLProperty:
 			self._persist
 			and (encoded_value := getattr(bl_instance, self._bl_prop_name)) != ''
 		):
-			value = decode_any(self._type, encoded_value)
+			value = serialize.decode(self._type, encoded_value)
 			cache_nopersist[self._bl_prop_name] = value
 			return value
 
@@ -294,7 +291,7 @@ class CachedBLProperty:
 		cache_nopersist[self._bl_prop_name] = value
 		if self._persist:
 			setattr(
-				bl_instance, self._bl_prop_name, ENCODER.encode(value).decode('utf-8')
+				bl_instance, self._bl_prop_name, serialize.encode(value).decode('utf-8')
 			)
 		return value
 
@@ -466,7 +463,7 @@ class BLField:
 			raise TypeError(msg)
 
 		# Define Blender Property (w/Update Sync)
-		encoded_default_value = ENCODER.encode(self._default_value).decode('utf-8')
+		encoded_default_value = serialize.encode(self._default_value).decode('utf-8')
 		log.debug(
 			'%s set to StringProperty w/default "%s" and no_update="%s"',
 			bl_attr_name,
@@ -487,14 +484,14 @@ class BLField:
 		## 2. Retrieve bpy.props.StringProperty string.
 		## 3. Decode using annotated type.
 		def getter(_self: BLInstance) -> AttrType:
-			return decode_any(AttrType, getattr(_self, bl_attr_name))
+			return serialize.decode(AttrType, getattr(_self, bl_attr_name))
 
 		## Setter:
 		## 1. Initialize bpy.props.StringProperty to Default (if undefined).
 		## 3. Encode value (implicitly using the annotated type).
 		## 2. Set bpy.props.StringProperty string.
 		def setter(_self: BLInstance, value: AttrType) -> None:
-			encoded_value = ENCODER.encode(value).decode('utf-8')
+			encoded_value = serialize.encode(value).decode('utf-8')
 			log.debug(
 				'Writing BLField attr "%s" w/encoded value: %s',
 				bl_attr_name,

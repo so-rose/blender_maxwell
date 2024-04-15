@@ -5,6 +5,8 @@ import typing as typ
 import sympy as sp
 import sympy.physics.units as spu
 
+SympyType = sp.Basic | sp.Expr | sp.MatrixBase | sp.Quantity
+
 
 ####################
 # - Useful Methods

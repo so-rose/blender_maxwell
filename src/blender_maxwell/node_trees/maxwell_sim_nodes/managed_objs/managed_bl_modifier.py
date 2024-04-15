@@ -8,6 +8,7 @@ import typing_extensions as typx
 from ....utils import analyze_geonodes, logger
 from .. import bl_socket_map
 from .. import contracts as ct
+from . import base
 
 log = logger.get(__name__)
 
@@ -160,7 +161,7 @@ def write_modifier(
 ####################
 # - ManagedObj
 ####################
-class ManagedBLModifier(ct.schemas.ManagedObj):
+class ManagedBLModifier(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLModifier
 	_modifier_name: str | None = None
 
@@ -184,6 +185,9 @@ class ManagedBLModifier(ct.schemas.ManagedObj):
 	####################
 	def __init__(self, name: str):
 		self.name = name
+
+	def bl_select(self) -> None: pass
+	def hide_preview(self) -> None: pass
 
 	####################
 	# - Deallocation

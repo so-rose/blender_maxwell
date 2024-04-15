@@ -12,6 +12,7 @@ import typing_extensions as typx
 
 from ....utils import logger
 from .. import contracts as ct
+from . import base
 
 log = logger.get(__name__)
 
@@ -76,7 +77,7 @@ def rgba_image_from_xyzf(xyz_freq, colormap: str | None = None):
 		return rgba_image_from_xyzf__grayscale(xyz_freq)
 
 
-class ManagedBLImage(ct.schemas.ManagedObj):
+class ManagedBLImage(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLImage
 	_bl_image_name: str
 
@@ -181,6 +182,9 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		if bl_image := bpy.data.images.get(self.name):
 			self.preview_space.image = bl_image
 
+	def hide_preview(self) -> None:
+		self.preview_space.image = None
+
 	####################
 	# - Image Geometry
 	####################
@@ -269,12 +273,12 @@ class ManagedBLImage(ct.schemas.ManagedObj):
 		)
 		# log.debug('Computed MPL Geometry (%f)', time.perf_counter() - time_start)
 
-		#log.debug(
-		#	'Creating MPL Axes (aspect=%f, width=%f, height=%f)',
-		#	aspect_ratio,
-		#	_width_inches,
-		#	_height_inches,
-		#)
+		# log.debug(
+		# 'Creating MPL Axes (aspect=%f, width=%f, height=%f)',
+		# aspect_ratio,
+		# _width_inches,
+		# _height_inches,
+		# )
 		# Create MPL Figure, Axes, and Compute Figure Geometry
 		fig, ax = plt.subplots(
 			figsize=[_width_inches, _height_inches],

@@ -1,17 +1,44 @@
+import abc
 import functools
 import typing as typ
 
 import bpy
+import pydantic as pyd
 import sympy as sp
-import sympy.physics.units as spu
 import typing_extensions as typx
 
+from .....utils import serialize
 from ....utils import logger
 from .. import contracts as ct
+from ..socket_types import SocketType
 
 log = logger.get(__name__)
 
 
+####################
+# - SocketDef
+####################
+class SocketDef(pyd.BaseModel, abc.ABC):
+	socket_type: SocketType
+
+	@abc.abstractmethod
+	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
+		"""Initializes a real Blender node socket from this socket definition."""
+
+	####################
+	# - Serialization
+	####################
+	def dump_as_msgspec(self) -> serialize.NaiveRepresentation:
+		return [serialize.TypeID.SocketDef, self.__class__.__name__, self.model_dump()]
+
+	@staticmethod
+	def parse_as_msgspec(obj: serialize.NaiveRepresentation) -> typ.Self:
+		return SocketDef.__subclasses__[obj[1]](**obj[2])
+
+
+####################
+# - SocketDef
+####################
 class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Fundamentals
 	socket_type: ct.SocketType

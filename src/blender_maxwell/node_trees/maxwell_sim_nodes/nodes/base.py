@@ -55,8 +55,8 @@ class MaxwellSimNode(bpy.types.Node):
 	presets: typ.ClassVar = MappingProxyType({})
 
 	# Managed Objects
-	managed_obj_defs: typ.ClassVar[
-		dict[ct.ManagedObjName, ct.schemas.ManagedObjDef]
+	managed_obj_types: typ.ClassVar[
+		dict[ct.ManagedObjName, type[_managed_objs.ManagedObj]]
 	] = MappingProxyType({})
 
 	####################
@@ -222,7 +222,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	@events.on_value_changed(
 		prop_name='sim_node_name',
-		props={'sim_node_name', 'managed_objs', 'managed_obj_defs'},
+		props={'sim_node_name', 'managed_objs', 'managed_obj_types'},
 	)
 	def _on_sim_node_name_changed(self, props: dict):
 		log.info(
@@ -233,9 +233,8 @@ class MaxwellSimNode(bpy.types.Node):
 		)
 
 		# Set Name of Managed Objects
-		for mobj_id, mobj in props['managed_objs'].items():
-			mobj_def = props['managed_obj_defs'][mobj_id]
-			mobj.name = mobj_def.name_prefix + props['sim_node_name']
+		for mobj in props['managed_objs'].values():
+			mobj.name = props['sim_node_name']
 
 	@events.on_value_changed(prop_name='active_socket_set')
 	def _on_socket_set_changed(self):
@@ -282,9 +281,7 @@ class MaxwellSimNode(bpy.types.Node):
 	def _on_preview_changed(self, props):
 		if not props['preview_active']:
 			for mobj in self.managed_objs.values():
-				if isinstance(mobj, _managed_objs.ManagedBLMesh):
-					## TODO: This is a Workaround
-					mobj.hide_preview()
+				mobj.hide_preview()
 
 	@events.on_enable_lock()
 	def _on_enabled_lock(self):
@@ -460,33 +457,17 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Managed Objects
 	####################
-	managed_bl_meshes: dict[str, _managed_objs.ManagedBLMesh] = bl_cache.BLField({})
-	managed_bl_images: dict[str, _managed_objs.ManagedBLImage] = bl_cache.BLField({})
-	managed_bl_modifiers: dict[str, _managed_objs.ManagedBLModifier] = bl_cache.BLField(
-		{}
-	)
-
-	@bl_cache.cached_bl_property(
-		persist=False
-	)  ## Disable broken ManagedObj union DECODER
+	@bl_cache.cached_bl_property(persist=True)
 	def managed_objs(self) -> dict[str, _managed_objs.ManagedObj]:
 		"""Access the managed objects defined on this node.
 
 		Persistent cache ensures that the managed objects are only created on first access, even across file reloads.
 		"""
-		if self.managed_obj_defs:
-			if not (
-				managed_objs := (
-					self.managed_bl_meshes
-					| self.managed_bl_images
-					| self.managed_bl_modifiers
-				)
-			):
-				return {
-					mobj_name: mobj_def.mk(mobj_def.name_prefix + self.sim_node_name)
-					for mobj_name, mobj_def in self.managed_obj_defs.items()
-				}
-			return managed_objs
+		if self.managed_obj_types:
+			return {
+				mobj_name: mobj_type(self.sim_node_name)
+				for mobj_name, mobj_type in self.managed_obj_types.items()
+			}
 
 		return {}
 
@@ -564,7 +545,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	@bl_cache.keyed_cache(
 		exclude={'self', 'optional'},
-		serialize={'unit_system'},
+		encode={'unit_system'},
 	)
 	def _compute_input(
 		self,

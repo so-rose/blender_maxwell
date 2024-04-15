@@ -1,5 +1,7 @@
 import typing as typ
 
+from .base import ManagedObj
+
 # from .managed_bl_empty import ManagedBLEmpty
 from .managed_bl_image import ManagedBLImage
 
@@ -10,9 +12,8 @@ from .managed_bl_mesh import ManagedBLMesh
 # from .managed_bl_volume import ManagedBLVolume
 from .managed_bl_modifier import ManagedBLModifier
 
-ManagedObj: typ.TypeAlias = ManagedBLImage | ManagedBLMesh | ManagedBLModifier
-
 __all__ = [
+	'ManagedObj',
 	#'ManagedBLEmpty',
 	'ManagedBLImage',
 	#'ManagedBLCollection',

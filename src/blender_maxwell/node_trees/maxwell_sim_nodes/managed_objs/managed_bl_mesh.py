@@ -7,6 +7,7 @@ import numpy as np
 from ....utils import logger
 from .. import contracts as ct
 from .managed_bl_collection import managed_collection, preview_collection
+from . import base
 
 log = logger.get(__name__)
 
@@ -14,7 +15,7 @@ log = logger.get(__name__)
 ####################
 # - BLMesh
 ####################
-class ManagedBLMesh(ct.schemas.ManagedObj):
+class ManagedBLMesh(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLMesh
 	_bl_object_name: str | None = None
 
