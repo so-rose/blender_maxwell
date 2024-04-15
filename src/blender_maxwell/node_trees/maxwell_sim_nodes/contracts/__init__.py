@@ -66,11 +66,6 @@ from .data_flows import (
 from .data_flow_actions import DataFlowAction
 
 ####################
-# - Schemas
-####################
-from . import schemas
-
-####################
 # - Export
 ####################
 __all__ = [
@@ -103,5 +98,4 @@ __all__ = [
 	'LazyDataValueRange',
 	'LazyDataValueSpectrum',
 	'DataFlowAction',
-	'schemas',
 ]

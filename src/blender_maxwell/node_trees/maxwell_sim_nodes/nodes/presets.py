@@ -2,10 +2,10 @@ import typing as typ
 
 import pydantic as pyd
 
-from ..bl import PresetName, SocketName
+from .. import contracts as ct
 
 
 class PresetDef(pyd.BaseModel):
-	label: PresetName
+	label: ct.PresetName
 	description: str
-	values: dict[SocketName, typ.Any]
+	values: dict[ct.SocketName, typ.Any]

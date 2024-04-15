@@ -29,13 +29,9 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Structure': sockets.MaxwellStructureSocketDef(),
 	}
 
-	managed_obj_defs: typ.ClassVar = {
-		'mesh': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLMesh(name),
-		),
-		'modifier': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLModifier(name),
-		),
+	managed_obj_types: typ.ClassVar = {
+		'mesh': managed_objs.ManagedBLMesh,
+		'modifier': managed_objs.ManagedBLModifier,
 	}
 
 	####################
@@ -74,7 +70,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 	def on_inputs_changed(
 		self,
 		props: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		managed_objs: dict,
 		input_sockets: dict,
 		unit_systems: dict,
 	):

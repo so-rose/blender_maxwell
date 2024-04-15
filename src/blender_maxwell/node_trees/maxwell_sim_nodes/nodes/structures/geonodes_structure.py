@@ -27,13 +27,9 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		'Structure': sockets.MaxwellStructureSocketDef(),
 	}
 
-	managed_obj_defs: typ.ClassVar = {
-		'mesh': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLMesh(name),
-		),
-		'modifier': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLModifier(name),
-		),
+	managed_obj_types: typ.ClassVar = {
+		'mesh': managed_objs.ManagedBLMesh,
+		'modifier': managed_objs.ManagedBLModifier,
 	}
 
 	####################
@@ -46,8 +42,8 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	)
 	def compute_structure(
 		self,
-		input_sockets: dict[str, typ.Any],
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		input_sockets: dict,
+		managed_objs: dict,
 	) -> td.Structure:
 		# Simulate Input Value Change
 		## This ensures that the mesh has been re-computed.
@@ -68,7 +64,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	# - Event Methods
 	####################
 	@events.on_value_changed(
-		socket_name='GeoNodes',
+		socket_name={'GeoNodes', 'Center'},
 		prop_name='preview_active',
 		any_loose_input_socket=True,
 		run_on_init=True,
@@ -83,7 +79,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	def on_input_changed(
 		self,
 		props: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		managed_objs: dict,
 		input_sockets: dict,
 		loose_input_sockets: dict,
 		unit_systems: dict,

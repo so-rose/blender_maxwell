@@ -47,11 +47,8 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'File Path': sockets.FilePathSocketDef(),
 	}
-	managed_obj_defs: typ.ClassVar = {
-		'plot': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLImage(name),
-			name_prefix='',
-		),
+	managed_obj_types: typ.ClassVar = {
+		'plot': managed_objs.ManagedBLImage,
 	}
 
 	####################

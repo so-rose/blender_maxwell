@@ -28,14 +28,9 @@ class SimDomainNode(base.MaxwellSimNode):
 		'Domain': sockets.MaxwellSimDomainSocketDef(),
 	}
 
-	managed_obj_defs: typ.ClassVar = {
-		'mesh': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLMesh(name),
-			name_prefix='',
-		),
-		'modifier': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLModifier(name),
-		),
+	managed_obj_types: typ.ClassVar = {
+		'mesh': managed_objs.ManagedBLMesh,
+		'modifier': managed_objs.ManagedBLModifier,
 	}
 
 	####################
@@ -75,7 +70,7 @@ class SimDomainNode(base.MaxwellSimNode):
 	def on_input_changed(
 		self,
 		props: dict,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		managed_objs: dict,
 		input_sockets: dict,
 		unit_systems: dict,
 	):

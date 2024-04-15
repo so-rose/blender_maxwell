@@ -1,8 +1,11 @@
 import abc
 import typing as typ
 
-from ....utils import serialize
+from blender_maxwell.utils import logger, serialize
+
 from .. import contracts as ct
+
+log = logger.get(__name__)
 
 
 class ManagedObj(abc.ABC):
@@ -50,9 +53,13 @@ class ManagedObj(abc.ABC):
 		return [
 			serialize.TypeID.ManagedObj,
 			self.__class__.__name__,
-			(self.managed_obj_type, self.name),
+			self.name,
 		]
 
 	@staticmethod
 	def parse_as_msgspec(obj: serialize.NaiveRepresentation) -> typ.Self:
-		return ManagedObj.__subclasses__[obj[1]](**obj[2])
+		return next(
+			subclass(obj[2])
+			for subclass in ManagedObj.__subclasses__()
+			if subclass.__name__ == obj[1]
+		)

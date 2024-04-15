@@ -1,6 +1,7 @@
-"""Attributes:
-NaiveEncodableType:
-See <https://jcristharif.com/msgspec/supported-types.html> for details.
+"""Robust serialization tool for use in the addon.
+
+Attributes:
+	NaiveEncodableType: See <https://jcristharif.com/msgspec/supported-types.html> for details.
 """
 
 import dataclasses
@@ -61,19 +62,20 @@ NaivelyEncodableType: typ.TypeAlias = (
 	| enum.Flag
 	| enum.IntFlag
 	| dataclasses.dataclass
-	| typ.Optional
-	| typ.Union
+	| typ.Optional[typ.Any]  # noqa: UP007
+	| typ.Union[typ.Any, ...]  # noqa: UP007
 	| typ.NewType
 	| typ.TypeAlias
-	| typ.TypeAliasType
-	| typ.Generic
-	| typ.TypeVar
-	| typ.Final
+	## SUPPORT:
+	# | typ.Generic[typ.Any]
+	# | typ.TypeVar
+	# | typ.Final
 	| msgspec.Raw
 	## NO SUPPORT:
 	# | msgspec.UNSET
 )
 _NaivelyEncodableTypeSet = frozenset(typ.get_args(NaivelyEncodableType))
+## TODO: Use for runtime type check? Beartype?
 
 
 class TypeID(enum.StrEnum):
@@ -87,7 +89,7 @@ NaiveRepresentation: typ.TypeAlias = list[TypeID, str | None, typ.Any]
 
 
 def is_representation(obj: NaivelyEncodableType) -> bool:
-	return isinstance(obj, list) and obj[0] in set(TypeID) and len(obj) == 3  # noqa: PLR2004
+	return isinstance(obj, list) and len(obj) == 3 and obj[0] in set(TypeID)  # noqa: PLR2004
 
 
 ####################
@@ -141,7 +143,9 @@ def _dec_hook(_type: type, obj: NaivelyEncodableType) -> typ.Any:
 		obj_value = obj[2]
 		return sp.sympify(obj_value).subs(spux.ALL_UNIT_SYMBOLS)
 
-	if hasattr(obj, 'parse_as_msgspec'):
+	if hasattr(_type, 'parse_as_msgspec') and (
+		is_representation(obj) and obj[0] in [TypeID.SocketDef, TypeID.ManagedObj]
+	):
 		return _type.parse_as_msgspec(obj)
 
 	msg = f'Can\'t decode "{obj}" to type {type(obj)}'

@@ -33,9 +33,11 @@ class BLInstance(typ.Protocol):
 	) -> None: ...
 
 
-PropGetMethod: typ.TypeAlias = typ.Callable[[BLInstance], serialize.EncodableValue]
+PropGetMethod: typ.TypeAlias = typ.Callable[
+	[BLInstance], serialize.NaivelyEncodableType
+]
 PropSetMethod: typ.TypeAlias = typ.Callable[
-	[BLInstance, serialize.EncodableValue], None
+	[BLInstance, serialize.NaivelyEncodableType], None
 ]
 
 

@@ -132,7 +132,7 @@ def _socket_def_from_bl_socket(
 
 def socket_def_from_bl_socket(
 	bl_interface_socket: bpy.types.NodeTreeInterfaceSocket,
-) -> ct.schemas.SocketDef:
+) -> sockets.base.SocketDef:
 	"""Computes an appropriate (no-arg) SocketDef from the given `bl_interface_socket`, by parsing it."""
 	return _socket_def_from_bl_socket(
 		bl_interface_socket.description, bl_interface_socket.bl_socket_idname

@@ -24,23 +24,12 @@ class VizNode(base.MaxwellSimNode):
 		'Data': sockets.AnySocketDef(),
 		'Freq': sockets.PhysicalFreqSocketDef(),
 	}
-	# input_sockets_sets: typ.ClassVar = {
-	# '2D Freq': {
-	# 'Data': sockets.AnySocketDef(),
-	# 'Freq': sockets.PhysicalFreqSocketDef(),
-	# },
-	# }
 	output_sockets: typ.ClassVar = {
 		'Preview': sockets.AnySocketDef(),
 	}
 
-	managed_obj_defs: typ.ClassVar = {
-		'plot': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLImage(name),
-		),
-		#'empty': ct.schemas.ManagedObjDef(
-		# mk=lambda name: managed_objs.ManagedBLEmpty(name),
-		# ),
+	managed_obj_types: typ.ClassVar = {
+		'plot': managed_objs.ManagedBLImage,
 	}
 
 	#####################
@@ -78,7 +67,7 @@ class VizNode(base.MaxwellSimNode):
 	)
 	def on_show_plot(
 		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
+		managed_objs: dict,
 		input_sockets: dict,
 		props: dict,
 		unit_systems: dict,

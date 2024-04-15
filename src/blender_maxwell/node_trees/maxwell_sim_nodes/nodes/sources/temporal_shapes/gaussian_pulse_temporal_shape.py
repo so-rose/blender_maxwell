@@ -41,11 +41,8 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
 	}
 
-	managed_obj_defs = {
-		'amp_time': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLImage(name),
-			name_prefix='amp_time_',
-		)
+	managed_obj_types = {
+		'amp_time': managed_objs.ManagedBLImage,
 	}
 
 	####################
@@ -123,9 +120,9 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 	)
 	def on_show_plot(
 		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-		output_sockets: dict[str, typ.Any],
-		props: dict[str, typ.Any],
+		managed_objs: dict,
+		output_sockets: dict,
+		props: dict,
 	):
 		temporal_shape = output_sockets['Temporal Shape']
 		plot_time_start = props['plot_time_start'] * 1e-15

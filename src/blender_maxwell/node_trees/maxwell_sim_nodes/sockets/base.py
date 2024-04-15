@@ -7,10 +7,8 @@ import pydantic as pyd
 import sympy as sp
 import typing_extensions as typx
 
-from .....utils import serialize
-from ....utils import logger
+from ....utils import logger, serialize
 from .. import contracts as ct
-from ..socket_types import SocketType
 
 log = logger.get(__name__)
 
@@ -19,7 +17,7 @@ log = logger.get(__name__)
 # - SocketDef
 ####################
 class SocketDef(pyd.BaseModel, abc.ABC):
-	socket_type: SocketType
+	socket_type: ct.SocketType
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
@@ -33,7 +31,11 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 
 	@staticmethod
 	def parse_as_msgspec(obj: serialize.NaiveRepresentation) -> typ.Self:
-		return SocketDef.__subclasses__[obj[1]](**obj[2])
+		return next(
+			subclass(**obj[2])
+			for subclass in SocketDef.__subclasses__()
+			if subclass.__name__ == obj[1]
+		)
 
 
 ####################

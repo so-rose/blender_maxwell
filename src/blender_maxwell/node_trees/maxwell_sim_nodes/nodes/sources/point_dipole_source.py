@@ -26,11 +26,8 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		'Source': sockets.MaxwellSourceSocketDef(),
 	}
 
-	managed_obj_defs = {
-		'sphere_empty': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLObject(name),
-			name_prefix='',
-		)
+	managed_obj_types = {
+		'mesh': managed_objs.ManagedBLMesh,
 	}
 
 	####################

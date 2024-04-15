@@ -26,11 +26,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 		'Medium': sockets.MaxwellMediumSocketDef(),
 	}
 
-	managed_obj_defs = {
-		'nk_plot': ct.schemas.ManagedObjDef(
-			mk=lambda name: managed_objs.ManagedBLImage(name),
-			name_prefix='',
-		)
+	managed_obj_types = {
+		'nk_plot': managed_objs.ManagedBLImage,
 	}
 
 	####################
@@ -125,8 +122,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	)
 	def on_show_plot(
 		self,
-		managed_objs: dict[str, ct.schemas.ManagedObj],
-		props: dict[str, typ.Any],
+		managed_objs: dict,
+		props: dict,
 	):
 		medium = td.material_library[props['material']].medium
 		freq_range = [

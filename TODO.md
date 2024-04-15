@@ -504,7 +504,7 @@ Unreported:
 - We found the translation callback! https://projects.blender.org/blender/blender/commit/8564e03cdf59fb2a71d545e81871411b82f561d9
     - This can update the node center!!
 
-- [ ] Optimize the `DataChanged` invalidator.
+- [x] Optimize the `DataChanged` invalidator.
 - [ ] Optimize unit stripping.
 
 
@@ -551,7 +551,7 @@ We need support for arbitrary objects, but still backed by the persistance seman
 - [x] For serializeability, let the encoder/decoder be able to make use of an optional `.msgspec_encodable()` and similar decoder respectively, and add support for these in the ENCODER/DECODER functions.
 - [x] Define a superclass for `SocketDef` and make everyone inherit from it
 	- [ ] Collect with a `BL_SOCKET_DEFS` object, instead of manually from `__init__.py`s
-	- [ ] Add support for `.msgspec_*()` methods, so that we remove the dependency on sockets from the serialization module.
+	- [x] Add support for `.msgspec_*()` methods, so that we remove the dependency on sockets from the serialization module.
 
 ### Sweeping Features
 - [ ] Replace all raw Blender properties with `BLField`.

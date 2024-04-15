@@ -12,11 +12,13 @@ import bpy
 import sympy as sp
 import typing_extensions as typx
 
-from ....utils import logger
-from .. import bl_cache
+from blender_maxwell.utils import logger
+
+from .. import bl_cache, sockets
 from .. import contracts as ct
 from .. import managed_objs as _managed_objs
 from . import events
+from . import presets as _presets
 
 log = logger.get(__name__)
 
@@ -42,17 +44,23 @@ class MaxwellSimNode(bpy.types.Node):
 	## TODO: bl_description from first line of __doc__?
 
 	# Sockets
-	input_sockets: typ.ClassVar[dict[str, ct.schemas.SocketDef]] = MappingProxyType({})
-	output_sockets: typ.ClassVar[dict[str, ct.schemas.SocketDef]] = MappingProxyType({})
-	input_socket_sets: typ.ClassVar[dict[str, dict[str, ct.schemas.SocketDef]]] = (
+	input_sockets: typ.ClassVar[dict[str, sockets.base.SocketDef]] = MappingProxyType(
+		{}
+	)
+	output_sockets: typ.ClassVar[dict[str, sockets.base.SocketDef]] = MappingProxyType(
+		{}
+	)
+	input_socket_sets: typ.ClassVar[dict[str, dict[str, sockets.base.SocketDef]]] = (
 		MappingProxyType({})
 	)
-	output_socket_sets: typ.ClassVar[dict[str, dict[str, ct.schemas.SocketDef]]] = (
+	output_socket_sets: typ.ClassVar[dict[str, dict[str, sockets.base.SocketDef]]] = (
 		MappingProxyType({})
 	)
 
 	# Presets
-	presets: typ.ClassVar = MappingProxyType({})
+	presets: typ.ClassVar[dict[str, dict[str, _presets.PresetDef]]] = MappingProxyType(
+		{}
+	)
 
 	# Managed Objects
 	managed_obj_types: typ.ClassVar[
@@ -300,8 +308,8 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Loose Sockets w/Events
 	####################
-	loose_input_sockets: dict[str, ct.schemas.SocketDef] = bl_cache.BLField({})
-	loose_output_sockets: dict[str, ct.schemas.SocketDef] = bl_cache.BLField({})
+	loose_input_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
+	loose_output_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
 
 	@events.on_value_changed(prop_name={'loose_input_sockets', 'loose_output_sockets'})
 	def _on_loose_sockets_changed(self):
@@ -331,7 +339,7 @@ class MaxwellSimNode(bpy.types.Node):
 	def _active_socket_set_socket_defs(
 		self,
 		direc: typx.Literal['input', 'output'],
-	) -> dict[ct.SocketName, ct.schemas.SocketDef]:
+	) -> dict[ct.SocketName, sockets.base.SocketDef]:
 		"""Retrieve all socket definitions for sockets that should be defined, according to the `self.active_socket_set`.
 
 		Notes:
@@ -341,7 +349,7 @@ class MaxwellSimNode(bpy.types.Node):
 			direc: The direction to load Blender sockets from.
 
 		Returns:
-			Mapping from socket names to corresponding `ct.schemas.SocketDef`s.
+			Mapping from socket names to corresponding `sockets.base.SocketDef`s.
 
 			If `self.active_socket_set` is None, the empty dict is returned.
 		"""
@@ -357,14 +365,14 @@ class MaxwellSimNode(bpy.types.Node):
 
 	def active_socket_defs(
 		self, direc: typx.Literal['input', 'output']
-	) -> dict[ct.SocketName, ct.schemas.SocketDef]:
+	) -> dict[ct.SocketName, sockets.base.SocketDef]:
 		"""Retrieve all socket definitions for sockets that should be defined.
 
 		Parameters:
 			direc: The direction to load Blender sockets from.
 
 		Returns:
-			Mapping from socket names to corresponding `ct.schemas.SocketDef`s.
+			Mapping from socket names to corresponding `sockets.base.SocketDef`s.
 		"""
 		static_sockets = self.input_sockets if direc == 'input' else self.output_sockets
 		loose_sockets = (
@@ -699,13 +707,6 @@ class MaxwellSimNode(bpy.types.Node):
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
 			event_method(self)
-
-		# Stop Propagation (maybe)
-		if (
-			ct.DataFlowAction.stop_if_no_event_methods(action)
-			and len(triggered_event_methods) == 0
-		):
-			return
 
 		# Propagate Action to All Sockets in "Trigger Direction"
 		## The trigger chain goes node/socket/node/socket/...
