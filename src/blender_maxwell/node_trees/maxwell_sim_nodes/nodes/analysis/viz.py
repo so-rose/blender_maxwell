@@ -20,7 +20,7 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
+	input_sockets: typ.ClassVar = {
 		'Data': sockets.AnySocketDef(),
 		'Freq': sockets.PhysicalFreqSocketDef(),
 	}
@@ -72,19 +72,11 @@ class VizNode(base.MaxwellSimNode):
 		props: dict,
 		unit_systems: dict,
 	):
-		selected_data = jnp.array(
-			input_sockets['Data'].sel(f=input_sockets['Freq'], method='nearest')
-		)
-
-		managed_objs['plot'].xyzf_to_image(
-			selected_data,
+		managed_objs['plot'].map_2d_to_image(
+			input_sockets['Data'].as_bound_jax_func(),
 			colormap=props['colormap'],
 			bl_select=True,
 		)
-
-	# @events.on_init()
-	# def on_init(self):
-	# self.on_changed_inputs()
 
 
 ####################

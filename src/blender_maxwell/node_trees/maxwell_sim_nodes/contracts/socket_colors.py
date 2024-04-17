@@ -7,6 +7,7 @@ SOCKET_COLORS = {
 	ST.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.String: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
+	ST.Expr: (0.5, 0.5, 0.5, 1.0),  # Medium Grey
 	# Number
 	ST.IntegerNumber: (0.5, 0.5, 1.0, 1.0),  # Light Blue
 	ST.RationalNumber: (0.4, 0.4, 0.9, 1.0),  # Medium Light Blue

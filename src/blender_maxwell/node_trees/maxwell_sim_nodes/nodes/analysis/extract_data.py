@@ -1,8 +1,11 @@
 import typing as typ
 
 import bpy
+import jax.numpy as jnp
+import sympy.physics.units as spu
 
-from .....utils import logger
+from blender_maxwell.utils import jarray, logger
+
 from ... import contracts as ct
 from ... import sockets
 from .. import base, events
@@ -229,8 +232,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Data',
 		props={'sim_data__monitor_name', 'field_data__component'},
+		input_sockets={'Field Data'},
+		input_sockets_optional={'Field Data': True},
 	)
-	def compute_extracted_data(self, props: dict):
+	def compute_extracted_data(self, props: dict, input_sockets: dict):
 		if self.active_socket_set == 'Sim Data':
 			if (
 				CACHE_SIM_DATA.get(self.instance_id) is None
@@ -242,12 +247,21 @@ class ExtractDataNode(base.MaxwellSimNode):
 			return sim_data.monitor_data[props['sim_data__monitor_name']]
 
 		elif self.active_socket_set == 'Field Data':  # noqa: RET505
-			field_data = self._compute_input('Field Data')
-			return getattr(field_data, props['field_data__component'])
+			xarr = getattr(input_sockets['Field Data'], props['field_data__component'])
+
+			return jarray.JArray.from_xarray(
+				xarr,
+				dim_units={
+					'x': spu.um,
+					'y': spu.um,
+					'z': spu.um,
+					'f': spu.hertz,
+				},
+			)
 
 		elif self.active_socket_set == 'Flux Data':
 			flux_data = self._compute_input('Flux Data')
-			return flux_data.flux
+			return jnp.array(flux_data.flux)
 
 		msg = f'Tried to get data from unknown output socket in "{self.bl_label}"'
 		raise RuntimeError(msg)

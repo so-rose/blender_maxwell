@@ -42,6 +42,15 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 # - SocketDef
 ####################
 class MaxwellSimSocket(bpy.types.NodeSocket):
+	"""A specialized Blender socket for nodes in a Maxwell simulation.
+
+	Attributes:
+		instance_id: A unique ID attached to a particular socket instance.
+			Guaranteed to be unchanged so long as the socket lives.
+			Used as a socket-specific cache index.
+		locked: The lock-state of a particular socket, which determines the socket's user editability
+	"""
+
 	# Fundamentals
 	socket_type: ct.SocketType
 	bl_label: str
@@ -73,21 +82,53 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Initialization
 	####################
-	def __init_subclass__(cls, **kwargs: typ.Any):
-		super().__init_subclass__(**kwargs)
+	@classmethod
+	def set_prop(
+		cls,
+		prop_name: str,
+		prop: bpy.types.Property,
+		no_update: bool = False,
+		update_with_name: str | None = None,
+		**kwargs,
+	) -> None:
+		"""Adds a Blender property to a class via `__annotations__`, so it initializes with any subclass.
 
-		# Setup Blender ID for Node
-		if not hasattr(cls, 'socket_type'):
-			msg = f"Socket class {cls} does not define 'socket_type'"
-			raise ValueError(msg)
-		cls.bl_idname = str(cls.socket_type.value)
+		Notes:
+			- Blender properties can't be set within `__init_subclass__` simply by adding attributes to the class; they must be added as type annotations.
+			- Must be called **within** `__init_subclass__`.
 
-		# Setup Locked Property for Node
-		cls.__annotations__['locked'] = bpy.props.BoolProperty(
-			name='Locked State',
-			description="The lock-state of a particular socket, which determines the socket's user editability",
-			default=False,
+		Parameters:
+			name: The name of the property to set.
+			prop: The `bpy.types.Property` to instantiate and attach..
+			no_update: Don't attach a `self.sync_prop()` callback to the property's `update`.
+		"""
+		_update_with_name = prop_name if update_with_name is None else update_with_name
+		extra_kwargs = (
+			{
+				'update': lambda self, context: self.sync_prop(
+					_update_with_name, context
+				),
+			}
+			if not no_update
+			else {}
 		)
+		cls.__annotations__[prop_name] = prop(
+			**kwargs,
+			**extra_kwargs,
+		)
+
+	def __init_subclass__(cls, **kwargs: typ.Any):
+		log.debug('Initializing Socket: %s', cls.socket_type)
+		super().__init_subclass__(**kwargs)
+		# cls._assert_attrs_valid()
+
+		# Socket Properties
+		## Identifiers
+		cls.bl_idname: str = str(cls.socket_type.value)
+		cls.set_prop('instance_id', bpy.props.StringProperty, no_update=True)
+
+		## Special States
+		cls.set_prop('locked', bpy.props.BoolProperty, no_update=True, default=False)
 
 		# Setup Style
 		cls.socket_color = ct.SOCKET_COLORS[cls.socket_type]

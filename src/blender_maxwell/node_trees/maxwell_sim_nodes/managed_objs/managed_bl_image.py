@@ -38,8 +38,8 @@ def apply_colormap(normalized_data, colormap):
 
 
 @jax.jit
-def rgba_image_from_xyzf__viridis(xyz_freq):
-	amplitude = jnp.abs(jnp.squeeze(xyz_freq))
+def rgba_image_from_2d_map__viridis(map_2d):
+	amplitude = jnp.abs(map_2d)
 	amplitude_normalized = (amplitude - amplitude.min()) / (
 		amplitude.max() - amplitude.min()
 	)
@@ -49,8 +49,8 @@ def rgba_image_from_xyzf__viridis(xyz_freq):
 
 
 @jax.jit
-def rgba_image_from_xyzf__grayscale(xyz_freq):
-	amplitude = jnp.abs(jnp.squeeze(xyz_freq))
+def rgba_image_from_2d_map__grayscale(map_2d):
+	amplitude = jnp.abs(map_2d)
 	amplitude_normalized = (amplitude - amplitude.min()) / (
 		amplitude.max() - amplitude.min()
 	)
@@ -59,21 +59,19 @@ def rgba_image_from_xyzf__grayscale(xyz_freq):
 	return jnp.dstack((rgb_array, alpha_channel))
 
 
-def rgba_image_from_xyzf(xyz_freq, colormap: str | None = None):
-	"""RGBA Image from Squeezable XYZ-Freq w/fixed freq.
+def rgba_image_from_2d_map(map_2d, colormap: str | None = None):
+	"""RGBA Image from a map of 2D coordinates to values.
 
 	Parameters:
-		xyz_freq: Shape (xlen, ylen, zlen), one dimension has length 1.
-		width_px: Pixel width to resize the image to.
-		height: Pixel height to resize the image to.
+		map_2d: Shape (width, height, value).
 
 	Returns:
-		Image as a JAX array of shape (height, width, 3)
+		Image as a JAX array of shape (height, width, 4)
 	"""
 	if colormap == 'VIRIDIS':
-		return rgba_image_from_xyzf__viridis(xyz_freq)
+		return rgba_image_from_2d_map__viridis(map_2d)
 	if colormap == 'GRAYSCALE':
-		return rgba_image_from_xyzf__grayscale(xyz_freq)
+		return rgba_image_from_2d_map__grayscale(map_2d)
 
 
 class ManagedBLImage(base.ManagedObj):
@@ -227,11 +225,11 @@ class ManagedBLImage(base.ManagedObj):
 	####################
 	# - Special Methods
 	####################
-	def xyzf_to_image(
-		self, xyz_freq, colormap: str | None = 'VIRIDIS', bl_select: bool = False
+	def map_2d_to_image(
+		self, map_2d, colormap: str | None = 'VIRIDIS', bl_select: bool = False
 	):
 		self.data_to_image(
-			lambda _: rgba_image_from_xyzf(xyz_freq, colormap=colormap),
+			lambda _: rgba_image_from_2d_map(map_2d, colormap=colormap),
 			bl_select=bl_select,
 		)
 

@@ -14,6 +14,7 @@ class SocketType(BlenderTypeEnum):
 	String = enum.auto()
 	FilePath = enum.auto()
 	Color = enum.auto()
+	Expr = enum.auto()
 
 	# Number
 	IntegerNumber = enum.auto()

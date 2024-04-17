@@ -6,6 +6,7 @@ SOCKET_SHAPES = {
 	ST.Bool: 'CIRCLE',
 	ST.String: 'CIRCLE',
 	ST.FilePath: 'CIRCLE',
+	ST.Expr: 'CIRCLE',
 	# Number
 	ST.IntegerNumber: 'CIRCLE',
 	ST.RationalNumber: 'CIRCLE',
