@@ -5,7 +5,7 @@ import numpy as np
 import sympy.physics.units as spu
 import tidy3d as td
 
-from ......utils import extra_sympy_units as spuex
+from blender_maxwell.utils import extra_sympy_units as spuex
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events

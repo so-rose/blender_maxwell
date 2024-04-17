@@ -14,7 +14,7 @@ from pathlib import Path
 import tidy3d as td
 import tidy3d.web as td_web
 
-from ..utils import logger
+from blender_maxwell.utils import logger
 
 log = logger.get(__name__)
 

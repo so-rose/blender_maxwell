@@ -1,4 +1,4 @@
-from ....utils.blender_type_enum import BlenderTypeEnum
+from blender_maxwell.utils.blender_type_enum import BlenderTypeEnum
 
 
 class Icon(BlenderTypeEnum):

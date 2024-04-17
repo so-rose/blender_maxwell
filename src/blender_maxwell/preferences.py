@@ -127,7 +127,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		if pydeps.DEPS_OK:
 			log.info('Getting Logger (DEPS_OK = %s)', str(pydeps.DEPS_OK))
 			with pydeps.importable_addon_deps(self.pydeps_path):
-				from .utils import logger
+				from blender_maxwell.utils import logger
 		else:
 			log.info('Getting Simple Logger (DEPS_OK = %s)', str(pydeps.DEPS_OK))
 			logger = simple_logger

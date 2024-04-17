@@ -1,6 +1,6 @@
 import enum
 
-from ....utils.blender_type_enum import BlenderTypeEnum, wrap_values_in_MT
+from blender_maxwell.utils.blender_type_enum import BlenderTypeEnum, wrap_values_in_MT
 
 
 @wrap_values_in_MT

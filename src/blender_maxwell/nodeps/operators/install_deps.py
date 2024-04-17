@@ -5,7 +5,7 @@ from pathlib import Path
 import bpy
 
 from ... import registration
-from ..utils import pydeps, simple_logger
+from blender_maxwell.utils import pydeps, simple_logger
 
 log = simple_logger.get(__name__)
 

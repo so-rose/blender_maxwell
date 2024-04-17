@@ -3,7 +3,7 @@ from pathlib import Path
 
 import bpy
 
-from ..utils import pydeps
+from blender_maxwell.utils import pydeps
 
 
 class UninstallPyDeps(bpy.types.Operator):

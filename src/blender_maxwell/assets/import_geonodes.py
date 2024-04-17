@@ -8,7 +8,7 @@ import bpy
 import typing_extensions as typx
 
 from .. import info
-from ..utils import logger
+from blender_maxwell.utils import logger
 
 log = logger.get(__name__)
 

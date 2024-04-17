@@ -9,7 +9,7 @@ import matplotlib.axis as mpl_ax
 import numpy as np
 import typing_extensions as typx
 
-from ....utils import logger
+from blender_maxwell.utils import logger
 from .. import contracts as ct
 from . import base
 

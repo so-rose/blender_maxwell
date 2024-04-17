@@ -6,7 +6,7 @@ import typing as typ
 
 import bpy
 
-from ...utils import logger, serialize
+from blender_maxwell.utils import logger, serialize
 
 log = logger.get(__name__)
 

@@ -1,6 +1,6 @@
 import bpy
 
-from ..utils import logger as logger
+from blender_maxwell.utils import logger as logger
 
 log = logger.get(__name__)
 

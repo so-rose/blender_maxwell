@@ -4,9 +4,9 @@ import bpy
 import sympy as sp
 import sympy.physics.units as spu
 
-from .....utils import extra_sympy_units as spux
-from .....utils import logger
-from .....utils import sci_constants as constants
+from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
+from blender_maxwell.utils import sci_constants as constants
 from ... import contracts as ct
 from ... import sockets
 from .. import base, events

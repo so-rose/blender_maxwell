@@ -2,7 +2,7 @@ import typing as typ
 
 import bpy
 
-from ......utils import sci_constants as constants
+from blender_maxwell.utils import sci_constants as constants
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events

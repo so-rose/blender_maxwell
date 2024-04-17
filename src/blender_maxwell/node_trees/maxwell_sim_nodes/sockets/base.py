@@ -7,7 +7,7 @@ import pydantic as pyd
 import sympy as sp
 import typing_extensions as typx
 
-from ....utils import logger, serialize
+from blender_maxwell.utils import logger, serialize
 from .. import contracts as ct
 
 log = logger.get(__name__)

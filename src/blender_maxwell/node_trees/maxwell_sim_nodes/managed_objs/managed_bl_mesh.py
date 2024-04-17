@@ -4,7 +4,7 @@ import bmesh
 import bpy
 import numpy as np
 
-from ....utils import logger
+from blender_maxwell.utils import logger
 from .. import contracts as ct
 from . import base
 from .managed_bl_collection import managed_collection, preview_collection

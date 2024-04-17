@@ -3,7 +3,7 @@ import inspect
 import typing as typ
 from types import MappingProxyType
 
-from ....utils import logger
+from blender_maxwell.utils import logger
 from .. import contracts as ct
 
 log = logger.get(__name__)

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from ...... import info
 from ......services import tdcloud
-from ......utils import logger
+from blender_maxwell.utils import logger
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events

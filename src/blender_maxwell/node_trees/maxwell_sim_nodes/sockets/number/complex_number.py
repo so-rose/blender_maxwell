@@ -3,7 +3,7 @@ import typing as typ
 import bpy
 import sympy as sp
 
-from .....utils.pydantic_sympy import SympyExpr
+from blender_maxwell.utils.pydantic_sympy import SympyExpr
 from ... import contracts as ct
 from .. import base
 

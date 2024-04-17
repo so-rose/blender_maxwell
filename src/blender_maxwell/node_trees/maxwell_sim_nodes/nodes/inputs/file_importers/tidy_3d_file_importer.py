@@ -5,7 +5,7 @@ import bpy
 import tidy3d as td
 import tidy3d.plugins.dispersion as td_dispersion
 
-from ......utils import logger
+from blender_maxwell.utils import logger
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events

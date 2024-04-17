@@ -1,7 +1,7 @@
 import bpy
 import sympy as sp
 
-from .....utils.pydantic_sympy import ConstrSympyExpr
+from blender_maxwell.utils.pydantic_sympy import ConstrSympyExpr
 from ... import contracts as ct
 from .. import base
 

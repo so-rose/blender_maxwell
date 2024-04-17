@@ -5,7 +5,7 @@ import typing as typ
 import bpy
 import typing_extensions as typx
 
-from ....utils import analyze_geonodes, logger
+from blender_maxwell.utils import analyze_geonodes, logger
 from .. import bl_socket_map
 from .. import contracts as ct
 from . import base
