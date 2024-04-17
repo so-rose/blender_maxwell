@@ -343,7 +343,7 @@ class MaxwellSimTree(bpy.types.NodeTree):
 				## The link has already been removed, but we can fix that.
 				## If NO: Queue re-adding the link (safe since the sockets exist)
 				## TODO: Crash if deleting removing linked loose sockets.
-				consent_removal = to_socket.sync_link_removed(from_socket)
+				consent_removal = to_socket.allow_remove_link(from_socket)
 				if not consent_removal:
 					link_corrections['to_add'].append((from_socket, to_socket))
 
@@ -354,12 +354,14 @@ class MaxwellSimTree(bpy.types.NodeTree):
 			# Retrieve Link Reference
 			link = self.node_link_cache.link_ptrs_as_links[link_ptr]
 
-			# Ask 'to_socket' for Consent to Remove Link
+			# Ask 'to_socket' for Consent to Add Link
 			## The link has already been added, but we can fix that.
 			## If NO: Queue re-adding the link (safe since the sockets exist)
-			consent_added = link.to_socket.sync_link_added(link)
+			consent_added = link.to_socket.allow_add_link(link)
 			if not consent_added:
 				link_corrections['to_remove'].append(link)
+			else:
+				link.to_socket.on_link_added(link)
 
 		# Link Corrections
 		## ADD: Links that 'to_socket' don't want removed.

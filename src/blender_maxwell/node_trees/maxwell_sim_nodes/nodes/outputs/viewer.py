@@ -124,7 +124,7 @@ class ViewerNode(base.MaxwellSimNode):
 	)
 	def on_changed_plot_preview(self, props):
 		if self.inputs['Data'].is_linked and props['auto_plot']:
-			self.trigger_action(ct.DataFlowAction.ShowPlot)
+			self.trigger_event(ct.FlowEvent.ShowPlot)
 
 	@events.on_value_changed(
 		socket_name='Data',
@@ -137,7 +137,7 @@ class ViewerNode(base.MaxwellSimNode):
 		# Remove Non-Repreviewed Previews on Close
 		with node_tree.repreview_all():
 			if self.inputs['Data'].is_linked and props['auto_3d_preview']:
-				self.trigger_action(ct.DataFlowAction.ShowPreview)
+				self.trigger_event(ct.FlowEvent.ShowPreview)
 
 
 ####################

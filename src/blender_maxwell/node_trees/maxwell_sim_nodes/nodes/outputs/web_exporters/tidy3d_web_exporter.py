@@ -180,7 +180,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	####################
 	def sync_lock_tree(self, context):
 		if self.lock_tree:
-			self.trigger_action(ct.DataFlowAction.EnableLock)
+			self.trigger_event(ct.FlowEvent.EnableLock)
 			self.locked = False
 			for bl_socket in self.inputs:
 				if bl_socket.name == 'FDTD Sim':
@@ -188,7 +188,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 				bl_socket.locked = False
 
 		else:
-			self.trigger_action(ct.DataFlowAction.DisableLock)
+			self.trigger_event(ct.FlowEvent.DisableLock)
 
 		self.sync_prop('lock_tree', context)
 

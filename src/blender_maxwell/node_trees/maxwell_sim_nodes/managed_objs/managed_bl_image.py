@@ -23,6 +23,9 @@ _MPL_CM = matplotlib.cm.get_cmap('viridis', 512)
 VIRIDIS_COLORMAP = jnp.array([_MPL_CM(i)[:3] for i in range(512)])
 
 
+####################
+# - Image Functions
+####################
 def apply_colormap(normalized_data, colormap):
 	# Linear interpolation between colormap points
 	n_colors = colormap.shape[0]
@@ -74,6 +77,9 @@ def rgba_image_from_2d_map(map_2d, colormap: str | None = None):
 		return rgba_image_from_2d_map__grayscale(map_2d)
 
 
+####################
+# - Managed BL Image
+####################
 class ManagedBLImage(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLImage
 	_bl_image_name: str
@@ -170,7 +176,7 @@ class ManagedBLImage(base.ManagedObj):
 			)
 
 	####################
-	# - Actions
+	# - Methods
 	####################
 	def bl_select(self) -> None:
 		"""Synchronizes the managed object to the preview, by manipulating

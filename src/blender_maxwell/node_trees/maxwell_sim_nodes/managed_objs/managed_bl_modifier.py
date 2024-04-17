@@ -12,8 +12,6 @@ from . import base
 
 log = logger.get(__name__)
 
-ModifierType: typ.TypeAlias = typx.Literal['NODES', 'ARRAY']
-NodeTreeInterfaceID: typ.TypeAlias = str
 UnitSystem: typ.TypeAlias = typ.Any
 
 
@@ -33,7 +31,7 @@ class ModifierAttrsNODES(typ.TypedDict):
 
 	node_group: bpy.types.GeometryNodeTree
 	unit_system: UnitSystem
-	inputs: dict[NodeTreeInterfaceID, typ.Any]
+	inputs: dict[ct.BLNodeTreeInterfaceID, typ.Any]
 
 
 class ModifierAttrsARRAY(typ.TypedDict):
@@ -222,7 +220,7 @@ class ManagedBLModifier(base.ManagedObj):
 	def bl_modifier(
 		self,
 		bl_object: bpy.types.Object,
-		modifier_type: ModifierType,
+		modifier_type: ct.BLModifierType,
 		modifier_attrs: ModifierAttrs,
 	):
 		"""Creates a new modifier for the current `bl_object`.

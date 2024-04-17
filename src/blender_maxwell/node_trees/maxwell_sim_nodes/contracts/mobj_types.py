@@ -1,6 +1,6 @@
 import enum
 
-from ....utils.blender_type_enum import BlenderTypeEnum
+from blender_maxwell.blender_type_enum import BlenderTypeEnum
 
 
 class ManagedObjType(BlenderTypeEnum):

@@ -98,7 +98,7 @@ class ManagedBLMesh(base.ManagedObj):
 		bpy.data.meshes.remove(bl_object.data)
 
 	####################
-	# - Actions
+	# - Methods
 	####################
 	def show_preview(self) -> None:
 		"""Moves the managed Blender object to the preview collection.

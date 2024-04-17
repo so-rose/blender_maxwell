@@ -17,25 +17,68 @@ log = logger.get(__name__)
 # - SocketDef
 ####################
 class SocketDef(pyd.BaseModel, abc.ABC):
+	"""Defines everything needed to initialize a `MaxwellSimSocket`.
+
+	Used by nodes to specify which sockets to use as inputs/outputs.
+
+	Notes:
+		Not instantiated directly - rather, individual sockets each define a SocketDef subclass tailored to its own needs.
+
+	Attributes:
+		socket_type: The socket type to initialize.
+	"""
+
 	socket_type: ct.SocketType
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
-		"""Initializes a real Blender node socket from this socket definition."""
+		"""Initializes a real Blender node socket from this socket definition.
+
+		Parameters:
+			bl_socket: The Blender node socket to alter using data from this SocketDef.
+		"""
 
 	####################
 	# - Serialization
 	####################
 	def dump_as_msgspec(self) -> serialize.NaiveRepresentation:
+		"""Transforms this `SocketDef` into an object that can be natively serialized by `msgspec`.
+
+		Notes:
+			Makes use of `pydantic.BaseModel.model_dump()` to cast any special fields into a serializable format.
+			If this method is failing, check that `pydantic` can actually cast all the fields in your model.
+
+		Returns:
+			A particular `list`, with three elements:
+
+			1. The `serialize`-provided "Type Identifier", to differentiate this list from generic list.
+			2. The name of this subclass, so that the correct `SocketDef` can be reconstructed on deserialization.
+			3. A dictionary containing simple Python types, as cast by `pydantic`.
+		"""
 		return [serialize.TypeID.SocketDef, self.__class__.__name__, self.model_dump()]
 
 	@staticmethod
 	def parse_as_msgspec(obj: serialize.NaiveRepresentation) -> typ.Self:
-		return next(
+		"""Transforms an object made by `self.dump_as_msgspec()` into a subclass of `SocketDef`.
+
+		Notes:
+			The method presumes that the deserialized object produced by `msgspec` perfectly matches the object originally created by `self.dump_as_msgspec()`.
+
+			This is a **mostly robust** presumption, as `pydantic` attempts to be quite consistent in how to interpret types with almost identical semantics.
+			Still, yet-unknown edge cases may challenge these presumptions.
+
+		Returns:
+			A new subclass of `SocketDef`, initialized using the `model_dump()` dictionary.
+		"""
+		initialized_classes = [
 			subclass(**obj[2])
 			for subclass in SocketDef.__subclasses__()
 			if subclass.__name__ == obj[1]
-		)
+		]
+		if not initialized_classes:
+			msg = f'No "SocketDef" subclass found for name {obj[1]}. Please report this error'
+			RuntimeError(msg)
+		return next(initialized_classes)
 
 
 ####################
@@ -72,7 +115,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	socket_color: tuple
 
 	# Options
-	# link_limit: int = 0
 	use_units: bool = False
 	use_prelock: bool = False
 
@@ -132,14 +174,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Setup Style
 		cls.socket_color = ct.SOCKET_COLORS[cls.socket_type]
-		cls.socket_shape = ct.SOCKET_SHAPES[cls.socket_type]
 
 		# Setup List
-		cls.__annotations__['active_kind'] = bpy.props.StringProperty(
-			name='Active Kind',
-			description='The active Data Flow Kind',
-			default=str(ct.FlowKind.Value),
-			update=lambda self, _: self.sync_active_kind(),
+		cls.set_prop(
+			'active_kind', bpy.props.StringProperty, default=str(ct.FlowKind.Value)
 		)
 
 		# Configure Use of Units
@@ -169,86 +207,116 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			)
 
 	####################
-	# - Action Chain
+	# - Event Chain
 	####################
-	def trigger_action(
+	def trigger_event(
 		self,
-		action: ct.DataFlowAction,
+		event: ct.FlowEvent,
 	) -> None:
 		"""Called whenever the socket's output value has changed.
 
 		This also invalidates any of the socket's caches.
 
 		When called on an input node, the containing node's
-		`trigger_action` method will be called with this socket.
+		`trigger_event` method will be called with this socket.
 
 		When called on a linked output node, the linked socket's
-		`trigger_action` method will be called.
+		`trigger_event` method will be called.
 		"""
 		# Forwards Chains
-		if action in {ct.DataFlowAction.DataChanged}:
+		if event in {ct.FlowEvent.DataChanged}:
 			## Input Socket
 			if not self.is_output:
-				self.node.trigger_action(action, socket_name=self.name)
+				self.node.trigger_event(event, socket_name=self.name)
 
 			## Linked Output Socket
 			elif self.is_output and self.is_linked:
 				for link in self.links:
-					link.to_socket.trigger_action(action)
+					link.to_socket.trigger_event(event)
 
 		# Backwards Chains
-		elif action in {
-			ct.DataFlowAction.EnableLock,
-			ct.DataFlowAction.DisableLock,
-			ct.DataFlowAction.OutputRequested,
-			ct.DataFlowAction.DataChanged,
-			ct.DataFlowAction.ShowPreview,
-			ct.DataFlowAction.ShowPlot,
+		elif event in {
+			ct.FlowEvent.EnableLock,
+			ct.FlowEvent.DisableLock,
+			ct.FlowEvent.OutputRequested,
+			ct.FlowEvent.DataChanged,
+			ct.FlowEvent.ShowPreview,
+			ct.FlowEvent.ShowPlot,
 		}:
-			if action == ct.DataFlowAction.EnableLock:
+			if event == ct.FlowEvent.EnableLock:
 				self.locked = True
 
-			if action == ct.DataFlowAction.DisableLock:
+			if event == ct.FlowEvent.DisableLock:
 				self.locked = False
 
 			## Output Socket
 			if self.is_output:
-				self.node.trigger_action(action, socket_name=self.name)
+				self.node.trigger_event(event, socket_name=self.name)
 
 			## Linked Input Socket
 			elif not self.is_output and self.is_linked:
 				for link in self.links:
-					link.from_socket.trigger_action(action)
+					link.from_socket.trigger_event(event)
 
 	####################
-	# - Action Chain: Event Handlers
+	# - Event Chain: Event Handlers
 	####################
-	def sync_active_kind(self):
-		"""Called when the active data flow kind of the socket changes.
+	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
+		"""Called when a property has been updated.
 
-		Alters the shape of the socket to match the active FlowKind, then triggers `ct.DataFlowAction.DataChanged` on the current socket.
+		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
+
+		- **Active Kind** (`active_kind`): Sets the socket shape to reflect the active `FlowKind`.
+
+		Attributes:
+			prop_name: The name of the property that was changed.
 		"""
-		self.display_shape = {
-			ct.FlowKind.Value: ct.SOCKET_SHAPES[self.socket_type],
-			ct.FlowKind.ValueArray: 'SQUARE',
-			ct.FlowKind.ValueSpectrum: 'SQUARE',
-			ct.FlowKind.LazyValue: ct.SOCKET_SHAPES[self.socket_type],
-			ct.FlowKind.LazyValueRange: 'SQUARE',
-			ct.FlowKind.LazyValueSpectrum: 'SQUARE',
-		}[self.active_kind] + ('_DOT' if self.use_units else '')
+		# Property: Active Kind
+		if prop_name == 'active_kind':
+			self.display_shape(
+				'SQUARE'
+				if self.active_kind
+				in {ct.FlowKind.LazyValue, ct.FlowKind.LazyValueRange}
+				else 'CIRCLE'
+			) + ('_DOT' if self.use_units else '')
 
-		self.trigger_action(ct.DataFlowAction.DataChanged)
+		# Valid Properties
+		elif hasattr(self, prop_name):
+			self.trigger_event(ct.FlowEvent.DataChanged)
 
-	def sync_prop(self, prop_name: str, _: bpy.types.Context):
-		"""Called when a property has been updated."""
-		if hasattr(self, prop_name):
-			self.trigger_action(ct.DataFlowAction.DataChanged)
+		# Undefined Properties
 		else:
 			msg = f'Property {prop_name} not defined on socket {self}'
 			raise RuntimeError(msg)
 
-	def sync_link_added(self, link) -> bool:
-		"""Called when a link has been added to this (input) socket."""
+	def allow_add_link(self, link: bpy.types.NodeLink) -> bool:
+		"""Called to ask whether a link may be added to this (input) socket.
+
+		- **Locked**: Locked sockets may not have links added.
+		- **Capabilities**: Capabilities of both sockets participating in the link must be compatible.
+
+		Notes:
+			In practice, the link in question has already been added.
+			This function determines **whether the new link should be instantly removed** - if so, the removal producing the _practical effect_ of the link "not being added" at all.
+
+
+		Attributes:
+			link: The node link that was already added, whose continued existance is in question.
+
+		Returns:
+			Whether or not consent is given to add the link.
+			In practice, the link will simply remain if consent is given.
+			If consent is not given, the new link will be removed.
+
+		Raises:
+			RuntimeError: If this socket is an output socket.
+		"""
+		# Output Socket Check
+		if self.is_output:
+			msg = 'Tried to ask output socket for consent to add link'
+			raise RuntimeError(msg)
+
+		# Lock Check
 		if self.locked:
 			log.error(
 				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but input socket is locked',
@@ -258,36 +326,66 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 				self.capabilities,
 			)
 			return False
+
+		# Capability Check
 		if not link.from_socket.capabilities.is_compatible_with(self.capabilities):
 			log.error(
-				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but capabilities are invalid',
+				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but capabilities are incompatible',
 				link.from_socket.bl_label,
 				link.from_socket.capabilities,
 				self.bl_label,
 				self.capabilities,
 			)
 			return False
-		if self.is_output:
-			msg = "Tried to sync 'link add' on output socket"
-			raise RuntimeError(msg)
-
-		self.trigger_action(ct.DataFlowAction.DataChanged)
 
 		return True
 
-	def sync_link_removed(self, from_socket) -> bool:
-		"""Called when a link has been removed from this (input) socket.
+	def on_link_added(self, link: bpy.types.NodeLink) -> None:
+		"""Triggers a `ct.FlowEvent.LinkChanged` event on link add.
 
-		Returns a bool, whether or not the socket consents to the link change.
+		Attributes:
+			link: The node link that was added.
+				Currently unused.
+
+		Returns:
+			Whether or not consent is given to add the link.
+			In practice, the link will simply remain if consent is given.
+			If consent is not given, the new link will be removed.
 		"""
-		if self.locked:
-			return False
+		self.trigger_event(ct.FlowEvent.DataChanged)
+
+	def allow_remove_link(self, from_socket: bpy.types.NodeSocket) -> bool:
+		"""Called to ask whether a link may be removed from this `to_socket`.
+
+		- **Locked**: Locked sockets may not have links removed.
+		- **Capabilities**: Capabilities of both sockets participating in the link must be compatible.
+
+		Notes:
+			In practice, the link in question has already been removed.
+			Therefore, only the `from_socket` that the link _was_ attached to is provided.
+
+		Attributes:
+			from_socket: The node socket that was attached to before link removal.
+				Currently unused.
+
+		Returns:
+			Whether or not consent is given to remove the link.
+			If so, nothing will happen.
+			If consent is not given, a new link will be added that is identical to the old one.
+
+		Raises:
+			RuntimeError: If this socket is an output socket.
+		"""
+		# Output Socket Check
 		if self.is_output:
 			msg = "Tried to sync 'link add' on output socket"
 			raise RuntimeError(msg)
 
-		self.trigger_action(ct.DataFlowAction.DataChanged)
+		# Lock Check
+		if self.locked:
+			return False
 
+		self.trigger_event(ct.FlowEvent.DataChanged)
 		return True
 
 	####################

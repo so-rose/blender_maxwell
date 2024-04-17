@@ -36,7 +36,7 @@
 	- Output: Write the input socket value.
 	- Condition: Input socket is unlinked. (If it's linked, then lock the object's position. Use sync_link_added() for that)
 - Node to BL:
-	- Trigger: "Report" action on an input socket that the managed object declares reliance on.
+	- Trigger: "Report" event on an input socket that the managed object declares reliance on.
 	- Input: The input socket value (linked or unlinked)
 	- Output: The object location (origin), using a unit system.
 

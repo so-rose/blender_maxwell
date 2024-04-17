@@ -121,28 +121,26 @@ class MaxwellSimNode(bpy.types.Node):
 
 	@classmethod
 	def _gather_event_methods(cls) -> dict[str, typ.Callable[[], None]]:
-		"""Gathers all methods called in response to actions/events observed by the node.
+		"""Gathers all methods called in response to events observed by the node.
 
 		Notes:
-			- 'Event methods' must have an attribute 'action_type' in order to be picked up.
-			- 'Event methods' must have an attribute 'action_type'.
+			- 'Event methods' must have an attribute 'event' in order to be picked up.
+			- 'Event methods' must have an attribute 'event'.
 
 		Returns:
-			Event methods, indexed by the action that (maybe) triggers them.
+			Event methods, indexed by the event that (maybe) triggers them.
 		"""
 		event_methods = [
 			method
 			for attr_name in dir(cls)
-			if hasattr(method := getattr(cls, attr_name), 'action_type')
-			and method.action_type in set(ct.DataFlowAction)
+			if hasattr(method := getattr(cls, attr_name), 'event')
+			and method.event in set(ct.FlowEvent)
 		]
-		event_methods_by_action = {
-			action_type: [] for action_type in set(ct.DataFlowAction)
-		}
+		event_methods_by_event = {event: [] for event in set(ct.FlowEvent)}
 		for method in event_methods:
-			event_methods_by_action[method.action_type].append(method)
+			event_methods_by_event[method.event].append(method)
 
-		return event_methods_by_action
+		return event_methods_by_event
 
 	@classmethod
 	def socket_set_names(cls) -> list[str]:
@@ -185,7 +183,7 @@ class MaxwellSimNode(bpy.types.Node):
 		cls.set_prop('locked', bpy.props.BoolProperty, no_update=True, default=False)
 
 		## Event Method Callbacks
-		cls.event_methods_by_action = cls._gather_event_methods()
+		cls.event_methods_by_event = cls._gather_event_methods()
 
 		## Active Socket Set
 		if len(cls.input_socket_sets) + len(cls.output_socket_sets) > 0:
@@ -483,25 +481,22 @@ class MaxwellSimNode(bpy.types.Node):
 	# - Event Methods
 	####################
 	@property
-	def _event_method_filter_by_action(self) -> dict[ct.DataFlowAction, typ.Callable]:
-		"""Compute a map of DataFlowActions, to a function that filters its event methods.
+	def _event_method_filter_by_event(self) -> dict[ct.FlowEvent, typ.Callable]:
+		"""Compute a map of FlowEvents, to a function that filters its event methods.
 
 		The returned filter functions are hard-coded, and must always return a `bool`.
 		They may use attributes of `self`, always return `True` or `False`, or something different.
 
 		Notes:
-			This is an internal method; you probably want `self.filtered_event_methods_by_action`.
+			This is an internal method; you probably want `self.filtered_event_methods_by_event`.
 
 		Returns:
-			The map of `ct.DataFlowAction` to a function that can determine whether any `event_method` should be run.
+			The map of `ct.FlowEvent` to a function that can determine whether any `event_method` should be run.
 		"""
 		return {
-			ct.DataFlowAction.EnableLock: lambda *_: True,
-			ct.DataFlowAction.DisableLock: lambda *_: True,
-			ct.DataFlowAction.DataChanged: lambda event_method,
-			socket_name,
-			prop_name,
-			_: (
+			ct.FlowEvent.EnableLock: lambda *_: True,
+			ct.FlowEvent.DisableLock: lambda *_: True,
+			ct.FlowEvent.DataChanged: lambda event_method, socket_name, prop_name, _: (
 				(
 					socket_name
 					and socket_name in event_method.callback_info.on_changed_sockets
@@ -516,7 +511,7 @@ class MaxwellSimNode(bpy.types.Node):
 					and socket_name in self.loose_input_sockets
 				)
 			),
-			ct.DataFlowAction.OutputRequested: lambda output_socket_method,
+			ct.FlowEvent.OutputRequested: lambda output_socket_method,
 			output_socket_name,
 			_,
 			kind: (
@@ -526,26 +521,26 @@ class MaxwellSimNode(bpy.types.Node):
 					== output_socket_method.callback_info.output_socket_name
 				)
 			),
-			ct.DataFlowAction.ShowPreview: lambda *_: True,
-			ct.DataFlowAction.ShowPlot: lambda *_: True,
+			ct.FlowEvent.ShowPreview: lambda *_: True,
+			ct.FlowEvent.ShowPlot: lambda *_: True,
 		}
 
-	def filtered_event_methods_by_action(
+	def filtered_event_methods_by_event(
 		self,
-		action: ct.DataFlowAction,
+		event: ct.FlowEvent,
 		_filter: tuple[ct.SocketName, str],
 	) -> list[typ.Callable]:
 		"""Return all event methods that should run, given the context provided by `_filter`.
 
-		The inclusion decision is made by the internal property `self._event_method_filter_by_action`.
+		The inclusion decision is made by the internal property `self._event_method_filter_by_event`.
 
 		Returns:
 			All `event_method`s that should run, as callable objects (they can be run using `event_method(self)`).
 		"""
 		return [
 			event_method
-			for event_method in self.event_methods_by_action[action]
-			if self._event_method_filter_by_action[action](event_method, *_filter)
+			for event_method in self.event_methods_by_event[event]
+			if self._event_method_filter_by_event[event](event_method, *_filter)
 		]
 
 	####################
@@ -591,7 +586,7 @@ class MaxwellSimNode(bpy.types.Node):
 		raise ValueError(msg)
 
 	####################
-	# - Compute Action: Output Socket
+	# - Compute Event: Output Socket
 	####################
 	@bl_cache.keyed_cache(
 		exclude={'self', 'optional'},
@@ -619,8 +614,8 @@ class MaxwellSimNode(bpy.types.Node):
 			msg = f"Can't compute nonexistent output socket name {output_socket_name}, as it's not currently active"
 			raise RuntimeError(msg)
 
-		output_socket_methods = self.filtered_event_methods_by_action(
-			ct.DataFlowAction.OutputRequested,
+		output_socket_methods = self.filtered_event_methods_by_event(
+			ct.FlowEvent.OutputRequested,
 			(output_socket_name, None, kind),
 		)
 
@@ -636,7 +631,7 @@ class MaxwellSimNode(bpy.types.Node):
 		raise ValueError(msg)
 
 	####################
-	# - Action Trigger
+	# - Event Trigger
 	####################
 	def _should_recompute_output_socket(
 		self,
@@ -657,25 +652,25 @@ class MaxwellSimNode(bpy.types.Node):
 			)
 		)
 
-	def trigger_action(
+	def trigger_event(
 		self,
-		action: ct.DataFlowAction,
+		event: ct.FlowEvent,
 		socket_name: ct.SocketName | None = None,
 		prop_name: ct.SocketName | None = None,
 	) -> None:
-		"""Recursively triggers actions/events forwards or backwards along the node tree, allowing nodes in the update path to react.
+		"""Recursively triggers events forwards or backwards along the node tree, allowing nodes in the update path to react.
 
-		Use `events` decorators to define methods that react to particular `ct.DataFlowAction`s.
+		Use `events` decorators to define methods that react to particular `ct.FlowEvent`s.
 
 		Notes:
 			This can be an unpredictably heavy function, depending on the node graph topology.
 
 		Parameters:
-			action: The action/event to report forwards/backwards along the node tree.
+			event: The event to report forwards/backwards along the node tree.
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
-		if action == ct.DataFlowAction.DataChanged:
+		if event == ct.FlowEvent.DataChanged:
 			input_socket_name = socket_name  ## Trigger direction is forwards
 
 			# Invalidate Input Socket Cache
@@ -687,8 +682,8 @@ class MaxwellSimNode(bpy.types.Node):
 				)
 
 			# Invalidate Output Socket Cache
-			for output_socket_method in self.event_methods_by_action[
-				ct.DataFlowAction.OutputRequested
+			for output_socket_method in self.event_methods_by_event[
+				ct.FlowEvent.OutputRequested
 			]:
 				method_info = output_socket_method.callback_info
 				if self._should_recompute_output_socket(
@@ -701,24 +696,24 @@ class MaxwellSimNode(bpy.types.Node):
 
 		# Run Triggered Event Methods
 		stop_propagation = False
-		triggered_event_methods = self.filtered_event_methods_by_action(
-			action, (socket_name, prop_name, None)
+		triggered_event_methods = self.filtered_event_methods_by_event(
+			event, (socket_name, prop_name, None)
 		)
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
 			event_method(self)
 
-		# Propagate Action to All Sockets in "Trigger Direction"
+		# Propagate Event to All Sockets in "Trigger Direction"
 		## The trigger chain goes node/socket/node/socket/...
 		if not stop_propagation:
 			triggered_sockets = self._bl_sockets(
-				direc=ct.DataFlowAction.trigger_direction(action)
+				direc=ct.FlowEvent.flow_direction[event]
 			)
 			for bl_socket in triggered_sockets:
-				bl_socket.trigger_action(action)
+				bl_socket.trigger_event(event)
 
 	####################
-	# - Property Action: On Update
+	# - Property Event: On Update
 	####################
 	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Report that a particular property has changed, which may cause certain caches to regenerate.
@@ -732,7 +727,7 @@ class MaxwellSimNode(bpy.types.Node):
 			prop_name: The name of the property that changed.
 		"""
 		if hasattr(self, prop_name):
-			self.trigger_action(ct.DataFlowAction.DataChanged, prop_name=prop_name)
+			self.trigger_event(ct.FlowEvent.DataChanged, prop_name=prop_name)
 		else:
 			msg = f'Property {prop_name} not defined on node {self}'
 			raise RuntimeError(msg)
@@ -864,9 +859,7 @@ class MaxwellSimNode(bpy.types.Node):
 		## -> Compromise: Users explicitly say 'run_on_init' in @on_value_changed
 		for event_method in [
 			event_method
-			for event_method in self.event_methods_by_action[
-				ct.DataFlowAction.DataChanged
-			]
+			for event_method in self.event_methods_by_event[ct.FlowEvent.DataChanged]
 			if event_method.callback_info.run_on_init
 		]:
 			event_method(self)
@@ -915,7 +908,7 @@ class MaxwellSimNode(bpy.types.Node):
 			bl_socket.is_linked and bl_socket.locked
 			for bl_socket in self.inputs.values()
 		):
-			self.trigger_action(ct.DataFlowAction.DisableLock)
+			self.trigger_event(ct.FlowEvent.DisableLock)
 
 		# Free Managed Objects
 		for managed_obj in self.managed_objs.values():

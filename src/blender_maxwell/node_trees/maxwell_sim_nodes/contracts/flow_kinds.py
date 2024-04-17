@@ -12,7 +12,6 @@ import sympy.physics.units as spu
 import typing_extensions as typx
 
 from ....utils import extra_sympy_units as spux
-from ....utils import sci_constants as constants
 from .socket_types import SocketType
 
 
@@ -37,10 +36,8 @@ class FlowKind(enum.StrEnum):
 			Can be used to represent computations for which all data is not yet known, or for which just-in-time compilation can drastically increase performance.
 		LazyArrayRange: An object that generates an `Array` from range information (start/stop/step/spacing).
 			This should be used instead of `Array` whenever possible.
-		Param: An object providing data to complete `Lazy` data.
-			For example,
-		Info: An object providing context about other flows.
-			For example,
+		Param: A dictionary providing particular parameters for a lazy value.
+		Info: An dictionary providing extra context about any aspect of flow.
 	"""
 
 	Capabilities = enum.auto()

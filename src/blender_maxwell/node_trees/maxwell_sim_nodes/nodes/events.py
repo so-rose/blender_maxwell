@@ -50,7 +50,7 @@ PropName: typ.TypeAlias = str
 
 
 def event_decorator(
-	action_type: ct.DataFlowAction,
+	event: ct.FlowEvent,
 	callback_info: EventCallbackInfo | None,
 	stop_propagation: bool = False,
 	# Request Data for Callback
@@ -72,10 +72,10 @@ def event_decorator(
 	"""Returns a decorator for a method of `MaxwellSimNode`, declaring it as able respond to events passing through a node.
 
 	Parameters:
-		action_type: A name describing which event the decorator should respond to.
-			Set to `return_method.action_type`
-		callback_info: A dictionary that provides the caller with additional per-`action_type` information.
-			This might include parameters to help select the most appropriate method(s) to respond to an event with, or actions to take after running the callback.
+		event: A name describing which event the decorator should respond to.
+			Set to `return_method.event`
+		callback_info: A dictionary that provides the caller with additional per-`event` information.
+			This might include parameters to help select the most appropriate method(s) to respond to an event with, or events to take after running the callback.
 		props: Set of `props` to compute, then pass to the decorated method.
 		stop_propagation: Whether or stop propagating the event through the graph after encountering this method.
 			Other methods defined on the same node will still run.
@@ -93,7 +93,7 @@ def event_decorator(
 		A decorator, which can be applied to a method of `MaxwellSimNode`.
 		When a `MaxwellSimNode` subclass initializes, such a decorated method will be picked up on.
 
-		When the `action_type` action passes through the node, then `callback_info` is used to determine
+		When `event` passes through the node, then `callback_info` is used to determine
 	"""
 	req_params = (
 		{'self'}
@@ -252,14 +252,14 @@ def event_decorator(
 			)
 
 		# Set Decorated Attributes and Return
-		## Fix Introspection + Documentation
+		## TODO: Fix Introspection + Documentation
 		# decorated.__name__ = method.__name__
 		# decorated.__module__ = method.__module__
 		# decorated.__qualname__ = method.__qualname__
-		# decorated.__doc__ = method.__doc__
+		decorated.__doc__ = method.__doc__
 
 		## Add Spice
-		decorated.action_type = action_type
+		decorated.event = event
 		decorated.callback_info = callback_info
 		decorated.stop_propagation = stop_propagation
 
@@ -275,7 +275,7 @@ def on_enable_lock(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.EnableLock,
+		event=ct.FlowEvent.EnableLock,
 		callback_info=None,
 		**kwargs,
 	)
@@ -285,7 +285,7 @@ def on_disable_lock(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.DisableLock,
+		event=ct.FlowEvent.DisableLock,
 		callback_info=None,
 		**kwargs,
 	)
@@ -300,7 +300,7 @@ def on_value_changed(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.DataChanged,
+		event=ct.FlowEvent.DataChanged,
 		callback_info=InfoDataChanged(
 			run_on_init=run_on_init,
 			on_changed_sockets=(
@@ -320,7 +320,7 @@ def computes_output_socket(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.OutputRequested,
+		event=ct.FlowEvent.OutputRequested,
 		callback_info=InfoOutputRequested(
 			output_socket_name=output_socket_name,
 			kind=kind,
@@ -342,7 +342,7 @@ def on_show_preview(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.ShowPreview,
+		event=ct.FlowEvent.ShowPreview,
 		callback_info={},
 		**kwargs,
 	)
@@ -353,7 +353,7 @@ def on_show_plot(
 	**kwargs,
 ):
 	return event_decorator(
-		action_type=ct.DataFlowAction.ShowPlot,
+		event=ct.FlowEvent.ShowPlot,
 		callback_info={},
 		stop_propagation=stop_propagation,
 		**kwargs,
