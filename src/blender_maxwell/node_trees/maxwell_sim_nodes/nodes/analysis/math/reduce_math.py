@@ -81,7 +81,7 @@ class ReduceMathNode(base.MaxwellSimNode):
 		'Data',
 		props={'operation'},
 		input_sockets={'Data', 'Axis', 'Reducer'},
-		input_socket_kinds={'Reducer': ct.DataFlowKind.LazyValue},
+		input_socket_kinds={'Reducer': ct.FlowKind.LazyValue},
 		input_sockets_optional={'Reducer': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):

@@ -38,7 +38,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.DataFlowKind.Value,
+		kind=ct.FlowKind.Value,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
@@ -55,7 +55,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.DataFlowKind.Value,
+		kind=ct.FlowKind.Value,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
@@ -73,7 +73,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.DataFlowKind.LazyValueRange,
+		kind=ct.FlowKind.LazyValueRange,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
@@ -92,12 +92,12 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.DataFlowKind.LazyValueRange,
+		kind=ct.FlowKind.LazyValueRange,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
-			'WL': ct.DataFlowKind.LazyValueRange,
-			'Freq': ct.DataFlowKind.LazyValueRange,
+			'WL': ct.FlowKind.LazyValueRange,
+			'Freq': ct.FlowKind.LazyValueRange,
 		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)

@@ -8,7 +8,7 @@
 #class MaxwellSimProp(bpy.types.PropertyGroup):
 #	"""A Blender property usable in nodes and sockets."""
 #	name: str = ""
-#	data_flow_kind: ct.DataFlowKind
+#	data_flow_kind: ct.FlowKind
 #
 #	value: dict[str, tuple[bpy.types.Property, dict]] | None = None
 #

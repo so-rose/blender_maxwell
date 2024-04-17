@@ -111,7 +111,7 @@ class PhysicalFreqSocketDef(base.SocketDef):
 
 		bl_socket.value = self.default_value
 		if self.is_array:
-			bl_socket.active_kind = ct.DataFlowKind.LazyValueRange
+			bl_socket.active_kind = ct.FlowKind.LazyValueRange
 			bl_socket.lazy_value_range = (self.min_freq, self.max_freq, self.steps)
 
 

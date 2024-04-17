@@ -26,16 +26,16 @@ class InfoDataChanged:
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class InfoOutputRequested:
 	output_socket_name: ct.SocketName
-	kind: ct.DataFlowKind
+	kind: ct.FlowKind
 
 	depon_props: set[str]
 
 	depon_input_sockets: set[ct.SocketName]
-	depon_input_socket_kinds: dict[ct.SocketName, ct.DataFlowKind]
+	depon_input_socket_kinds: dict[ct.SocketName, ct.FlowKind]
 	depon_all_loose_input_sockets: bool
 
 	depon_output_sockets: set[ct.SocketName]
-	depon_output_socket_kinds: dict[ct.SocketName, ct.DataFlowKind]
+	depon_output_socket_kinds: dict[ct.SocketName, ct.FlowKind]
 	depon_all_loose_output_sockets: bool
 
 
@@ -58,10 +58,10 @@ def event_decorator(
 	props: set[PropName] = frozenset(),
 	input_sockets: set[ct.SocketName] = frozenset(),
 	input_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
-	input_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
+	input_socket_kinds: dict[ct.SocketName, ct.FlowKind] = MappingProxyType({}),
 	output_sockets: set[ct.SocketName] = frozenset(),
 	output_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
-	output_socket_kinds: dict[ct.SocketName, ct.DataFlowKind] = MappingProxyType({}),
+	output_socket_kinds: dict[ct.SocketName, ct.FlowKind] = MappingProxyType({}),
 	all_loose_input_sockets: bool = False,
 	all_loose_output_sockets: bool = False,
 	# Request Unit System Scaling
@@ -81,8 +81,8 @@ def event_decorator(
 			Other methods defined on the same node will still run.
 		managed_objs: Set of `managed_objs` to retrieve, then pass to the decorated method.
 		input_sockets: Set of `input_sockets` to compute, then pass to the decorated method.
-		input_socket_kinds: The `ct.DataFlowKind` to compute per-input-socket.
-			If an input socket isn't specified, it defaults to `ct.DataFlowKind.Value`.
+		input_socket_kinds: The `ct.FlowKind` to compute per-input-socket.
+			If an input socket isn't specified, it defaults to `ct.FlowKind.Value`.
 		output_sockets: Set of `output_sockets` to compute, then pass to the decorated method.
 		all_loose_input_sockets: Whether to compute all loose input sockets and pass them to the decorated method.
 			Used when the names of the loose input sockets are unknown, but all of their values are needed.
@@ -157,7 +157,7 @@ def event_decorator(
 						input_socket_name: node._compute_input(
 							input_socket_name,
 							kind=input_socket_kinds.get(
-								input_socket_name, ct.DataFlowKind.Value
+								input_socket_name, ct.FlowKind.Value
 							),
 							unit_system=(
 								unit_system := unit_systems.get(
@@ -179,10 +179,10 @@ def event_decorator(
 			method_kw_args |= (
 				{
 					'output_sockets': {
-						output_socket_name: ct.DataFlowKind.scale_to_unit_system(
+						output_socket_name: ct.FlowKind.scale_to_unit_system(
 							(
 								output_socket_kind := output_socket_kinds.get(
-									output_socket_name, ct.DataFlowKind.Value
+									output_socket_name, ct.FlowKind.Value
 								)
 							),
 							node.compute_output(
@@ -201,7 +201,7 @@ def event_decorator(
 						else node.compute_output(
 							output_socket_name,
 							kind=output_socket_kinds.get(
-								output_socket_name, ct.DataFlowKind.Value
+								output_socket_name, ct.FlowKind.Value
 							),
 							optional=output_sockets_optional.get(
 								output_socket_name, False
@@ -316,7 +316,7 @@ def on_value_changed(
 ## TODO: Change name to 'on_output_requested'
 def computes_output_socket(
 	output_socket_name: ct.SocketName | None,
-	kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+	kind: ct.FlowKind = ct.FlowKind.Value,
 	**kwargs,
 ):
 	return event_decorator(

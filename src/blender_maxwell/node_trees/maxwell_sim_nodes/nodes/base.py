@@ -273,7 +273,7 @@ class MaxwellSimNode(bpy.types.Node):
 					msg = f'Tried to set preset socket/value pair ({socket_name}={socket_value}), but socket is not in active input sockets ({self.inputs})'
 					raise ValueError(msg)
 
-				## TODO: Account for DataFlowKind
+				## TODO: Account for FlowKind
 				bl_socket.value = socket_value
 
 	@events.on_show_preview()
@@ -558,7 +558,7 @@ class MaxwellSimNode(bpy.types.Node):
 	def _compute_input(
 		self,
 		input_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		kind: ct.FlowKind = ct.FlowKind.Value,
 		unit_system: dict[ct.SocketType, sp.Expr] | None = None,
 		optional: bool = False,
 	) -> typ.Any:
@@ -574,7 +574,7 @@ class MaxwellSimNode(bpy.types.Node):
 		"""
 		if (bl_socket := self.inputs.get(input_socket_name)) is not None:
 			return (
-				ct.DataFlowKind.scale_to_unit_system(
+				ct.FlowKind.scale_to_unit_system(
 					kind,
 					bl_socket.compute_data(kind=kind),
 					bl_socket.socket_type,
@@ -599,14 +599,14 @@ class MaxwellSimNode(bpy.types.Node):
 	def compute_output(
 		self,
 		output_socket_name: ct.SocketName,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		kind: ct.FlowKind = ct.FlowKind.Value,
 		optional: bool = False,
 	) -> typ.Any:
 		"""Computes the value of an output socket.
 
 		Parameters:
 			output_socket_name: The name declaring the output socket, for which this method computes the output.
-			kind: The DataFlowKind to use when computing the output socket value.
+			kind: The FlowKind to use when computing the output socket value.
 
 		Returns:
 			The value of the output socket, as computed by the dedicated method

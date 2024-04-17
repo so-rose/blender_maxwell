@@ -35,7 +35,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'FDTD Sim',
-		kind=ct.DataFlowKind.Value,
+		kind=ct.FlowKind.Value,
 		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
 	)
 	def compute_fdtd_sim(self, input_sockets: dict) -> sp.Expr:

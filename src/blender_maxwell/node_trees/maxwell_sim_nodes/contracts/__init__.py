@@ -54,7 +54,7 @@ from .managed_obj_type import ManagedObjType
 # - Data Flows
 ####################
 from .data_flows import (
-	DataFlowKind,
+	FlowKind,
 	DataCapabilities,
 	DataValue,
 	DataValueArray,
@@ -89,7 +89,7 @@ __all__ = [
 	'NodeCategory',
 	'NODE_CAT_LABELS',
 	'ManagedObjType',
-	'DataFlowKind',
+	'FlowKind',
 	'DataCapabilities',
 	'DataValue',
 	'DataValueArray',

@@ -138,7 +138,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		cls.__annotations__['active_kind'] = bpy.props.StringProperty(
 			name='Active Kind',
 			description='The active Data Flow Kind',
-			default=str(ct.DataFlowKind.Value),
+			default=str(ct.FlowKind.Value),
 			update=lambda self, _: self.sync_active_kind(),
 		)
 
@@ -226,15 +226,15 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	def sync_active_kind(self):
 		"""Called when the active data flow kind of the socket changes.
 
-		Alters the shape of the socket to match the active DataFlowKind, then triggers `ct.DataFlowAction.DataChanged` on the current socket.
+		Alters the shape of the socket to match the active FlowKind, then triggers `ct.DataFlowAction.DataChanged` on the current socket.
 		"""
 		self.display_shape = {
-			ct.DataFlowKind.Value: ct.SOCKET_SHAPES[self.socket_type],
-			ct.DataFlowKind.ValueArray: 'SQUARE',
-			ct.DataFlowKind.ValueSpectrum: 'SQUARE',
-			ct.DataFlowKind.LazyValue: ct.SOCKET_SHAPES[self.socket_type],
-			ct.DataFlowKind.LazyValueRange: 'SQUARE',
-			ct.DataFlowKind.LazyValueSpectrum: 'SQUARE',
+			ct.FlowKind.Value: ct.SOCKET_SHAPES[self.socket_type],
+			ct.FlowKind.ValueArray: 'SQUARE',
+			ct.FlowKind.ValueSpectrum: 'SQUARE',
+			ct.FlowKind.LazyValue: ct.SOCKET_SHAPES[self.socket_type],
+			ct.FlowKind.LazyValueRange: 'SQUARE',
+			ct.FlowKind.LazyValueSpectrum: 'SQUARE',
 		}[self.active_kind] + ('_DOT' if self.use_units else '')
 
 		self.trigger_action(ct.DataFlowAction.DataChanged)
@@ -360,19 +360,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	def _compute_data(
 		self,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		kind: ct.FlowKind = ct.FlowKind.Value,
 	) -> typ.Any:
 		"""Computes the internal data of this socket, ONLY.
 
 		**NOTE**: Low-level method. Use `compute_data` instead.
 		"""
 		return {
-			ct.DataFlowKind.Value: lambda: self.value,
-			ct.DataFlowKind.ValueArray: lambda: self.value_array,
-			ct.DataFlowKind.ValueSpectrum: lambda: self.value_spectrum,
-			ct.DataFlowKind.LazyValue: lambda: self.lazy_value,
-			ct.DataFlowKind.LazyValueRange: lambda: self.lazy_value_range,
-			ct.DataFlowKind.LazyValueSpectrum: lambda: self.lazy_value_spectrum,
+			ct.FlowKind.Value: lambda: self.value,
+			ct.FlowKind.ValueArray: lambda: self.value_array,
+			ct.FlowKind.ValueSpectrum: lambda: self.value_spectrum,
+			ct.FlowKind.LazyValue: lambda: self.lazy_value,
+			ct.FlowKind.LazyValueRange: lambda: self.lazy_value_range,
+			ct.FlowKind.LazyValueSpectrum: lambda: self.lazy_value_spectrum,
 		}[kind]()
 
 		msg = f'socket._compute_data was called with invalid kind "{kind}"'
@@ -380,7 +380,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 	def compute_data(
 		self,
-		kind: ct.DataFlowKind = ct.DataFlowKind.Value,
+		kind: ct.FlowKind = ct.FlowKind.Value,
 	):
 		"""Computes the value of this socket, including all relevant factors.
 
@@ -463,10 +463,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Can be overridden if more specific logic is required.
 		"""
-		if self.active_kind == ct.DataFlowKind.Value:
+		if self.active_kind == ct.FlowKind.Value:
 			self.value = self.value / self.unit * self.prev_unit
 
-		elif self.active_kind == ct.DataFlowKind.LazyValueRange:
+		elif self.active_kind == ct.FlowKind.LazyValueRange:
 			lazy_value_range = self.lazy_value_range
 			self.lazy_value_range = (
 				lazy_value_range.start / self.unit * self.prev_unit,
@@ -565,12 +565,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		# Data Column(s)
 		col = row.column(align=True)
 		{
-			ct.DataFlowKind.Value: self.draw_value,
-			ct.DataFlowKind.ValueArray: self.draw_value_array,
-			ct.DataFlowKind.ValueSpectrum: self.draw_value_spectrum,
-			ct.DataFlowKind.LazyValue: self.draw_lazy_value,
-			ct.DataFlowKind.LazyValueRange: self.draw_lazy_value_range,
-			ct.DataFlowKind.LazyValueSpectrum: self.draw_lazy_value_spectrum,
+			ct.FlowKind.Value: self.draw_value,
+			ct.FlowKind.ValueArray: self.draw_value_array,
+			ct.FlowKind.ValueSpectrum: self.draw_value_spectrum,
+			ct.FlowKind.LazyValue: self.draw_lazy_value,
+			ct.FlowKind.LazyValueRange: self.draw_lazy_value_range,
+			ct.FlowKind.LazyValueSpectrum: self.draw_lazy_value_spectrum,
 		}[self.active_kind](col)
 
 	def draw_output(
@@ -598,7 +598,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		row.label(text=text)
 
 	####################
-	# - DataFlowKind draw() Methods
+	# - FlowKind draw() Methods
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		pass

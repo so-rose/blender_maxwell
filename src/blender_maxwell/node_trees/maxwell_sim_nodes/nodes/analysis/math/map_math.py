@@ -103,7 +103,7 @@ class MapMathNode(base.MaxwellSimNode):
 		'Data',
 		props={'active_socket_set', 'operation'},
 		input_sockets={'Data', 'Mapper'},
-		input_socket_kinds={'Mapper': ct.DataFlowKind.LazyValue},
+		input_socket_kinds={'Mapper': ct.FlowKind.LazyValue},
 		input_sockets_optional={'Mapper': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):

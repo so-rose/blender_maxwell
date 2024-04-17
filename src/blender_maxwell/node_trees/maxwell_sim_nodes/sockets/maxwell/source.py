@@ -18,7 +18,7 @@ class MaxwellSourceSocketDef(base.SocketDef):
 
 	def init(self, bl_socket: MaxwellSourceBLSocket) -> None:
 		if self.is_list:
-			bl_socket.active_kind = ct.DataFlowKind.ValueArray
+			bl_socket.active_kind = ct.FlowKind.ValueArray
 
 
 ####################

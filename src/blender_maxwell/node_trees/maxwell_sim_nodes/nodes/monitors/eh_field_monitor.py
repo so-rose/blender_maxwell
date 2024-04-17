@@ -67,7 +67,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			'Freqs',
 		},
 		input_socket_kinds={
-			'Freqs': ct.DataFlowKind.LazyValueRange,
+			'Freqs': ct.FlowKind.LazyValueRange,
 		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={
