@@ -17,6 +17,7 @@ class DataFlowAction(enum.StrEnum):
 	ShowPreview = 'show_preview'
 	ShowPlot = 'show_plot'
 
+	@staticmethod
 	def trigger_direction(action: typ.Self) -> typx.Literal['input', 'output']:
 		"""When a given action is triggered, all sockets/nodes/... in this direction should be recursively triggered.
 
@@ -35,6 +36,7 @@ class DataFlowAction(enum.StrEnum):
 			DataFlowAction.ShowPlot: 'input',
 		}[action]
 
+	@staticmethod
 	def stop_if_no_event_methods(action: typ.Self) -> bool:
 		return {
 			DataFlowAction.EnableLock: False,

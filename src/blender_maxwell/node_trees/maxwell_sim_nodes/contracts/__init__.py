@@ -55,13 +55,13 @@ from .managed_obj_type import ManagedObjType
 ####################
 from .data_flows import (
 	FlowKind,
-	DataCapabilities,
-	DataValue,
-	DataValueArray,
-	DataValueSpectrum,
-	LazyDataValue,
-	LazyDataValueRange,
-	LazyDataValueSpectrum,
+	CapabilitiesFlow,
+	ValueFlow,
+	ArrayFlow,
+	LazyValueFlow,
+	LazyArrayRangeFlow,
+	ParamsFlow,
+	InfoFlow,
 )
 from .data_flow_actions import DataFlowAction
 
@@ -90,12 +90,12 @@ __all__ = [
 	'NODE_CAT_LABELS',
 	'ManagedObjType',
 	'FlowKind',
-	'DataCapabilities',
-	'DataValue',
-	'DataValueArray',
-	'DataValueSpectrum',
-	'LazyDataValue',
-	'LazyDataValueRange',
-	'LazyDataValueSpectrum',
+	'CapabilitiesFlow',
+	'ValueFlow',
+	'ArrayFlow',
+	'LazyValueFlow',
+	'LazyArrayRangeFlow',
+	'ParamsFlow',
+	'InfoFlow',
 	'DataFlowAction',
 ]

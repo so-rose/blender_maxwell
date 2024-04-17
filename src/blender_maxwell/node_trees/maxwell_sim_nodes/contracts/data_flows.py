@@ -54,7 +54,7 @@ class FlowKind(enum.StrEnum):
 	LazyArrayRange = enum.auto()
 
 	# Auxiliary
-	Param = enum.auto()
+	Params = enum.auto()
 	Info = enum.auto()
 
 	@classmethod
@@ -283,9 +283,9 @@ class LazyArrayRangeFlow:
 
 
 ####################
-# - Param
+# - Params
 ####################
-ParamFlow: typ.TypeAlias = dict[str, typ.Any]
+ParamsFlow: typ.TypeAlias = dict[str, typ.Any]
 
 
 ####################

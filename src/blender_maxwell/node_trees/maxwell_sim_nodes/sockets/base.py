@@ -303,56 +303,48 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 	# Value
 	@property
-	def value(self) -> ct.DataValue:
+	def value(self) -> ct.ValueFlow:
 		raise NotImplementedError
 
 	@value.setter
-	def value(self, value: ct.DataValue) -> None:
+	def value(self, value: ct.ValueFlow) -> None:
 		raise NotImplementedError
 
 	# ValueArray
 	@property
-	def value_array(self) -> ct.DataValueArray:
+	def array(self) -> ct.ArrayFlow:
+		## TODO: Single-element list when value exists.
 		raise NotImplementedError
 
-	@value_array.setter
-	def value_array(self, value: ct.DataValueArray) -> None:
-		raise NotImplementedError
-
-	# ValueSpectrum
-	@property
-	def value_spectrum(self) -> ct.DataValueSpectrum:
-		raise NotImplementedError
-
-	@value_spectrum.setter
-	def value_spectrum(self, value: ct.DataValueSpectrum) -> None:
+	@array.setter
+	def array(self, value: ct.ArrayFlow) -> None:
 		raise NotImplementedError
 
 	# LazyValue
 	@property
-	def lazy_value(self) -> ct.LazyDataValue:
+	def lazy_value(self) -> ct.LazyValueFlow:
 		raise NotImplementedError
 
 	@lazy_value.setter
-	def lazy_value(self, lazy_value: ct.LazyDataValue) -> None:
+	def lazy_value(self, lazy_value: ct.LazyValueFlow) -> None:
 		raise NotImplementedError
 
-	# LazyValueRange
+	# LazyArrayRange
 	@property
-	def lazy_value_range(self) -> ct.LazyDataValueRange:
+	def lazy_array_range(self) -> ct.LazyArrayRangeFlow:
 		raise NotImplementedError
 
-	@lazy_value_range.setter
-	def lazy_value_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
+	@lazy_array_range.setter
+	def lazy_array_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
 		raise NotImplementedError
 
-	# LazyValueSpectrum
+	# LazyArrayRange
 	@property
-	def lazy_value_spectrum(self) -> ct.LazyDataValueSpectrum:
+	def param(self) -> ct.ParamsFlow:
 		raise NotImplementedError
 
-	@lazy_value_spectrum.setter
-	def lazy_value_spectrum(self, value: ct.LazyDataValueSpectrum) -> None:
+	@param.setter
+	def param(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
 		raise NotImplementedError
 
 	####################
@@ -369,10 +361,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		return {
 			ct.FlowKind.Value: lambda: self.value,
 			ct.FlowKind.ValueArray: lambda: self.value_array,
-			ct.FlowKind.ValueSpectrum: lambda: self.value_spectrum,
 			ct.FlowKind.LazyValue: lambda: self.lazy_value,
-			ct.FlowKind.LazyValueRange: lambda: self.lazy_value_range,
-			ct.FlowKind.LazyValueSpectrum: lambda: self.lazy_value_spectrum,
+			ct.FlowKind.LazyArrayRange: lambda: self.lazy_array_range,
+			ct.FlowKind.Params: lambda: self.params,
+			ct.FlowKind.Info: lambda: self.info,
 		}[kind]()
 
 		msg = f'socket._compute_data was called with invalid kind "{kind}"'
