@@ -1,4 +1,4 @@
-from . import map_math, filter_math, reduce_math, operate_math
+from . import filter_math, map_math, operate_math, reduce_math
 
 BL_REGISTER = [
 	*map_math.BL_REGISTER,

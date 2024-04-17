@@ -3,20 +3,16 @@ from pathlib import Path
 
 import bpy
 
-PATH_ADDON_ROOT = Path(__file__).resolve().parent
-
-####################
-# - Addon Info
-####################
+PATH_ADDON_ROOT = Path(__file__).resolve().parent.parent
 with (PATH_ADDON_ROOT / 'pyproject.toml').open('rb') as f:
 	PROJ_SPEC = tomllib.load(f)
 	## bl_info is filled with PROJ_SPEC when packing the .zip.
 
-ADDON_NAME = PROJ_SPEC['project']['name']
-ADDON_VERSION = PROJ_SPEC['project']['version']
+NAME = PROJ_SPEC['project']['name']
+VERSION = PROJ_SPEC['project']['version']
 
 ####################
-# - Asset Info
+# - Assets
 ####################
 PATH_ASSETS = PATH_ADDON_ROOT / 'assets'
 
@@ -33,7 +29,17 @@ DEFAULT_PATH_DEPS = PATH_ADDON_ROOT / '.addon_dependencies'
 ####################
 ADDON_CACHE = PATH_ADDON_ROOT / '.addon_cache'
 ADDON_CACHE.mkdir(exist_ok=True)
-## TODO: Addon preferences?
+
+
+####################
+# - Addon Prefs Info
+####################
+def prefs() -> bpy.types.AddonPreferences | None:
+	if (addon := bpy.context.preferences.addons.get(NAME)) is None:
+		return None
+
+	return addon.preferences
+
 
 ####################
 # - Logging Info
@@ -47,13 +53,3 @@ DEFAULT_LOG_PATH.touch(exist_ok=True)
 PATH_BOOTSTRAP_LOG_LEVEL = PATH_ADDON_ROOT / '.bootstrap_log_level'
 with PATH_BOOTSTRAP_LOG_LEVEL.open('r') as f:
 	BOOTSTRAP_LOG_LEVEL = int(f.read().strip())
-
-
-####################
-# - Addon Prefs Info
-####################
-def addon_prefs() -> bpy.types.AddonPreferences | None:
-	if (addon := bpy.context.preferences.addons.get(ADDON_NAME)) is None:
-		return None
-
-	return addon.preferences

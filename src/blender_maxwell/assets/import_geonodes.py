@@ -1,21 +1,16 @@
 """Provides for the linking and/or appending of geometry nodes trees from vendored libraries included in Blender maxwell."""
 
 import enum
-import typing as typ
 from pathlib import Path
 
 import bpy
-import typing_extensions as typx
 
-from .. import info
+from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger
 
-log = logger.get(__name__)
+from .. import info
 
-ImportMethod: typ.TypeAlias = typx.Literal['append', 'link']
-BLOperatorStatus: typ.TypeAlias = set[
-	typx.Literal['RUNNING_MODAL', 'CANCELLED', 'FINISHED', 'PASS_THROUGH', 'INTERFACE']
-]
+log = logger.get(__name__)
 
 
 ####################
@@ -26,6 +21,7 @@ class GeoNodes(enum.StrEnum):
 
 	The value of this StrEnum is both the name of the .blend file containing the GeoNodes group, and of the GeoNodes group itself.
 	"""
+
 	# Node Previews
 	## Input
 	InputConstantPhysicalPol = '_input_constant_physical_pol'
@@ -134,7 +130,6 @@ GN_PARENT_PATHS: dict[GeoNodes, Path] = {
 	GeoNodes.SimulationSimGridAxisManual: GN_INTERNAL_SIMULATIONS_PATH,
 	GeoNodes.SimulationSimGridAxisUniform: GN_INTERNAL_SIMULATIONS_PATH,
 	GeoNodes.SimulationSimGridAxisArray: GN_INTERNAL_SIMULATIONS_PATH,
-
 	# Structures
 	GeoNodes.PrimitiveBox: GN_STRUCTURES_PRIMITIVES_PATH,
 	GeoNodes.PrimitiveRing: GN_STRUCTURES_PRIMITIVES_PATH,
@@ -147,7 +142,7 @@ GN_PARENT_PATHS: dict[GeoNodes, Path] = {
 ####################
 def import_geonodes(
 	geonodes: GeoNodes,
-	import_method: ImportMethod,
+	import_method: ct.BLImportMethod,
 ) -> bpy.types.GeometryNodeGroup:
 	"""Given a (name of a) GeoNodes group packaged with Blender Maxwell, link/append it to the current file, and return the node group.
 
@@ -159,10 +154,7 @@ def import_geonodes(
 	Returns:
 		A GeoNodes group available in the current .blend file, which can ex. be attached to a 'GeoNodes Structure' node.
 	"""
-	if (
-		import_method == 'link'
-		and geonodes in bpy.data.node_groups
-	):
+	if import_method == 'link' and geonodes in bpy.data.node_groups:
 		return bpy.data.node_groups[geonodes]
 
 	filename = geonodes
@@ -273,7 +265,7 @@ class AppendGeoNodes(bpy.types.Operator):
 	def invoke(self, context: bpy.types.Context, _):
 		return self.execute(context)
 
-	def execute(self, context: bpy.types.Context) -> BLOperatorStatus:
+	def execute(self, context: bpy.types.Context) -> ct.BLOperatorStatus:
 		"""Initializes the while-dragging modal handler, which executes custom logic when the mouse button is released.
 
 		Runs in response to drag_handler of a `UILayout.template_asset_view`.
@@ -296,7 +288,7 @@ class AppendGeoNodes(bpy.types.Operator):
 
 	def modal(
 		self, context: bpy.types.Context, event: bpy.types.Event
-	) -> BLOperatorStatus:
+	) -> ct.BLOperatorStatus:
 		"""When LMB is released, creates a GeoNodes Structure node.
 
 		Runs in response to events in the node editor while dragging an asset from the side panel.

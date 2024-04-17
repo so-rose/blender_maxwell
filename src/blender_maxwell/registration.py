@@ -12,33 +12,20 @@ from pathlib import Path
 
 import bpy
 
+from . import contracts as ct
 from .nodeps.utils import simple_logger
 
 log = simple_logger.get(__name__)
 
-# TODO: More types for these things!
 DelayedRegKey: typ.TypeAlias = str
-BLClass: typ.TypeAlias = (
-	bpy.types.Panel
-	| bpy.types.UIList
-	| bpy.types.Menu
-	| bpy.types.Header
-	| bpy.types.Operator
-	| bpy.types.KeyingSetInfo
-	| bpy.types.RenderEngine
-	| bpy.types.AssetShelf
-	| bpy.types.FileHandler
-)
-BLKeymapItem: typ.TypeAlias = typ.Any  ## TODO: Better Type
-KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
 
 ####################
 # - Globals
 ####################
 BL_KEYMAP: bpy.types.KeyMap | None = None
 
-REG__CLASSES: list[BLClass] = []
-REG__KEYMAP_ITEMS: list[BLKeymapItem] = []
+REG__CLASSES: list[ct.BLClass] = []
+REG__KEYMAP_ITEMS: list[ct.BLKeymapItem] = []
 
 DELAYED_REGISTRATIONS: dict[DelayedRegKey, typ.Callable[[Path], None]] = {}
 
@@ -51,7 +38,7 @@ EVENT__DEPS_SATISFIED: DelayedRegKey = 'on_deps_satisfied'
 ####################
 # - Class Registration
 ####################
-def register_classes(bl_register: list[BLClass]) -> None:
+def register_classes(bl_register: list[ct.BLClass]) -> None:
 	"""Registers a Blender class, allowing it to hook into relevant Blender features.
 
 	Caches registered classes in the module global `REG__CLASSES`.
@@ -150,8 +137,8 @@ def unregister_keymap_items():
 ####################
 def delay_registration(
 	delayed_reg_key: DelayedRegKey,
-	classes_cb: typ.Callable[[Path], list[BLClass]],
-	keymap_item_defs_cb: typ.Callable[[Path], list[KeymapItemDef]],
+	classes_cb: typ.Callable[[Path], list[ct.BLClass]],
+	keymap_item_defs_cb: typ.Callable[[Path], list[ct.KeymapItemDef]],
 ) -> None:
 	"""Delays the registration of Blender classes that depend on certain Python dependencies, for which neither the location nor validity is yet known.
 

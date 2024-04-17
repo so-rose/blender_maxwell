@@ -4,6 +4,7 @@ import typing as typ
 import bpy
 
 from blender_maxwell.utils import logger
+
 from . import contracts as ct
 
 log = logger.get(__name__)

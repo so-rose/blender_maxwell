@@ -5,6 +5,7 @@ import sympy.physics.units as spu
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 from blender_maxwell.utils.pydantic_sympy import SympyExpr
+
 from ... import contracts as ct
 from .. import base
 

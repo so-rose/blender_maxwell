@@ -1,4 +1,3 @@
-import typing as typ
 
 import bpy
 import scipy as sc
@@ -7,6 +6,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.utils import extra_sympy_units as spuex
+
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events

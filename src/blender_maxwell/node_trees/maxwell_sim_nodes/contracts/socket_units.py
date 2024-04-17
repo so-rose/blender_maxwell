@@ -1,6 +1,7 @@
 import sympy.physics.units as spu
 
 from blender_maxwell.utils import extra_sympy_units as spux
+
 from .socket_types import SocketType as ST  # noqa: N817
 
 SOCKET_UNITS = {

@@ -3,9 +3,10 @@ import typing as typ
 import sympy as sp
 import tidy3d as td
 
-from .....assets.import_geonodes import GeoNodes, import_geonodes
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
+
+from .....assets.import_geonodes import GeoNodes, import_geonodes
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events

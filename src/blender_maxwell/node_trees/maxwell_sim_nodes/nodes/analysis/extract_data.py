@@ -2,9 +2,8 @@ import typing as typ
 
 import bpy
 import jax.numpy as jnp
-import sympy.physics.units as spu
 
-from blender_maxwell.utils import jarray, logger
+from blender_maxwell.utils import logger
 
 from ... import contracts as ct
 from ... import sockets
@@ -249,15 +248,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 		elif self.active_socket_set == 'Field Data':  # noqa: RET505
 			xarr = getattr(input_sockets['Field Data'], props['field_data__component'])
 
-			return jarray.JArray.from_xarray(
-				xarr,
-				dim_units={
-					'x': spu.um,
-					'y': spu.um,
-					'z': spu.um,
-					'f': spu.hertz,
-				},
-			)
+			#return jarray.JArray.from_xarray(
+			#	xarr,
+			#	dim_units={
+			#		'x': spu.um,
+			#		'y': spu.um,
+			#		'z': spu.um,
+			#		'f': spu.hertz,
+			#	},
+			#)
 
 		elif self.active_socket_set == 'Flux Data':
 			flux_data = self._compute_input('Flux Data')

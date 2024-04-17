@@ -10,6 +10,7 @@ import numpy as np
 import typing_extensions as typx
 
 from blender_maxwell.utils import logger
+
 from .. import contracts as ct
 from . import base
 

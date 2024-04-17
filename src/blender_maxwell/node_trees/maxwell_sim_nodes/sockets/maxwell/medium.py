@@ -4,6 +4,7 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.utils.pydantic_sympy import ConstrSympyExpr
+
 from ... import contracts as ct
 from .. import base
 

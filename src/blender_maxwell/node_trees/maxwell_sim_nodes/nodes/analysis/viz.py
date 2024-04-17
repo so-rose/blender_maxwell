@@ -1,9 +1,9 @@
 import typing as typ
 
 import bpy
-import jax.numpy as jnp
 
 from blender_maxwell.utils import logger
+
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events

@@ -13,6 +13,7 @@ import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger as _logger
+
 from . import contracts as ct
 from . import sockets
 

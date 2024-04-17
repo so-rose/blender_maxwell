@@ -23,6 +23,7 @@ SocketName = typx.Annotated[
 ####################
 # - Blender Enums
 ####################
+BLImportMethod: typ.TypeAlias = typx.Literal['append', 'link']
 BLModifierType: typ.TypeAlias = typx.Literal['NODES', 'ARRAY']
 BLNodeTreeInterfaceID: typ.TypeAlias = str
 
@@ -58,13 +59,13 @@ BLOperatorStatus: typ.TypeAlias = set[
 ####################
 # - Addon Types
 ####################
+KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
 ManagedObjName = typx.Annotated[
 	str,
 	pyd.StringConstraints(
 		pattern=r'^[a-z_]+$',
 	),
 ]
-KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
 
 ####################
 # - Blender Strings

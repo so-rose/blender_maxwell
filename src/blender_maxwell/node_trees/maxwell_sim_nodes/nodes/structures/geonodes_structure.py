@@ -3,6 +3,7 @@ import typing as typ
 import tidy3d as td
 
 from blender_maxwell.utils import analyze_geonodes, logger
+
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
 from .. import base, events

@@ -4,6 +4,7 @@ import sympy.physics.optics.polarization as spo_pol
 import sympy.physics.units as spu
 
 from blender_maxwell.utils.pydantic_sympy import SympyExpr
+
 from ... import contracts as ct
 from .. import base
 

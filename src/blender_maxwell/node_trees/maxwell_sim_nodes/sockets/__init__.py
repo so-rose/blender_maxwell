@@ -1,4 +1,5 @@
 from blender_maxwell.utils import logger
+
 from .. import contracts as ct
 from . import basic, blender, maxwell, number, physical, tidy3d, vector
 from .scan_socket_defs import scan_for_socket_defs

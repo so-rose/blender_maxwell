@@ -1,5 +1,4 @@
 import enum
-import typing as typ
 
 import typing_extensions as typx
 

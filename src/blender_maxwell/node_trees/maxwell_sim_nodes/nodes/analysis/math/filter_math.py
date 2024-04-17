@@ -1,8 +1,6 @@
-import functools
 import typing as typ
 
 import bpy
-import jax
 import jax.numpy as jnp
 
 from blender_maxwell.utils import logger

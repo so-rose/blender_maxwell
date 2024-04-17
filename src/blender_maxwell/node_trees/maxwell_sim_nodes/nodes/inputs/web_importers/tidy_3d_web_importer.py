@@ -1,9 +1,10 @@
 import typing as typ
 from pathlib import Path
 
+from blender_maxwell.utils import logger
+
 from ...... import info
 from ......services import tdcloud
-from blender_maxwell.utils import logger
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events

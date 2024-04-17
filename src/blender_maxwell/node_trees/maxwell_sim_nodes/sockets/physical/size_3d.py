@@ -3,6 +3,7 @@ import sympy as sp
 import sympy.physics.units as spu
 
 from blender_maxwell.utils.pydantic_sympy import SympyExpr
+
 from ... import contracts as ct
 from .. import base
 

@@ -1,4 +1,4 @@
-from . import extract_data, viz, math
+from . import extract_data, math, viz
 
 BL_REGISTER = [
 	*extract_data.BL_REGISTER,

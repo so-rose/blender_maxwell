@@ -12,6 +12,7 @@ import sympy.physics.units as spu
 import typing_extensions as typx
 
 from blender_maxwell.utils import extra_sympy_units as spux
+
 from .socket_types import SocketType
 
 

@@ -4,6 +4,7 @@ import bpy
 import sympy as sp
 
 from blender_maxwell.utils import logger
+
 from ... import contracts as ct
 from ... import sockets
 from .. import base, events

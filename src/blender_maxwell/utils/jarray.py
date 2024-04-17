@@ -4,13 +4,11 @@ from types import MappingProxyType
 
 import jax
 import jax.numpy as jnp
-import pandas as pd
 
 # import jaxtyping as jtyp
 import sympy.physics.units as spu
 import xarray
 
-from . import extra_sympy_units as spux
 from . import logger
 
 log = logger.get(__name__)
