@@ -125,6 +125,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Initialization
 	####################
+	## TODO: Common implementation of this for both sockets and nodes - perhaps a BLInstance base class?
 	@classmethod
 	def set_prop(
 		cls,
@@ -183,103 +184,84 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Configure Use of Units
 		if cls.use_units:
-			# Set Shape :)
-			cls.socket_shape += '_DOT'
-
 			if not (socket_units := ct.SOCKET_UNITS.get(cls.socket_type)):
-				msg = 'Tried to `use_units` on {cls.bl_idname} socket, but `SocketType` has no units defined in `contracts.SOCKET_UNITS`'
+				msg = f'Tried to define "use_units" on socket {cls.bl_label} socket, but there is no unit for {cls.socket_type} defined in "contracts.SOCKET_UNITS"'
 				raise RuntimeError(msg)
 
-			# Current Unit
-			cls.__annotations__['active_unit'] = bpy.props.EnumProperty(
+			cls.set_prop(
+				'active_unit',
+				bpy.props.EnumProperty,
 				name='Unit',
-				description='Choose a unit',
 				items=[
 					(unit_name, str(unit_value), str(unit_value))
 					for unit_name, unit_value in socket_units['values'].items()
 				],
 				default=socket_units['default'],
-				update=lambda self, _: self.sync_unit_change(),
 			)
-
-			# Previous Unit (for conversion)
-			cls.__annotations__['prev_active_unit'] = bpy.props.StringProperty(
+			cls.set_prop(
+				'prev_active_unit',
+				bpy.props.StringProperty,
 				default=socket_units['default'],
 			)
 
 	####################
-	# - Event Chain
+	# - Property Event: On Update
 	####################
-	def trigger_event(
-		self,
-		event: ct.FlowEvent,
-	) -> None:
-		"""Called whenever the socket's output value has changed.
+	def _on_active_kind_changed(self) -> None:
+		"""Matches the display shape to the active `FlowKind`.
 
-		This also invalidates any of the socket's caches.
-
-		When called on an input node, the containing node's
-		`trigger_event` method will be called with this socket.
-
-		When called on a linked output node, the linked socket's
-		`trigger_event` method will be called.
+		Notes:
+			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
-		# Forwards Chains
-		if event in {ct.FlowEvent.DataChanged}:
-			## Input Socket
-			if not self.is_output:
-				self.node.trigger_event(event, socket_name=self.name)
+		self.display_shape = (
+			'SQUARE'
+			if self.active_kind in {ct.FlowKind.LazyValue, ct.FlowKind.LazyValueRange}
+			else 'CIRCLE'
+		) + ('_DOT' if self.use_units else '')
 
-			## Linked Output Socket
-			elif self.is_output and self.is_linked:
-				for link in self.links:
-					link.to_socket.trigger_event(event)
+	def _on_unit_changed(self) -> None:
+		"""Synchronizes the `FlowKind` data to the newly set unit.
 
-		# Backwards Chains
-		elif event in {
-			ct.FlowEvent.EnableLock,
-			ct.FlowEvent.DisableLock,
-			ct.FlowEvent.OutputRequested,
-			ct.FlowEvent.DataChanged,
-			ct.FlowEvent.ShowPreview,
-			ct.FlowEvent.ShowPlot,
-		}:
-			if event == ct.FlowEvent.EnableLock:
-				self.locked = True
+		When a new unit is set, the internal ex. floating point properties become out of sync.
+		This function applies a rescaling operation based on the factor between the previous unit (`self.prev_unit`) and the new unit `(self.unit)`.
 
-			if event == ct.FlowEvent.DisableLock:
-				self.locked = False
+		- **Value**: Retrieve the value (with incorrect new unit), exchange the new unit for the old unit, and assign it back.
+		- **Array**: Replace the internal unit with the old (correct) unit, and rescale all values in the array to the new unit.
 
-			## Output Socket
-			if self.is_output:
-				self.node.trigger_event(event, socket_name=self.name)
+		Notes:
+			Called by `self.on_prop_changed()` when `self.active_unit` is changed.
 
-			## Linked Input Socket
-			elif not self.is_output and self.is_linked:
-				for link in self.links:
-					link.from_socket.trigger_event(event)
+			This allows for a unit-scaling operation **without needing to know anything about the data representation** (at the cost of performance).
+		"""
+		if self.active_kind == ct.FlowKind.Value:
+			self.value = self.value / self.unit * self.prev_unit
 
-	####################
-	# - Event Chain: Event Handlers
-	####################
+		elif self.active_kind in [ct.FlowKind.Array, ct.FlowKind.LazyArrayRange]:
+			self.lazy_value_range = self.lazy_value_range.correct_unit(
+				self.prev_unit
+			).rescale_to_unit(self.unit)
+		else:
+			msg = f'Active kind {self.active_kind} has no way of scaling units (from {self.prev_active_unit} to {self.active_unit}). Please check the node definition'
+			raise RuntimeError(msg)
+
+		self.prev_active_unit = self.active_unit
+
 	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated.
 
 		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
 
-		- **Active Kind** (`active_kind`): Sets the socket shape to reflect the active `FlowKind`.
+		- **Active Kind** (`self.active_kind`): Sets the socket shape to reflect the active `FlowKind`.
+		- **Unit** (`self.unit`): Corrects the internal `FlowKind` representation to match the new unit.
 
 		Attributes:
 			prop_name: The name of the property that was changed.
 		"""
 		# Property: Active Kind
 		if prop_name == 'active_kind':
-			self.display_shape(
-				'SQUARE'
-				if self.active_kind
-				in {ct.FlowKind.LazyValue, ct.FlowKind.LazyValueRange}
-				else 'CIRCLE'
-			) + ('_DOT' if self.use_units else '')
+			self._on_active_kind_changed()
+		elif prop_name == 'unit':
+			self._on_unit_changed()
 
 		# Valid Properties
 		elif hasattr(self, prop_name):
@@ -290,6 +272,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			msg = f'Property {prop_name} not defined on socket {self}'
 			raise RuntimeError(msg)
 
+	####################
+	# - Link Event: Consent / On Change
+	####################
 	def allow_add_link(self, link: bpy.types.NodeLink) -> bool:
 		"""Called to ask whether a link may be added to this (input) socket.
 
@@ -299,7 +284,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Notes:
 			In practice, the link in question has already been added.
 			This function determines **whether the new link should be instantly removed** - if so, the removal producing the _practical effect_ of the link "not being added" at all.
-
 
 		Attributes:
 			link: The node link that was already added, whose continued existance is in question.
@@ -341,21 +325,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		return True
 
-	def on_link_added(self, link: bpy.types.NodeLink) -> None:
-		"""Triggers a `ct.FlowEvent.LinkChanged` event on link add.
+	def on_link_added(self, link: bpy.types.NodeLink) -> None:  # noqa: ARG002
+		"""Triggers a `ct.FlowEvent.LinkChanged` event when a link is added.
+
+		Notes:
+			Called by the node tree, generally (but not guaranteed) after `self.allow_add_link()` has given consent to add the link.
 
 		Attributes:
 			link: The node link that was added.
 				Currently unused.
-
-		Returns:
-			Whether or not consent is given to add the link.
-			In practice, the link will simply remain if consent is given.
-			If consent is not given, the new link will be removed.
 		"""
-		self.trigger_event(ct.FlowEvent.DataChanged)
+		self.trigger_event(ct.FlowEvent.LinkChanged)
 
-	def allow_remove_link(self, from_socket: bpy.types.NodeSocket) -> bool:
+	def allow_remove_link(self, from_socket: bpy.types.NodeSocket) -> bool:  # noqa: ARG002
 		"""Called to ask whether a link may be removed from this `to_socket`.
 
 		- **Locked**: Locked sockets may not have links removed.
@@ -386,8 +368,66 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if self.locked:
 			return False
 
-		self.trigger_event(ct.FlowEvent.DataChanged)
 		return True
+
+	def on_link_removed(self, from_socket: bpy.types.NodeSocket) -> None:  # noqa: ARG002
+		"""Triggers a `ct.FlowEvent.LinkChanged` event when a link is removed.
+
+		Notes:
+			Called by the node tree, generally (but not guaranteed) after `self.allow_remove_link()` has given consent to remove the link.
+
+		Attributes:
+			from_socket: The node socket that was attached to before link removal.
+				Currently unused.
+		"""
+		self.trigger_event(ct.FlowEvent.LinkChanged)
+
+	####################
+	# - Event Chain
+	####################
+	def trigger_event(
+		self,
+		event: ct.FlowEvent,
+	) -> None:
+		"""Recursively triggers an event along the node tree, depending on whether the socket is an input or output socket.
+
+		Notes:
+			This can be an unpredictably heavy function, depending on the node graph topology.
+
+		Parameters:
+			event: The event to report along the node tree.
+				The value of `ct.FlowEvent.flow_direction[event]` must match either `input` or `output`, depending on whether the socket is input/output.
+		"""
+		flow_direction = ct.FlowEvent.flow_direction[event]
+
+		# Input Socket | Input Flow
+		if not self.is_output and flow_direction == 'input':
+			if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
+				self.locked = event == ct.FlowEvent.EnableLock
+
+			for link in self.links:
+				link.from_socket.trigger_event(event)
+
+		# Input Socket | Output Flow
+		if not self.is_output and flow_direction == 'output':
+			## THIS IS A WORKAROUND (bc Node only understands DataChanged)
+			## TODO: Handle LinkChanged on the node.
+			if event == ct.FlowEvent.LinkChanged:
+				self.node.trigger_event(ct.FlowEvent.DataChanged, socket_name=self.name)
+
+			self.node.trigger_event(event, socket_name=self.name)
+
+		# Output Socket | Input Flow
+		if self.is_output and flow_direction == 'input':
+			if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
+				self.locked = event == ct.FlowEvent.EnableLock
+
+			self.node.trigger_event(event, socket_name=self.name)
+
+		# Output Socket | Output Flow
+		if self.is_output and flow_direction == 'output':
+			for link in self.links:
+				link.to_socket.trigger_event(event)
 
 	####################
 	# - Data Chain
@@ -437,13 +477,22 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	def lazy_array_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
 		raise NotImplementedError
 
-	# LazyArrayRange
+	# Param
 	@property
 	def param(self) -> ct.ParamsFlow:
 		raise NotImplementedError
 
 	@param.setter
 	def param(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
+		raise NotImplementedError
+
+	# Info
+	@property
+	def info(self) -> ct.ParamsFlow:
+		raise NotImplementedError
+
+	@info.setter
+	def info(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
 		raise NotImplementedError
 
 	####################
@@ -546,41 +595,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		self.active_unit = matching_unit_names[0]
 
-	def sync_unit_change(self) -> None:
-		"""In unit-aware sockets, the internal `value()` property multiplies the Blender property value by the current active unit.
-
-		When the unit is changed, `value()` will display the old scalar with the new unit.
-		To fix this, we need to update the scalar to use the new unit.
-
-		Can be overridden if more specific logic is required.
-		"""
-		if self.active_kind == ct.FlowKind.Value:
-			self.value = self.value / self.unit * self.prev_unit
-
-		elif self.active_kind == ct.FlowKind.LazyValueRange:
-			lazy_value_range = self.lazy_value_range
-			self.lazy_value_range = (
-				lazy_value_range.start / self.unit * self.prev_unit,
-				lazy_value_range.stop / self.unit * self.prev_unit,
-				lazy_value_range.steps,
-			)
-
-		self.prev_active_unit = self.active_unit
-
 	####################
-	# - Style
+	# - Theme
 	####################
-	def draw_color(
-		self,
-		context: bpy.types.Context,
-		node: bpy.types.Node,
-	) -> ct.BLColorRGBA:
-		"""Color of the socket icon, when embedded in a node."""
-		return self.socket_color
-
 	@classmethod
 	def draw_color_simple(cls) -> ct.BLColorRGBA:
-		"""Fallback color of the socket icon (ex.when not embedded in a node)."""
+		"""Sets the socket's color to `cls.socket_color`.
+
+		Notes:
+			Blender calls this method to determine the socket color.
+
+		Returns:
+			A Blender-compatible RGBA value, with no explicit color space.
+		"""
 		return cls.socket_color
 
 	####################
@@ -593,7 +620,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
-		"""Called by Blender to draw the socket UI."""
+		"""Draw the socket UI.
+
+		- **Input Socket**: Will use `self.draw_input()`.
+		- **Output Socket**: Will use `self.draw_output()`.
+
+		Parameters:
+			context: The current Blender context.
+			layout: Target for defining UI elements.
+			node: The node within which the socket is embedded.
+			text: The socket's name in the UI.
+		"""
 		if self.is_output:
 			self.draw_output(context, layout, node, text)
 		else:
@@ -606,8 +643,21 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
-		pass
+		"""Draw the "prelock" UI, which is usable regardless of the `self.locked` state.
 
+		Notes:
+			If a "prelock" UI is needed by a socket, it should set `self.use_prelock` and override this method.
+
+		Parameters:
+			context: The current Blender context.
+			col: Target for defining UI elements.
+			node: The node within which the socket is embedded.
+			text: The socket's name in the UI.
+		"""
+
+	####################
+	# - UI: Input / Output Socket
+	####################
 	def draw_input(
 		self,
 		context: bpy.types.Context,
@@ -615,7 +665,23 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		node: bpy.types.Node,
 		text: str,
 	) -> None:
-		"""Draws the socket UI, when the socket is an input socket."""
+		"""Draw the UI of the input socket.
+
+		- **Locked** (`self.locked`): The UI will be unusable.
+		- **Linked** (`self.is_linked`): Only the socket label will display.
+		- **Use Units** (`self.use_units`): The currently active unit will display as a dropdown menu.
+		- **Use Prelock** (`self.use_prelock`): The "prelock" UI drawn with `self.draw_prelock()`, which shows **regardless of `self.locked`**.
+		- **FlowKind**: The `FlowKind`-specific UI corresponding to the current `self.active_kind`.
+
+		Notes:
+			Shouldn't be overridden.
+
+		Parameters:
+			context: The current Blender context.
+			layout: Target for defining UI elements.
+			node: The node within which the socket is embedded.
+			text: The socket's name in the UI.
+		"""
 		col = layout.column(align=False)
 
 		# Label Row
@@ -653,25 +719,33 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		elif self.locked:
 			row.enabled = False
 
-		# Data Column(s)
+		# FlowKind Column(s)
 		col = row.column(align=True)
 		{
 			ct.FlowKind.Value: self.draw_value,
-			ct.FlowKind.ValueArray: self.draw_value_array,
-			ct.FlowKind.ValueSpectrum: self.draw_value_spectrum,
+			ct.FlowKind.Array: self.draw_value_array,
 			ct.FlowKind.LazyValue: self.draw_lazy_value,
 			ct.FlowKind.LazyValueRange: self.draw_lazy_value_range,
-			ct.FlowKind.LazyValueSpectrum: self.draw_lazy_value_spectrum,
 		}[self.active_kind](col)
 
 	def draw_output(
 		self,
-		context: bpy.types.Context,
+		context: bpy.types.Context,  # noqa: ARG002
 		layout: bpy.types.UILayout,
-		node: bpy.types.Node,
+		node: bpy.types.Node,  # noqa: ARG002
 		text: str,
 	) -> None:
-		"""Draws the socket UI, when the socket is an output socket."""
+		"""Draw the label text on the output socket.
+
+		Notes:
+			Shouldn't be overridden.
+
+		Parameters:
+			context: The current Blender context.
+			layout: Target for defining UI elements.
+			node: The node within which the socket is embedded.
+			text: The socket's name in the UI.
+		"""
 		layout.label(text=text)
 
 	####################
@@ -682,29 +756,53 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		row: bpy.types.UILayout,
 		text: str,
 	) -> None:
-		"""Called to draw the label row (same height as socket shape).
+		"""Draw the label row, which is at the same height as the socket shape.
 
-		Can be overridden.
+		Notes:
+			Can be overriden by individual socket classes, if they need to alter the way that the label row is drawn.
+
+		Parameters:
+			row: Target for defining UI elements.
+			text: The socket's name in the UI.
 		"""
 		row.label(text=text)
 
-	####################
-	# - FlowKind draw() Methods
-	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		pass
+		"""Draws the socket value on its own line.
 
-	def draw_value_array(self, col: bpy.types.UILayout) -> None:
-		pass
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.Value`.
 
-	def draw_value_spectrum(self, col: bpy.types.UILayout) -> None:
-		pass
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+
+	def draw_array(self, col: bpy.types.UILayout) -> None:
+		"""Draws the socket array on its own line.
+
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.Array`.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""
 
 	def draw_lazy_value(self, col: bpy.types.UILayout) -> None:
-		pass
+		"""Draws the socket lazy value on its own line.
 
-	def draw_lazy_value_range(self, col: bpy.types.UILayout) -> None:
-		pass
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValue`.
 
-	def draw_lazy_value_spectrum(self, col: bpy.types.UILayout) -> None:
-		pass
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+
+	def draw_lazy_array_range(self, col: bpy.types.UILayout) -> None:
+		"""Draws the socket lazy array range on its own line.
+
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyArrayRange`.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""

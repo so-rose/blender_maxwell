@@ -192,7 +192,6 @@ class MaxwellSimNode(bpy.types.Node):
 				'active_socket_set',
 				bpy.props.EnumProperty,
 				name='Active Socket Set',
-				description='Selector of active sockets',
 				items=[
 					(socket_set_name, socket_set_name, socket_set_name)
 					for socket_set_name in socket_set_names
@@ -742,13 +741,13 @@ class MaxwellSimNode(bpy.types.Node):
 	) -> None:
 		"""Draws the UI of the node.
 
-		- Locked (`self.locked`): The UI will be unusable.
-		- Active Preset (`self.active_preset`): The preset selector will display.
-		- Active Socket Set (`self.active_socket_set`): The socket set selector will display.
-		- Use Sim Node Name (`self.use_sim_node_name`): The "Sim Node Name will display.
-		- Properties (`self.draw_props()`): Node properties will display.
-		- Operators (`self.draw_operators()`): Node operators will display.
-		- Info (`self.draw_operators()`): Node information will display.
+		- **Locked** (`self.locked`): The UI will be unusable.
+		- **Active Preset** (`self.active_preset`): The preset selector will display.
+		- **Active Socket Set** (`self.active_socket_set`): The socket set selector will display.
+		- **Use Sim Node Name** (`self.use_sim_node_name`): The `self.sim_node_name` will display.
+		- **Properties**: Node properties will display, if `self.draw_props()` is overridden.
+		- **Operators**: Node operators will display, if `self.draw_operators()` is overridden.
+		- **Info**: Node information will display, if `self.draw_info()` is overridden.
 
 		Parameters:
 			context: The current Blender context.

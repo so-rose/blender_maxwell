@@ -347,6 +347,8 @@ class MaxwellSimTree(bpy.types.NodeTree):
 				consent_removal = to_socket.allow_remove_link(from_socket)
 				if not consent_removal:
 					link_corrections['to_add'].append((from_socket, to_socket))
+				else:
+					to_socket.on_link_removed(from_socket)
 
 			# Ensure Removal of Socket PTRs, PTRs->REFs
 			self.node_link_cache.remove_sockets_by_link_ptr(link_ptr)

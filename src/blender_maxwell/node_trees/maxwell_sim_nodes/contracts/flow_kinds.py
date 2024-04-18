@@ -108,7 +108,25 @@ class ArrayFlow:
 	"""
 
 	values: jax.Array
-	unit: spu.Quantity | None
+	unit: spu.Quantity | None = None
+
+	def correct_unit(self, real_unit: spu.Quantity) -> typ.Self:
+		if self.unit is not None:
+			return ArrayFlow(values=self.values, unit=real_unit)
+
+		msg = f'Tried to correct unit of unitless LazyDataValueRange "{real_unit}"'
+		raise ValueError(msg)
+
+	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
+		if self.unit is not None:
+			return ArrayFlow(
+				values=float(spux.scaling_factor(self.unit, unit)) * self.values,
+				unit=unit,
+			)
+			## TODO: Is this scaling numerically stable?
+
+		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
+		raise ValueError(msg)
 
 
 ####################
@@ -213,14 +231,26 @@ class LazyArrayRangeFlow:
 	steps: int
 	scaling: typx.Literal['lin', 'geom', 'log'] = 'lin'
 
-	has_unit: bool = False
-	unit: spu.Quantity = False
+	unit: spu.Quantity | None = False
 
-	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
-		if self.has_unit:
+	def correct_unit(self, real_unit: spu.Quantity) -> typ.Self:
+		if self.unit is not None:
 			return LazyArrayRangeFlow(
 				symbols=self.symbols,
-				has_unit=self.has_unit,
+				unit=real_unit,
+				start=self.start,
+				stop=self.stop,
+				steps=self.steps,
+				scaling=self.scaling,
+			)
+
+		msg = f'Tried to correct unit of unitless LazyDataValueRange "{real_unit}"'
+		raise ValueError(msg)
+
+	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
+		if self.unit is not None:
+			return LazyArrayRangeFlow(
+				symbols=self.symbols,
 				unit=unit,
 				start=spu.convert_to(self.start, unit),
 				stop=spu.convert_to(self.stop, unit),
@@ -239,7 +269,6 @@ class LazyArrayRangeFlow:
 		"""Call a function on both bounds (start and stop), creating a new `LazyDataValueRange`."""
 		return LazyArrayRangeFlow(
 			symbols=self.symbols,
-			has_unit=self.has_unit,
 			unit=self.unit,
 			start=spu.convert_to(
 				bound_cb(self.start if not reverse else self.stop), self.unit
@@ -255,7 +284,7 @@ class LazyArrayRangeFlow:
 		self, symbol_values: dict[sp.Symbol, ValueFlow] = MappingProxyType({})
 	) -> ArrayFlow:
 		# Realize Symbols
-		if not self.has_unit:
+		if self.unit is None:
 			start = spux.sympy_to_python(self.start.subs(symbol_values))
 			stop = spux.sympy_to_python(self.stop.subs(symbol_values))
 		else:

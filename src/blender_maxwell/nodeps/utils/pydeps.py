@@ -4,7 +4,8 @@ import os
 import sys
 from pathlib import Path
 
-from ... import info
+import blender_maxwell.contracts as ct
+
 from . import simple_logger
 
 log = simple_logger.get(__name__)
@@ -30,8 +31,8 @@ def importable_addon_deps(path_deps: Path):
 			yield
 		finally:
 			pass
-			#log.info('Removing Path from sys.path: %s', str(os_path))
-			#sys.path.remove(os_path)
+			# log.info('Removing Path from sys.path: %s', str(os_path))
+			# sys.path.remove(os_path)
 	else:
 		try:
 			yield
@@ -43,7 +44,7 @@ def importable_addon_deps(path_deps: Path):
 def syspath_from_bpy_prefs() -> bool:
 	import bpy
 
-	addon_prefs = bpy.context.preferences.addons[info.ADDON_NAME].preferences
+	addon_prefs = bpy.context.preferences.addons[ct.addon.NAME].preferences
 	if hasattr(addon_prefs, 'path_addon_pydeps'):
 		log.info('Retrieved PyDeps Path from Addon Prefs')
 		path_pydeps = addon_prefs.path_addon_pydeps
@@ -67,7 +68,7 @@ def _check_pydeps(
 	"""
 
 	def conform_pypi_package_deplock(deplock: str):
-		"""Conforms a <package>==<version> de-lock to match if pypi considers them the same (PyPi is case-insensitive and considers -/_ to be the same)
+		"""Conforms a <package>==<version> de-lock to match if pypi considers them the same (PyPi is case-insensitive and considers -/_ to be the same).
 
 		See <https://peps.python.org/pep-0426/#name>
 		"""
@@ -127,7 +128,7 @@ def check_pydeps(path_deps: Path):
 	global DEPS_OK  # noqa: PLW0603
 	global DEPS_ISSUES  # noqa: PLW0603
 
-	if len(issues := _check_pydeps(info.PATH_REQS, path_deps)) > 0:
+	if len(issues := _check_pydeps(ct.addon.PATH_REQS, path_deps)) > 0:
 		log.info('PyDeps Check Failed')
 		log.debug('%s', ', '.join(issues))
 
