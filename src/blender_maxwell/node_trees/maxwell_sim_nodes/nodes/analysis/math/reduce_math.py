@@ -44,7 +44,7 @@ class ReduceMathNode(base.MaxwellSimNode):
 		name='Op',
 		description='Operation to reduce the input axis with',
 		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.sync_prop('operation', context),
+		update=lambda self, context: self.on_prop_changed('operation', context),
 	)
 
 	def search_operations(self) -> list[tuple[str, str, str]]:
@@ -79,24 +79,14 @@ class ReduceMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Data',
-		props={'operation'},
+		props={'active_socket_set', 'operation'},
 		input_sockets={'Data', 'Axis', 'Reducer'},
-		input_socket_kinds={'Reducer': ct.FlowKind.LazyValue},
+		input_socket_kinds={'Reducer': ct.FlowKind.LazyValueFunc},
 		input_sockets_optional={'Reducer': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):
-		if not hasattr(input_sockets['Data'], 'shape'):
-			msg = 'Input socket "Data" must be an N-D Array (with a "shape" attribute)'
-			raise ValueError(msg)
-
-		if self.active_socket_set == 'Axis Expr':
-			ufunc = jnp.ufunc(input_sockets['Reducer'], nin=2, nout=1)
-			return ufunc.reduce(input_sockets['Data'], axis=input_sockets['Axis'])
-
-		if self.active_socket_set == 'By Axis':
-			## Dimension Reduction
-			# ('SQUEEZE', 'Squeeze', '(*, 1, *) -> (*, *)'),
-			# Accumulation
+		if props['active_socket_set'] == 'By Axis':
+			# Simple Accumulation
 			if props['operation'] == 'SUM':
 				return jnp.sum(input_sockets['Data'], axis=input_sockets['Axis'])
 			if props['operation'] == 'PROD':
@@ -121,6 +111,10 @@ class ReduceMathNode(base.MaxwellSimNode):
 			# Dimension Reduction
 			if props['operation'] == 'SQUEEZE':
 				return jnp.squeeze(input_sockets['Data'], axis=input_sockets['Axis'])
+
+		if props['active_socket_set'] == 'Expr':
+			ufunc = jnp.ufunc(input_sockets['Reducer'], nin=2, nout=1)
+			return ufunc.reduce(input_sockets['Data'], axis=input_sockets['Axis'])
 
 		msg = 'Operation invalid'
 		raise ValueError(msg)

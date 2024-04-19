@@ -42,7 +42,7 @@ class OperateMathNode(base.MaxwellSimNode):
 		name='Op',
 		description='Operation to apply to the two inputs',
 		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.sync_prop('operation', context),
+		update=lambda self, context: self.on_prop_changed('operation', context),
 	)
 
 	def search_operations(self) -> list[tuple[str, str, str]]:

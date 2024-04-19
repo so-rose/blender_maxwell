@@ -10,13 +10,12 @@ from types import MappingProxyType
 
 import bpy
 import sympy as sp
-import typing_extensions as typx
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import bl_cache, logger
 
-from .. import bl_cache, sockets
 from .. import contracts as ct
 from .. import managed_objs as _managed_objs
+from .. import sockets
 from . import events
 from . import presets as _presets
 
@@ -102,12 +101,12 @@ class MaxwellSimNode(bpy.types.Node):
 		Parameters:
 			name: The name of the property to set.
 			prop: The `bpy.types.Property` to instantiate and attach..
-			no_update: Don't attach a `self.sync_prop()` callback to the property's `update`.
+			no_update: Don't attach a `self.on_prop_changed()` callback to the property's `update`.
 		"""
 		_update_with_name = prop_name if update_with_name is None else update_with_name
 		extra_kwargs = (
 			{
-				'update': lambda self, context: self.sync_prop(
+				'update': lambda self, context: self.on_prop_changed(
 					_update_with_name, context
 				),
 			}
@@ -316,7 +315,7 @@ class MaxwellSimNode(bpy.types.Node):
 	# - Socket Accessors
 	####################
 	def _bl_sockets(
-		self, direc: typx.Literal['input', 'output']
+		self, direc: typ.Literal['input', 'output']
 	) -> bpy.types.NodeInputs:
 		"""Retrieve currently visible Blender sockets on the node, by-direction.
 
@@ -335,7 +334,7 @@ class MaxwellSimNode(bpy.types.Node):
 
 	def _active_socket_set_socket_defs(
 		self,
-		direc: typx.Literal['input', 'output'],
+		direc: typ.Literal['input', 'output'],
 	) -> dict[ct.SocketName, sockets.base.SocketDef]:
 		"""Retrieve all socket definitions for sockets that should be defined, according to the `self.active_socket_set`.
 
@@ -361,7 +360,7 @@ class MaxwellSimNode(bpy.types.Node):
 		return socket_sets.get(self.active_socket_set, {})
 
 	def active_socket_defs(
-		self, direc: typx.Literal['input', 'output']
+		self, direc: typ.Literal['input', 'output']
 	) -> dict[ct.SocketName, sockets.base.SocketDef]:
 		"""Retrieve all socket definitions for sockets that should be defined.
 
@@ -664,6 +663,9 @@ class MaxwellSimNode(bpy.types.Node):
 		Notes:
 			This can be an unpredictably heavy function, depending on the node graph topology.
 
+			Doesn't currently accept `LinkChanged` (->Output) events; rather, these propagate as `DataChanged` events.
+			**This may change** if it becomes important for the node to differentiate between "change in data" and "change in link".
+
 		Parameters:
 			event: The event to report forwards/backwards along the node tree.
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
@@ -714,7 +716,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Property Event: On Update
 	####################
-	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
+	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Report that a particular property has changed, which may cause certain caches to regenerate.
 
 		Notes:

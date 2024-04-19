@@ -1,30 +1,18 @@
 import typing as typ
 
 import bpy
-import pydantic as pyd
-import typing_extensions as typx
 
 ####################
 # - Blender Strings
 ####################
-BLEnumID = typx.Annotated[
-	str,
-	pyd.StringConstraints(
-		pattern=r'^[A-Z_]+$',
-	),
-]
-SocketName = typx.Annotated[
-	str,
-	pyd.StringConstraints(
-		pattern=r'^[a-zA-Z0-9_]+$',
-	),
-]
+BLEnumID = str
+SocketName = str
 
 ####################
 # - Blender Enums
 ####################
-BLImportMethod: typ.TypeAlias = typx.Literal['append', 'link']
-BLModifierType: typ.TypeAlias = typx.Literal['NODES', 'ARRAY']
+BLImportMethod: typ.TypeAlias = typ.Literal['append', 'link']
+BLModifierType: typ.TypeAlias = typ.Literal['NODES', 'ARRAY']
 BLNodeTreeInterfaceID: typ.TypeAlias = str
 
 BLIconSet: frozenset[str] = frozenset(
@@ -49,30 +37,60 @@ BLClass: typ.TypeAlias = (
 BLKeymapItem: typ.TypeAlias = typ.Any  ## TODO: Better Type
 BLColorRGBA = tuple[float, float, float, float]
 
+
 ####################
 # - Operators
 ####################
+BLSpaceType: typ.TypeAlias = typ.Literal[
+	'EMPTY',
+	'VIEW_3D',
+	'IMAGE_EDITOR',
+	'NODE_EDITOR',
+	'SEQUENCE_EDITOR',
+	'CLIP_EDITOR',
+	'DOPESHEET_EDITOR',
+	'GRAPH_EDITOR',
+	'NLA_EDITOR',
+	'TEXT_EDITOR',
+	'CONSOLE',
+	'INFO',
+	'TOPBAR',
+	'STATUSBAR',
+	'OUTLINER',
+	'PROPERTIES',
+	'FILE_BROWSER',
+	'SPREADSHEET',
+	'PREFERENCES',
+]
+BLRegionType: typ.TypeAlias = typ.Literal[
+	'WINDOW',
+	'HEADER',
+	'CHANNELS',
+	'TEMPORARY',
+	'UI',
+	'TOOLS',
+	'TOOL_PROPS',
+	'ASSET_SHELF',
+	'ASSET_SHELF_HEADER',
+	'PREVIEW',
+	'HUD',
+	'NAVIGATION_BAR',
+	'EXECUTE',
+	'FOOTER',
+	'TOOL_HEADER',
+	'XR',
+]
 BLOperatorStatus: typ.TypeAlias = set[
-	typx.Literal['RUNNING_MODAL', 'CANCELLED', 'FINISHED', 'PASS_THROUGH', 'INTERFACE']
+	typ.Literal['RUNNING_MODAL', 'CANCELLED', 'FINISHED', 'PASS_THROUGH', 'INTERFACE']
 ]
 
 ####################
 # - Addon Types
 ####################
 KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
-ManagedObjName = typx.Annotated[
-	str,
-	pyd.StringConstraints(
-		pattern=r'^[a-z_]+$',
-	),
-]
+ManagedObjName = str
 
 ####################
 # - Blender Strings
 ####################
-PresetName = typx.Annotated[
-	str,
-	pyd.StringConstraints(
-		pattern=r'^[a-zA-Z0-9_]+$',
-	),
-]
+PresetName = str

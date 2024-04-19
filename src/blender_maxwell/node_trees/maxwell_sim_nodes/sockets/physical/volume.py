@@ -20,7 +20,7 @@ class PhysicalVolumeBLSocket(base.MaxwellSimSocket):
 		description='Represents the unitless part of the area',
 		default=0.0,
 		precision=6,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

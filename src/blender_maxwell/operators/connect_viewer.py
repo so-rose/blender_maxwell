@@ -59,7 +59,7 @@ BL_REGISTER = [
 	ConnectViewerNode,
 ]
 
-BL_KEYMAP_ITEM_DEFS = [
+BL_HOTKEYS = [
 	{
 		'_': (
 			ConnectViewerNode.bl_idname,

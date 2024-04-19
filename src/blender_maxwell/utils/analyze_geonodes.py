@@ -1,5 +1,6 @@
+import typing as typ
+
 import bpy
-import typing_extensions as typx
 
 INVALID_BL_SOCKET_TYPES = {
 	'NodeSocketGeometry',
@@ -8,7 +9,7 @@ INVALID_BL_SOCKET_TYPES = {
 
 def interface(
 	geonodes: bpy.types.GeometryNodeTree,  ## TODO: bpy type
-	direc: typx.Literal['INPUT', 'OUTPUT'],
+	direc: typ.Literal['INPUT', 'OUTPUT'],
 ):
 	"""Returns 'valid' GeoNodes interface sockets.
 

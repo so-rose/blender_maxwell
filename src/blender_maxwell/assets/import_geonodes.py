@@ -8,8 +8,6 @@ import bpy
 from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger
 
-from .. import info
-
 log = logger.get(__name__)
 
 
@@ -75,7 +73,7 @@ class GeoNodes(enum.StrEnum):
 
 # GeoNodes Paths
 ## Internal
-GN_INTERNAL_PATH = info.PATH_ASSETS / 'internal' / 'primitives'
+GN_INTERNAL_PATH = ct.addon.PATH_ASSETS / 'internal' / 'primitives'
 GN_INTERNAL_INPUTS_PATH = GN_INTERNAL_PATH / 'input'
 GN_INTERNAL_SOURCES_PATH = GN_INTERNAL_PATH / 'source'
 GN_INTERNAL_STRUCTURES_PATH = GN_INTERNAL_PATH / 'structure'
@@ -83,7 +81,7 @@ GN_INTERNAL_MONITORS_PATH = GN_INTERNAL_PATH / 'monitor'
 GN_INTERNAL_SIMULATIONS_PATH = GN_INTERNAL_PATH / 'simulation'
 
 ## Structures
-GN_STRUCTURES_PATH = info.PATH_ASSETS / 'structures'
+GN_STRUCTURES_PATH = ct.addon.PATH_ASSETS / 'structures'
 GN_STRUCTURES_PRIMITIVES_PATH = GN_STRUCTURES_PATH / 'primitives'
 
 GN_PARENT_PATHS: dict[GeoNodes, Path] = {
@@ -377,14 +375,14 @@ class AppendGeoNodes(bpy.types.Operator):
 asset_libraries = bpy.context.preferences.filepaths.asset_libraries
 if (
 	asset_library_idx := asset_libraries.find('Blender Maxwell')
-) != -1 and asset_libraries['Blender Maxwell'].path != str(info.PATH_ASSETS):
+) != -1 and asset_libraries['Blender Maxwell'].path != str(ct.addon.PATH_ASSETS):
 	bpy.ops.preferences.asset_library_remove(asset_library_idx)
 
 if 'Blender Maxwell' not in asset_libraries:
 	bpy.ops.preferences.asset_library_add()
 	asset_library = asset_libraries[-1]  ## Since the operator adds to the end
 	asset_library.name = 'Blender Maxwell'
-	asset_library.path = str(info.PATH_ASSETS)
+	asset_library.path = str(ct.addon.PATH_ASSETS)
 
 bpy.types.WindowManager.active_asset_list = bpy.props.CollectionProperty(
 	type=bpy.types.AssetHandle
@@ -398,7 +396,7 @@ BL_REGISTER = [
 	AppendGeoNodes,
 ]
 
-BL_KEYMAP_ITEM_DEFS = [
+BL_HOTKEYS = [
 	# {
 	# '_': [
 	# AppendGeoNodes.bl_idname,

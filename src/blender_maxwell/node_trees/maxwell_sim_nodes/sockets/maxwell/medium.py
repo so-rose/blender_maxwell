@@ -3,7 +3,7 @@ import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td
 
-from blender_maxwell.utils.pydantic_sympy import ConstrSympyExpr
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
@@ -25,7 +25,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 		default=500.0,
 		precision=4,
 		step=50,
-		update=(lambda self, context: self.sync_prop('wl', context)),
+		update=(lambda self, context: self.on_prop_changed('wl', context)),
 	)
 
 	rel_permittivity: bpy.props.FloatVectorProperty(
@@ -34,7 +34,9 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 		size=2,
 		default=(1.0, 0.0),
 		precision=2,
-		update=(lambda self, context: self.sync_prop('rel_permittivity', context)),
+		update=(
+			lambda self, context: self.on_prop_changed('rel_permittivity', context)
+		),
 	)
 
 	####################
@@ -72,7 +74,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 
 	@value.setter
 	def value(
-		self, value: tuple[ConstrSympyExpr(allow_variables=False), complex]
+		self, value: tuple[spux.ConstrSympyExpr(allow_variables=False), complex]
 	) -> None:
 		_wl, rel_permittivity = value
 

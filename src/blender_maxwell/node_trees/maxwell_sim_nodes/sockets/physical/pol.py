@@ -39,7 +39,7 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 			('STOKES', 'Stokes', 'Linear x-pol of field'),
 		],
 		default='UNPOL',
-		update=(lambda self, context: self.sync_prop('model', context)),
+		update=(lambda self, context: self.on_prop_changed('model', context)),
 	)
 
 	## Lin Ang
@@ -47,7 +47,7 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 		name='Pol. Angle',
 		description='Angle to polarize linearly along',
 		default=0.0,
-		update=(lambda self, context: self.sync_prop('lin_ang', context)),
+		update=(lambda self, context: self.on_prop_changed('lin_ang', context)),
 	)
 	## Circ
 	circ: bpy.props.EnumProperty(
@@ -58,7 +58,7 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 			('RCP', 'RCP', "'Right Circular Polarization'"),
 		],
 		default='LCP',
-		update=(lambda self, context: self.sync_prop('circ', context)),
+		update=(lambda self, context: self.on_prop_changed('circ', context)),
 	)
 	## Jones
 	jones_psi: bpy.props.FloatProperty(
@@ -66,14 +66,14 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 		description='Angle of the ellipse to the x-axis',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('jones_psi', context)),
+		update=(lambda self, context: self.on_prop_changed('jones_psi', context)),
 	)
 	jones_chi: bpy.props.FloatProperty(
 		name='Jones Major-Axis-Adjacent Angle',
 		description='Angle of adjacent to the ellipse major axis',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('jones_chi', context)),
+		update=(lambda self, context: self.on_prop_changed('jones_chi', context)),
 	)
 
 	## Stokes
@@ -82,28 +82,28 @@ class PhysicalPolBLSocket(base.MaxwellSimSocket):
 		description='Angle of the ellipse to the x-axis',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('stokes_psi', context)),
+		update=(lambda self, context: self.on_prop_changed('stokes_psi', context)),
 	)
 	stokes_chi: bpy.props.FloatProperty(
 		name='Stokes Major-Axis-Adjacent Angle',
 		description='Angle of adjacent to the ellipse major axis',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('stokes_chi', context)),
+		update=(lambda self, context: self.on_prop_changed('stokes_chi', context)),
 	)
 	stokes_p: bpy.props.FloatProperty(
 		name='Stokes Polarization Degree',
 		description='The degree of polarization',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('stokes_p', context)),
+		update=(lambda self, context: self.on_prop_changed('stokes_p', context)),
 	)
 	stokes_I: bpy.props.FloatProperty(
 		name='Stokes Field Intensity',
 		description='The intensity of the polarized field',
 		default=0.0,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('stokes_I', context)),
+		update=(lambda self, context: self.on_prop_changed('stokes_I', context)),
 	)  ## TODO: Units?
 
 	####################

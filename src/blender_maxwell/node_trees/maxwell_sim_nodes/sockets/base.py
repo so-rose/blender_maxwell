@@ -5,8 +5,8 @@ import typing as typ
 import bpy
 import pydantic as pyd
 import sympy as sp
-import typing_extensions as typx
 
+from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, serialize
 
 from .. import contracts as ct
@@ -100,7 +100,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	bl_label: str
 
 	# Style
-	display_shape: typx.Literal[
+	display_shape: typ.Literal[
 		'CIRCLE',
 		'SQUARE',
 		'DIAMOND',
@@ -144,12 +144,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Parameters:
 			name: The name of the property to set.
 			prop: The `bpy.types.Property` to instantiate and attach..
-			no_update: Don't attach a `self.sync_prop()` callback to the property's `update`.
+			no_update: Don't attach a `self.on_prop_changed()` callback to the property's `update`.
 		"""
 		_update_with_name = prop_name if update_with_name is None else update_with_name
 		extra_kwargs = (
 			{
-				'update': lambda self, context: self.sync_prop(
+				'update': lambda self, context: self.on_prop_changed(
 					_update_with_name, context
 				),
 			}
@@ -185,7 +185,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		# Configure Use of Units
 		if cls.use_units:
 			if not (socket_units := ct.SOCKET_UNITS.get(cls.socket_type)):
-				msg = f'Tried to define "use_units" on socket {cls.bl_label} socket, but there is no unit for {cls.socket_type} defined in "contracts.SOCKET_UNITS"'
+				msg = f'{cls.socket_type}: Tried to define "use_units", but there is no unit for {cls.socket_type} defined in "contracts.SOCKET_UNITS"'
 				raise RuntimeError(msg)
 
 			cls.set_prop(
@@ -193,7 +193,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 				bpy.props.EnumProperty,
 				name='Unit',
 				items=[
-					(unit_name, str(unit_value), str(unit_value))
+					(unit_name, spux.sp_to_str(unit_value), sp.srepr(unit_value))
 					for unit_name, unit_value in socket_units['values'].items()
 				],
 				default=socket_units['default'],
@@ -203,6 +203,49 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 				bpy.props.StringProperty,
 				default=socket_units['default'],
 			)
+
+	####################
+	# - Units
+	####################
+	# TODO: Refactor
+	@functools.cached_property
+	def possible_units(self) -> dict[str, sp.Expr]:
+		if not self.use_units:
+			msg = "Tried to get possible units for socket {self}, but socket doesn't `use_units`"
+			raise ValueError(msg)
+
+		return ct.SOCKET_UNITS[self.socket_type]['values']
+
+	@property
+	def unit(self) -> sp.Expr:
+		return self.possible_units[self.active_unit]
+
+	@property
+	def prev_unit(self) -> sp.Expr:
+		return self.possible_units[self.prev_active_unit]
+
+	@unit.setter
+	def unit(self, value: str | sp.Expr) -> None:
+		# Retrieve Unit by String
+		if isinstance(value, str) and value in self.possible_units:
+			self.active_unit = self.possible_units[value]
+			return
+
+		# Retrieve =1 Matching Unit Name
+		matching_unit_names = [
+			unit_name
+			for unit_name, unit_sympy in self.possible_units.items()
+			if value == unit_sympy
+		]
+		if len(matching_unit_names) == 0:
+			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
+			raise ValueError(msg)
+
+		if len(matching_unit_names) > 1:
+			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
+			raise RuntimeError(msg)
+
+		self.active_unit = matching_unit_names[0]
 
 	####################
 	# - Property Event: On Update
@@ -215,7 +258,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		self.display_shape = (
 			'SQUARE'
-			if self.active_kind in {ct.FlowKind.LazyValue, ct.FlowKind.LazyValueRange}
+			if self.active_kind
+			in {ct.FlowKind.LazyValueFunc, ct.FlowKind.LazyValueRange}
 			else 'CIRCLE'
 		) + ('_DOT' if self.use_units else '')
 
@@ -241,12 +285,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 				self.prev_unit
 			).rescale_to_unit(self.unit)
 		else:
-			msg = f'Active kind {self.active_kind} has no way of scaling units (from {self.prev_active_unit} to {self.active_unit}). Please check the node definition'
+			msg = f'Socket {self.bl_label} ({self.socket_type}): Active kind {self.active_kind} declares no method of scaling units from {self.prev_active_unit} to {self.active_unit})'
 			raise RuntimeError(msg)
 
 		self.prev_active_unit = self.active_unit
 
-	def sync_prop(self, prop_name: str, _: bpy.types.Context) -> None:
+	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated.
 
 		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
@@ -269,7 +313,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Undefined Properties
 		else:
-			msg = f'Property {prop_name} not defined on socket {self}'
+			msg = f'Property {prop_name} not defined on socket {self.bl_label} ({self.socket_type})'
 			raise RuntimeError(msg)
 
 	####################
@@ -298,7 +342,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		# Output Socket Check
 		if self.is_output:
-			msg = 'Tried to ask output socket for consent to add link'
+			msg = f'Socket {self.bl_label} {self.socket_type}): Tried to ask output socket for consent to add link'
 			raise RuntimeError(msg)
 
 		# Lock Check
@@ -361,7 +405,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		# Output Socket Check
 		if self.is_output:
-			msg = "Tried to sync 'link add' on output socket"
+			msg = f'Socket {self.bl_label} {self.socket_type}): Tried to ask output socket for consent to remove link'
 			raise RuntimeError(msg)
 
 		# Lock Check
@@ -389,29 +433,38 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		self,
 		event: ct.FlowEvent,
 	) -> None:
-		"""Recursively triggers an event along the node tree, depending on whether the socket is an input or output socket.
+		"""Responds to and triggers subsequent events along the node tree.
+
+		- **Locking**: `EnableLock` or `DisableLock` will always affect this socket's lock.
+		- **Input Socket -> Input**: Trigger event on `from_socket`s along input links.
+		- **Input Socket -> Output**: Trigger event on node (w/`socket_name`).
+		- **Output Socket -> Input**: Trigger event on node (w/`socket_name`).
+		- **Output Socket -> Output**: Trigger event on `to_socket`s along output links.
+
 
 		Notes:
 			This can be an unpredictably heavy function, depending on the node graph topology.
 
+			A `LinkChanged` (->Output) event will trigger a `DataChanged` event on the node.
+			**This may change** if it becomes important for the node to differentiate between "change in data" and "change in link".
+
 		Parameters:
 			event: The event to report along the node tree.
-				The value of `ct.FlowEvent.flow_direction[event]` must match either `input` or `output`, depending on whether the socket is input/output.
+				The value of `ct.FlowEvent.flow_direction[event]` (`input` or `output`) determines the direction that an event flows.
 		"""
 		flow_direction = ct.FlowEvent.flow_direction[event]
 
+		# Locking
+		if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
+			self.locked = event == ct.FlowEvent.EnableLock
+
 		# Input Socket | Input Flow
 		if not self.is_output and flow_direction == 'input':
-			if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
-				self.locked = event == ct.FlowEvent.EnableLock
-
 			for link in self.links:
 				link.from_socket.trigger_event(event)
 
 		# Input Socket | Output Flow
 		if not self.is_output and flow_direction == 'output':
-			## THIS IS A WORKAROUND (bc Node only understands DataChanged)
-			## TODO: Handle LinkChanged on the node.
 			if event == ct.FlowEvent.LinkChanged:
 				self.node.trigger_event(ct.FlowEvent.DataChanged, socket_name=self.name)
 
@@ -419,9 +472,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Output Socket | Input Flow
 		if self.is_output and flow_direction == 'input':
-			if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
-				self.locked = event == ct.FlowEvent.EnableLock
-
 			self.node.trigger_event(event, socket_name=self.name)
 
 		# Output Socket | Output Flow
@@ -435,6 +485,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Capabilities
 	@property
 	def capabilities(self) -> None:
+		"""By default, the socket is linkeable with any other socket of the same type and active kind.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+		"""
 		return ct.DataCapabilities(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
@@ -443,57 +498,164 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Value
 	@property
 	def value(self) -> ct.ValueFlow:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Value", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	@value.setter
 	def value(self, value: ct.ValueFlow) -> None:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Value", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	# ValueArray
 	@property
 	def array(self) -> ct.ArrayFlow:
-		## TODO: Single-element list when value exists.
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Array", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	@array.setter
 	def array(self, value: ct.ArrayFlow) -> None:
-		raise NotImplementedError
+		"""Throws a descriptive error.
 
-	# LazyValue
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Array", but socket does not define it'
+		raise NotImplementedError(msg)
+
+	# LazyValueFunc
 	@property
-	def lazy_value(self) -> ct.LazyValueFlow:
-		raise NotImplementedError
+	def lazy_value_func(self) -> ct.LazyValueFuncFlow:
+		"""Throws a descriptive error.
 
-	@lazy_value.setter
-	def lazy_value(self, lazy_value: ct.LazyValueFlow) -> None:
-		raise NotImplementedError
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.LazyValueFunc", but socket does not define it'
+		raise NotImplementedError(msg)
+
+	@lazy_value_func.setter
+	def lazy_value_func(self, lazy_value_func: ct.LazyValueFuncFlow) -> None:
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.LazyValueFunc", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	# LazyArrayRange
 	@property
 	def lazy_array_range(self) -> ct.LazyArrayRangeFlow:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.LazyArrayRange", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	@lazy_array_range.setter
 	def lazy_array_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.LazyArrayRange", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	# Param
 	@property
 	def param(self) -> ct.ParamsFlow:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Param", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	@param.setter
 	def param(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Param", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	# Info
 	@property
 	def info(self) -> ct.ParamsFlow:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Info", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	@info.setter
 	def info(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
-		raise NotImplementedError
+		"""Throws a descriptive error.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Raises:
+			NotImplementedError: When used without being overridden.
+		"""
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Info", but socket does not define it'
+		raise NotImplementedError(msg)
 
 	####################
 	# - Data Chain Computation
@@ -502,32 +664,50 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		self,
 		kind: ct.FlowKind = ct.FlowKind.Value,
 	) -> typ.Any:
-		"""Computes the internal data of this socket, ONLY.
+		"""Low-level method to computes the data contained within this socket, for a particular `ct.FlowKind`.
 
-		**NOTE**: Low-level method. Use `compute_data` instead.
+		Notes:
+			Not all `ct.FlowKind`s are meant to be computed; namely, `Capabilities` should be directly referenced.
+
+		Raises:
+			ValueError: When referencing a socket that's meant to be directly referenced.
 		"""
-		return {
+		kind_data_map = {
 			ct.FlowKind.Value: lambda: self.value,
 			ct.FlowKind.ValueArray: lambda: self.value_array,
-			ct.FlowKind.LazyValue: lambda: self.lazy_value,
+			ct.FlowKind.LazyValueFunc: lambda: self.lazy_value,
 			ct.FlowKind.LazyArrayRange: lambda: self.lazy_array_range,
 			ct.FlowKind.Params: lambda: self.params,
 			ct.FlowKind.Info: lambda: self.info,
-		}[kind]()
+		}
+		if kind in kind_data_map:
+			return kind_data_map[kind]()
 
-		msg = f'socket._compute_data was called with invalid kind "{kind}"'
-		raise RuntimeError(msg)
+		## TODO: Reflect this constraint in the type
+		msg = f'Socket {self.bl_label} ({self.socket_type}): Kind {kind} cannot be computed within a socket "compute_data", as it is meant to be referenced directly'
+		raise ValueError(msg)
 
 	def compute_data(
 		self,
 		kind: ct.FlowKind = ct.FlowKind.Value,
-	):
-		"""Computes the value of this socket, including all relevant factors.
+	) -> typ.Any:
+		"""Computes internal or link-sourced data represented by this socket.
+
+		- **Input Socket | Unlinked**: Use socket's own data, by calling `_compute_data`.
+		- **Input Socket | Linked**: Call `compute_data` on the linked `from_socket`.
+		- **Output Socket**: Use the node's output data, by calling `node.compute_output()`.
 
 		Notes:
-			- If input socket, and unlinked, compute internal data.
-			- If input socket, and linked, compute linked socket data.
-			- If output socket, ask node for data.
+			This can be an unpredictably heavy function, depending on the node graph topology.
+
+		Parameters:
+			kind: The `ct.FlowKind` to reference when retrieving the data.
+
+		Returns:
+			The computed data, whever it came from.
+
+		Raises:
+			NotImplementedError: If multi-input sockets are used (no support yet as of Blender 4.1).
 		"""
 		# Compute Output Socket
 		if self.is_output:
@@ -538,62 +718,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if not self.is_linked:
 			return self._compute_data(kind)
 
-		## Linked: Check Capabilities
-		for link in self.links:
-			if not link.from_socket.capabilities.is_compatible_with(self.capabilities):
-				msg = f'Output socket "{link.from_socket.bl_label}" is linked to input socket "{self.bl_label}" with incompatible capabilities (caps_out="{link.from_socket.capabilities}", caps_in="{self.capabilities}")'
-				raise ValueError(msg)
-
-		## ...and Compute Data on Linked Socket
+		## Linked: Compute Data on Linked Socket
+		## -> Capabilities are guaranteed compatible by 'allow_link_add'.
+		## -> There is no point in rechecking every time data flows.
 		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
 		# Return Single Value / List of Values
-		## Preparation for multi-input sockets.
 		if len(linked_values) == 1:
 			return linked_values[0]
-		return linked_values
 
-	####################
-	# - Unit Properties
-	####################
-	@functools.cached_property
-	def possible_units(self) -> dict[str, sp.Expr]:
-		if not self.use_units:
-			msg = "Tried to get possible units for socket {self}, but socket doesn't `use_units`"
-			raise ValueError(msg)
-
-		return ct.SOCKET_UNITS[self.socket_type]['values']
-
-	@property
-	def unit(self) -> sp.Expr:
-		return self.possible_units[self.active_unit]
-
-	@property
-	def prev_unit(self) -> sp.Expr:
-		return self.possible_units[self.prev_active_unit]
-
-	@unit.setter
-	def unit(self, value: str | sp.Expr) -> None:
-		# Retrieve Unit by String
-		if isinstance(value, str) and value in self.possible_units:
-			self.active_unit = self.possible_units[value]
-			return
-
-		# Retrieve =1 Matching Unit Name
-		matching_unit_names = [
-			unit_name
-			for unit_name, unit_sympy in self.possible_units.items()
-			if value == unit_sympy
-		]
-		if len(matching_unit_names) == 0:
-			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
-			raise ValueError(msg)
-
-		if len(matching_unit_names) > 1:
-			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
-			raise RuntimeError(msg)
-
-		self.active_unit = matching_unit_names[0]
+		msg = f'Socket {self.bl_label} ({self.socket_type}): Multi-input sockets are not yet supported'
+		return NotImplementedError(msg)
 
 	####################
 	# - Theme
@@ -611,7 +746,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		return cls.socket_color
 
 	####################
-	# - UI Methods
+	# - UI
 	####################
 	def draw(
 		self,
@@ -724,7 +859,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		{
 			ct.FlowKind.Value: self.draw_value,
 			ct.FlowKind.Array: self.draw_value_array,
-			ct.FlowKind.LazyValue: self.draw_lazy_value,
+			ct.FlowKind.LazyValueFunc: self.draw_lazy_value,
 			ct.FlowKind.LazyValueRange: self.draw_lazy_value_range,
 		}[self.active_kind](col)
 
@@ -791,7 +926,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""Draws the socket lazy value on its own line.
 
 		Notes:
-			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValue`.
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValueFunc`.
 
 		Parameters:
 			col: Target for defining UI elements.

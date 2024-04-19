@@ -30,7 +30,7 @@ class Integer3DVectorBLSocket(base.MaxwellSimSocket):
 		description='Represents an integer 3D (coordinate) vector',
 		size=3,
 		default=(0, 0, 0),
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

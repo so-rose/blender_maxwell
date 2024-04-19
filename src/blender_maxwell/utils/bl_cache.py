@@ -430,7 +430,7 @@ class BLField:
 
 		Parameters:
 			default_value: The default value to use if the value is read before it's set.
-			triggers_prop_update: Whether to run `bl_instance.sync_prop(attr_name)` whenever value is set.
+			triggers_prop_update: Whether to run `bl_instance.on_prop_changed(attr_name)` whenever value is set.
 
 		"""
 		log.debug(

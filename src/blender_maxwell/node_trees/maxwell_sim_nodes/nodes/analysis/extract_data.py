@@ -2,8 +2,9 @@ import typing as typ
 
 import bpy
 import jax.numpy as jnp
+import sympy.physics.units as spu
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import bl_cache, logger
 
 from ... import contracts as ct
 from ... import sockets
@@ -11,11 +12,9 @@ from .. import base, events
 
 log = logger.get(__name__)
 
-CACHE_SIM_DATA = {}
-
 
 class ExtractDataNode(base.MaxwellSimNode):
-	"""Node for extracting data from other objects."""
+	"""Node for extracting data from particular objects."""
 
 	node_type = ct.NodeType.ExtractData
 	bl_label = 'Extract'
@@ -30,239 +29,196 @@ class ExtractDataNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Properties: Sim Data
+	# - Properties
 	####################
-	sim_data__monitor_name: bpy.props.EnumProperty(
-		name='Sim Data Monitor Name',
-		description='Monitor to extract from the attached SimData',
-		items=lambda self, context: self.search_monitors(context),
-		update=lambda self, context: self.sync_prop('sim_data__monitor_name', context),
+	extract_filter: bpy.props.EnumProperty(
+		name='Extract Filter',
+		description='Data to extract from the input',
+		search=lambda self, _, edit_text: self.search_extract_filters(edit_text),
+		update=lambda self, context: self.on_prop_changed('extract_filter', context),
 	)
 
-	cache__num_monitors: bpy.props.StringProperty(default='')
-	cache__monitor_names: bpy.props.StringProperty(default='')
-	cache__monitor_types: bpy.props.StringProperty(default='')
+	# Sim Data
+	sim_data_monitor_nametype: dict[str, str] = bl_cache.BLField({})
 
-	def search_monitors(self, _: bpy.types.Context) -> list[tuple[str, str, str]]:
-		"""Search the linked simulation data for monitors."""
-		# No Linked Sim Data: Return 'None'
-		if not self.inputs.get('Sim Data') or not self.inputs['Sim Data'].is_linked:
-			return [('NONE', 'None', 'No monitors')]
+	# Field Data
+	field_data_components: set[str] = bl_cache.BLField(set())
 
-		# Return Monitor Names
-		## Special Case for No Monitors
-		monitor_names = (
-			self.cache__monitor_names.split(',') if self.cache__monitor_names else []
-		)
-		monitor_types = (
-			self.cache__monitor_types.split(',') if self.cache__monitor_types else []
-		)
-		if len(monitor_names) == 0:
-			return [('NONE', 'None', 'No monitors')]
-		return [
-			(
-				monitor_name,
-				f'{monitor_name}',
-				f'Monitor "{monitor_name}" ({monitor_type}) recorded by the Sim',
-			)
-			for monitor_name, monitor_type in zip(
-				monitor_names, monitor_types, strict=False
-			)
-		]
+	def search_extract_filters(
+		self, _: bpy.types.Context
+	) -> list[tuple[str, str, str]]:
+		# Sim Data
+		if self.active_socket_set == 'Sim Data' and self.inputs['Sim Data'].is_linked:
+			return [
+				(
+					monitor_name,
+					f'{monitor_name}',
+					f'Monitor "{monitor_name}" ({monitor_type}) recorded by the Sim',
+				)
+				for monitor_name, monitor_type in self.sim_data_monitor_nametype.items()
+			]
 
-	def draw_props__sim_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		col.prop(self, 'sim_data__monitor_name', text='')
+		# Field Data
+		if self.active_socket_set == 'Field Data' and self.inputs['Sim Data'].is_linked:
+			return [
+				([('Ex', 'Ex', 'Ex')] if 'Ex' in self.field_data_components else [])
+				+ ([('Ey', 'Ey', 'Ey')] if 'Ey' in self.field_data_components else [])
+				+ ([('Ez', 'Ez', 'Ez')] if 'Ez' in self.field_data_components else [])
+				+ ([('Hx', 'Hx', 'Hx')] if 'Hx' in self.field_data_components else [])
+				+ ([('Hy', 'Hy', 'Hy')] if 'Hy' in self.field_data_components else [])
+				+ ([('Hz', 'Hz', 'Hz')] if 'Hz' in self.field_data_components else [])
+			]
 
-	def draw_info__sim_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		if self.sim_data__monitor_name != 'NONE':
+		# Flux Data
+		## Nothing to extract.
+
+		# Fallback
+		return []
+
+	####################
+	# - UI
+	####################
+	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		col.prop(self, 'extract_filter', text='')
+
+	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		if self.active_socket_set == 'Sim Data' and self.inputs['Sim Data'].is_linked:
 			# Header
 			row = col.row()
 			row.alignment = 'CENTER'
 			row.label(text=f'{self.cache__num_monitors} Monitors')
 
 			# Monitor Info
-			if int(self.cache__num_monitors) > 0:
-				for monitor_name, monitor_type in zip(
-					self.cache__monitor_names.split(','),
-					self.cache__monitor_types.split(','),
-					strict=False,
-				):
+			if len(self.sim_data_monitor_nametype) > 0:
+				for (
+					monitor_name,
+					monitor_type,
+				) in self.sim_data_monitor_nametype.items():
 					col.label(text=f'{monitor_name}: {monitor_type}')
 
 	####################
-	# - Events: Sim Data
+	# - Events
 	####################
 	@events.on_value_changed(
 		socket_name='Sim Data',
+		input_sockets={'Sim Data'},
+		input_sockets_optional={'Sim Data': True},
 	)
-	def on_sim_data_changed(self):
-		# SimData Cache Hit and SimData Input Unlinked
-		## Delete Cache Entry
-		if (
-			CACHE_SIM_DATA.get(self.instance_id) is not None
-			and not self.inputs['Sim Data'].is_linked
-		):
-			CACHE_SIM_DATA.pop(self.instance_id, None)  ## Both member-check
-			self.cache__num_monitors = ''
-			self.cache__monitor_names = ''
-			self.cache__monitor_types = ''
-
-		# SimData Cache Miss and Linked SimData
-		if (
-			CACHE_SIM_DATA.get(self.instance_id) is None
-			and self.inputs['Sim Data'].is_linked
-		):
-			sim_data = self._compute_input('Sim Data')
-
-			## Create Cache Entry
-			CACHE_SIM_DATA[self.instance_id] = {
-				'sim_data': sim_data,
-				'monitor_names': list(sim_data.monitor_data.keys()),
-				'monitor_types': [
-					monitor_data.type for monitor_data in sim_data.monitor_data.values()
-				],
+	def on_sim_data_changed(self, input_sockets: dict):
+		if input_sockets['Sim Data'] is not None:
+			self.sim_data_monitor_nametype = {
+				monitor_name: monitor_data.type
+				for monitor_name, monitor_data in input_sockets[
+					'Sim Data'
+				].monitor_data.items()
 			}
-			cache = CACHE_SIM_DATA[self.instance_id]
-			self.cache__num_monitors = str(len(cache['monitor_names']))
-			self.cache__monitor_names = ','.join(cache['monitor_names'])
-			self.cache__monitor_types = ','.join(cache['monitor_types'])
 
-	####################
-	# - Properties: Field Data
-	####################
-	field_data__component: bpy.props.EnumProperty(
-		name='Field Data Component',
-		description='Field monitor component to extract from the attached Field Data',
-		items=lambda self, context: self.search_field_data_components(context),
-		update=lambda self, context: self.sync_prop('field_data__component', context),
-	)
-
-	cache__components: bpy.props.StringProperty(default='')
-
-	def search_field_data_components(
-		self, _: bpy.types.Context
-	) -> list[tuple[str, str, str]]:
-		if not self.inputs.get('Field Data') or not self.inputs['Field Data'].is_linked:
-			return [('NONE', 'None', 'No data')]
-
-		if not self.cache__components:
-			return [('NONE', 'Loading...', 'Loading data...')]
-
-		components = [
-			tuple(component_str.split(','))
-			for component_str in self.cache__components.split('|')
-		]
-
-		if len(components) == 0:
-			return [('NONE', 'None', 'No components')]
-		return components
-
-	def draw_props__field_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		col.prop(self, 'field_data__component', text='')
-
-	def draw_info__field_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		pass
-
-	####################
-	# - Events: Field Data
-	####################
 	@events.on_value_changed(
 		socket_name='Field Data',
-	)
-	def on_field_data_changed(self):
-		if self.inputs['Field Data'].is_linked and not self.cache__components:
-			field_data = self._compute_input('Field Data')
-			components = [
-				*([('Ex', 'Ex', 'Ex')] if field_data.Ex is not None else []),
-				*([('Ey', 'Ey', 'Ey')] if field_data.Ey is not None else []),
-				*([('Ez', 'Ez', 'Ez')] if field_data.Ez is not None else []),
-				*([('Hx', 'Hx', 'Hx')] if field_data.Hx is not None else []),
-				*([('Hy', 'Hy', 'Hy')] if field_data.Hy is not None else []),
-				*([('Hz', 'Hz', 'Hz')] if field_data.Hz is not None else []),
-			]
-			self.cache__components = '|'.join(
-				[','.join(component) for component in components]
-			)
-
-		elif not self.inputs['Field Data'].is_linked and self.cache__components:
-			self.cache__components = ''
-
-	####################
-	# - Flux Data
-	####################
-
-	def draw_props__flux_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		pass
-
-	def draw_info__flux_data(
-		self, _: bpy.types.Context, col: bpy.types.UILayout
-	) -> None:
-		pass
-
-	####################
-	# - Global
-	####################
-	def draw_props(self, context: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		if self.active_socket_set == 'Sim Data':
-			self.draw_props__sim_data(context, col)
-		if self.active_socket_set == 'Field Data':
-			self.draw_props__field_data(context, col)
-		if self.active_socket_set == 'Flux Data':
-			self.draw_props__flux_data(context, col)
-
-	def draw_info(self, context: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		if self.active_socket_set == 'Sim Data':
-			self.draw_info__sim_data(context, col)
-		if self.active_socket_set == 'Field Data':
-			self.draw_info__field_data(context, col)
-		if self.active_socket_set == 'Flux Data':
-			self.draw_info__flux_data(context, col)
-
-	@events.computes_output_socket(
-		'Data',
-		props={'sim_data__monitor_name', 'field_data__component'},
 		input_sockets={'Field Data'},
 		input_sockets_optional={'Field Data': True},
 	)
+	def on_field_data_changed(self, input_sockets: dict):
+		if input_sockets['Field Data'] is not None:
+			self.field_data_components = (
+				{'Ex'}
+				if input_sockets['Field Data'].Ex is not None
+				else set() | {'Ey'}
+				if input_sockets['Field Data'].Ey is not None
+				else set() | {'Ez'}
+				if input_sockets['Field Data'].Ez is not None
+				else set() | {'Hx'}
+				if input_sockets['Field Data'].Hx is not None
+				else set() | {'Hy'}
+				if input_sockets['Field Data'].Hy is not None
+				else set() | {'Hz'}
+				if input_sockets['Field Data'].Hz is not None
+				else set()
+			)
+
+	####################
+	# - Output: Value
+	####################
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.Value,
+		props={'active_socket_set', 'extract_filter'},
+		input_sockets={'Sim Data', 'Field Data', 'Flux Data'},
+		input_sockets_optional={
+			'Sim Data': True,
+			'Field Data': True,
+			'Flux Data': True,
+		},
+	)
 	def compute_extracted_data(self, props: dict, input_sockets: dict):
-		if self.active_socket_set == 'Sim Data':
-			if (
-				CACHE_SIM_DATA.get(self.instance_id) is None
-				and self.inputs['Sim Data'].is_linked
-			):
-				self.on_sim_data_changed()
+		if props['active_socket_set'] == 'Sim Data':
+			return input_sockets['Sim Data'].monitor_data[props['extract_filter']]
 
-			sim_data = CACHE_SIM_DATA[self.instance_id]['sim_data']
-			return sim_data.monitor_data[props['sim_data__monitor_name']]
+		if props['active_socket_set'] == 'Field Data':
+			return getattr(input_sockets['Field Data'], props['extract_filter'])
 
-		elif self.active_socket_set == 'Field Data':  # noqa: RET505
-			xarr = getattr(input_sockets['Field Data'], props['field_data__component'])
+		if props['active_socket_set'] == 'Flux Data':
+			return input_sockets['Flux Data']
 
-			#return jarray.JArray.from_xarray(
-			#	xarr,
-			#	dim_units={
-			#		'x': spu.um,
-			#		'y': spu.um,
-			#		'z': spu.um,
-			#		'f': spu.hertz,
-			#	},
-			#)
+		msg = f'Tried to get a "FlowKind.Value" from socket set {props["active_socket_set"]} in "{self.bl_label}"'
+		raise RuntimeError(msg)
 
-		elif self.active_socket_set == 'Flux Data':
-			flux_data = self._compute_input('Flux Data')
-			return jnp.array(flux_data.flux)
+	####################
+	# - Output: LazyValueFunc
+	####################
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.LazyValueFunc,
+		props={'active_socket_set'},
+		output_sockets={'Data'},
+		output_socket_kinds={'Data': ct.FlowKind.Value},
+	)
+	def compute_extracted_data_lazy(self, props: dict, output_sockets: dict):
+		if self.active_socket_set in {'Field Data', 'Flux Data'}:
+			data = jnp.array(output_sockets['Data'].data)
+			return ct.LazyValueFuncFlow(func=lambda: data, supports_jax=True)
 
-		msg = f'Tried to get data from unknown output socket in "{self.bl_label}"'
+		msg = f'Tried to get a "FlowKind.LazyValueFunc" from socket set {props["active_socket_set"]} in "{self.bl_label}"'
+		raise RuntimeError(msg)
+
+	####################
+	# - Output: Info
+	####################
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.Info,
+		props={'active_socket_set'},
+		output_sockets={'Data'},
+		output_socket_kinds={'Data': ct.FlowKind.Value},
+	)
+	def compute_extracted_data_info(self, props: dict, output_sockets: dict):
+		if props['active_socket_set'] == 'Field Data':
+			xarr = output_sockets['Data']
+			return ct.InfoFlow(
+				dim_names=['x', 'y', 'z', 'f'],
+				dim_idx={
+					axis: ct.ArrayFlow(values=xarr.get_index(axis).values, unit=spu.um)
+					for axis in ['x', 'y', 'z']
+				}
+				| {
+					'f': ct.ArrayFlow(
+						values=xarr.get_index('f').values, unit=spu.hertz
+					),
+				},
+			)
+
+		if props['active_socket_set'] == 'Flux Data':
+			xarr = output_sockets['Data']
+			return ct.InfoFlow(
+				dim_names=['f'],
+				dim_idx={
+					'f': ct.ArrayFlow(
+						values=xarr.get_index('f').values, unit=spu.hertz
+					),
+				},
+			)
+
+		msg = f'Tried to get a "FlowKind.Info" from socket set {props["active_socket_set"]} in "{self.bl_label}"'
 		raise RuntimeError(msg)
 
 

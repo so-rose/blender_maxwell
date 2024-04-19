@@ -7,7 +7,6 @@ import jax.numpy as jnp
 import matplotlib
 import matplotlib.axis as mpl_ax
 import numpy as np
-import typing_extensions as typx
 
 from blender_maxwell.utils import logger
 
@@ -123,8 +122,8 @@ class ManagedBLImage(base.ManagedObj):
 		self,
 		width_px: int,
 		height_px: int,
-		color_model: typx.Literal['RGB', 'RGBA'],
-		dtype: typx.Literal['uint8', 'float32'],
+		color_model: typ.Literal['RGB', 'RGBA'],
+		dtype: typ.Literal['uint8', 'float32'],
 	):
 		"""Returns the managed blender image.
 

@@ -74,7 +74,7 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 			),
 		],
 		default='SIMULATION_DATA',
-		update=lambda self, context: self.sync_prop('tidy3d_type', context),
+		update=lambda self, context: self.on_prop_changed('tidy3d_type', context),
 	)
 
 	disp_fit__min_poles: bpy.props.IntProperty(

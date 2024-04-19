@@ -60,7 +60,7 @@ class _SympyExpr:
 			json_schema=sympy_expr_schema,
 			python_schema=sympy_expr_schema,
 			serialization=pyd_core_schema.plain_serializer_function_ser_schema(
-				lambda instance: str(instance)
+				lambda instance: sp.srepr(instance)
 			),
 		)
 
@@ -79,9 +79,9 @@ def ConstrSympyExpr(
 	allow_variables: bool = True,
 	allow_units: bool = True,
 	# Structure Class
-	allowed_sets: set[typx.Literal['integer', 'rational', 'real', 'complex']]
+	allowed_sets: set[typ.Literal['integer', 'rational', 'real', 'complex']]
 	| None = None,
-	allowed_structures: set[typx.Literal['scalar', 'matrix']] | None = None,
+	allowed_structures: set[typ.Literal['scalar', 'matrix']] | None = None,
 	# Element Class
 	allowed_symbols: set[sp.Symbol] | None = None,
 	allowed_units: set[spu.Quantity] | None = None,

@@ -52,13 +52,13 @@ class GaussianPulseTemporalShapeNode(base.MaxwellSimNode):
 		name='Plot Time Start (ps)',
 		description='The instance ID of a particular MaxwellSimNode instance, used to index caches',
 		default=0.0,
-		update=(lambda self, context: self.sync_prop('plot_time_start', context)),
+		update=(lambda self, context: self.on_prop_changed('plot_time_start', context)),
 	)
 	plot_time_end: bpy.props.FloatProperty(
 		name='Plot Time End (ps)',
 		description='The instance ID of a particular MaxwellSimNode instance, used to index caches',
 		default=5,
-		update=(lambda self, context: self.sync_prop('plot_time_start', context)),
+		update=(lambda self, context: self.on_prop_changed('plot_time_start', context)),
 	)
 
 	####################

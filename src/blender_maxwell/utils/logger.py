@@ -5,7 +5,8 @@ import rich.console
 import rich.logging
 import rich.traceback
 
-from .. import info
+from blender_maxwell import contracts as ct
+
 from ..nodeps.utils import simple_logger
 from ..nodeps.utils.simple_logger import (
 	LOG_LEVEL_MAP,  # noqa: F401
@@ -56,10 +57,7 @@ def get(module_name):
 	logger = logging.getLogger(module_name)
 
 	# Setup Logger from Addon Preferences
-	if (addon_prefs := info.addon_prefs()) is None:
-		msg = 'Addon preferences not defined'
-		raise RuntimeError(msg)
-	addon_prefs.sync_addon_logging(logger_to_setup=logger)
+	ct.addon.prefs().on_addon_logging_changed(single_logger_to_setup=logger)
 
 	return logger
 

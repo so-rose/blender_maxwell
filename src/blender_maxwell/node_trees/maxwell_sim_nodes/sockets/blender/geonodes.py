@@ -21,7 +21,7 @@ class BlenderMaxwellResetGeoNodesSocket(bpy.types.Operator):
 		socket = node.inputs[self.socket_name]
 
 		# Report as though the GeoNodes Tree Changed
-		socket.sync_prop('raw_value', context)
+		socket.on_prop_changed('raw_value', context)
 
 		return {'FINISHED'}
 
@@ -41,7 +41,7 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 		description='Represents a Blender GeoNodes Tree',
 		type=bpy.types.NodeTree,
 		poll=(lambda self, obj: obj.bl_idname == 'GeometryNodeTree'),
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

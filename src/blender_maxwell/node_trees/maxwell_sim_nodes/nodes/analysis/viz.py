@@ -43,7 +43,7 @@ class VizNode(base.MaxwellSimNode):
 			('GRAYSCALE', 'Grayscale', 'Barebones'),
 		],
 		default='VIRIDIS',
-		update=lambda self, context: self.sync_prop('colormap', context),
+		update=lambda self, context: self.on_prop_changed('colormap', context),
 	)
 
 	#####################

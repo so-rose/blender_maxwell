@@ -78,7 +78,7 @@ if __name__ == '__main__':
 		print(f'\tBlender: Install & Enable "{info.ADDON_NAME}"')
 	else:
 		print(f'\tBlender: "{info.ADDON_NAME}" Not Installed')
-		print(output)
+		print(*output, sep='')
 		sys.exit(1)
 
 	# Run Addon

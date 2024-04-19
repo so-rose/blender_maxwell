@@ -15,7 +15,7 @@ class BlenderMaterialBLSocket(base.MaxwellSimSocket):
 		name='Blender Material',
 		description='Represents a Blender material',
 		type=bpy.types.Material,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

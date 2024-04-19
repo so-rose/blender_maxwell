@@ -190,7 +190,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		else:
 			self.trigger_event(ct.FlowEvent.DisableLock)
 
-		self.sync_prop('lock_tree', context)
+		self.on_prop_changed('lock_tree', context)
 
 	def sync_tracked_task_id(self, context):
 		# Select Tracked Task
@@ -212,7 +212,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			self.inputs['Cloud Task'].sync_prepare_new_task()
 			self.inputs['Cloud Task'].locked = False
 
-		self.sync_prop('tracked_task_id', context)
+		self.on_prop_changed('tracked_task_id', context)
 
 	####################
 	# - Output Socket Callbacks

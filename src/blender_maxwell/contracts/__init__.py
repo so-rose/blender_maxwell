@@ -9,10 +9,18 @@ from .bl import (
 	BLModifierType,
 	BLNodeTreeInterfaceID,
 	BLOperatorStatus,
+	BLRegionType,
+	BLSpaceType,
 	KeymapItemDef,
 	ManagedObjName,
 	PresetName,
 	SocketName,
+)
+from .operator_types import (
+	OperatorType,
+)
+from .panel_types import (
+	PanelType,
 )
 
 __all__ = [
@@ -26,8 +34,12 @@ __all__ = [
 	'BLModifierType',
 	'BLNodeTreeInterfaceID',
 	'BLOperatorStatus',
+	'BLRegionType',
+	'BLSpaceType',
 	'KeymapItemDef',
 	'ManagedObjName',
 	'PresetName',
 	'SocketName',
+	'OperatorType',
+	'PanelType',
 ]

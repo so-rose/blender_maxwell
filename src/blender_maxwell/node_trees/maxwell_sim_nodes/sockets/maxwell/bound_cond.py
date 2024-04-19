@@ -1,6 +1,5 @@
 import bpy
 import tidy3d as td
-import typing_extensions as typx
 
 from ... import contracts as ct
 from .. import base
@@ -23,7 +22,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 			('PERIODIC', 'Periodic', 'Infinitely periodic layer'),
 		],
 		default='PML',
-		update=(lambda self, context: self.sync_prop('default_choice', context)),
+		update=(lambda self, context: self.on_prop_changed('default_choice', context)),
 	)
 
 	####################
@@ -45,7 +44,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 		}[self.default_choice]
 
 	@value.setter
-	def value(self, value: typx.Literal['PML', 'PEC', 'PMC', 'PERIODIC']) -> None:
+	def value(self, value: typ.Literal['PML', 'PEC', 'PMC', 'PERIODIC']) -> None:
 		self.default_choice = value
 
 
@@ -55,7 +54,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 class MaxwellBoundCondSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundCond
 
-	default_choice: typx.Literal['PML', 'PEC', 'PMC', 'PERIODIC'] = 'PML'
+	default_choice: typ.Literal['PML', 'PEC', 'PMC', 'PERIODIC'] = 'PML'
 
 	def init(self, bl_socket: MaxwellBoundCondBLSocket) -> None:
 		bl_socket.value = self.default_choice

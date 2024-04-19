@@ -28,7 +28,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		description='Represents the unitless part of the length',
 		default=0.0,
 		precision=6,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	min_len: bpy.props.FloatProperty(
@@ -36,20 +36,20 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		description='Lowest length',
 		default=0.0,
 		precision=4,
-		update=(lambda self, context: self.sync_prop('min_len', context)),
+		update=(lambda self, context: self.on_prop_changed('min_len', context)),
 	)
 	max_len: bpy.props.FloatProperty(
 		name='Max Length',
 		description='Highest length',
 		default=0.0,
 		precision=4,
-		update=(lambda self, context: self.sync_prop('max_len', context)),
+		update=(lambda self, context: self.on_prop_changed('max_len', context)),
 	)
 	steps: bpy.props.IntProperty(
 		name='Length Steps',
 		description='# of steps between min and max',
 		default=2,
-		update=(lambda self, context: self.sync_prop('steps', context)),
+		update=(lambda self, context: self.on_prop_changed('steps', context)),
 	)
 
 	####################
@@ -75,10 +75,9 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		self.raw_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
 
 	@property
-	def lazy_value_range(self) -> ct.LazyDataValueRange:
-		return ct.LazyDataValueRange(
+	def lazy_array_range(self) -> ct.LazyArrayRange:
+		return ct.LazyArrayRange(
 			symbols=set(),
-			has_unit=True,
 			unit=self.unit,
 			start=sp.S(self.min_len) * self.unit,
 			stop=sp.S(self.max_len) * self.unit,
@@ -86,7 +85,7 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 			scaling='lin',
 		)
 
-	@lazy_value_range.setter
+	@lazy_array_range.setter
 	def lazy_value_range(self, value: tuple[sp.Expr, sp.Expr, int]) -> None:
 		self.min_len = spux.sympy_to_python(spux.scale_to_unit(value[0], self.unit))
 		self.max_len = spux.sympy_to_python(spux.scale_to_unit(value[1], self.unit))
@@ -113,7 +112,7 @@ class PhysicalLengthSocketDef(base.SocketDef):
 
 		bl_socket.value = self.default_value
 		if self.is_array:
-			bl_socket.active_kind = ct.FlowKind.LazyValueRange
+			bl_socket.active_kind = ct.FlowKind.LazyArrayRange
 			bl_socket.lazy_value_range = (self.min_len, self.max_len, self.steps)
 
 

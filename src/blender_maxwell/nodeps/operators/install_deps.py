@@ -4,46 +4,64 @@ from pathlib import Path
 
 import bpy
 
-from blender_maxwell.utils import pydeps, simple_logger
-
+from ... import contracts as ct
 from ... import registration
+from ..utils import pydeps, simple_logger
 
 log = simple_logger.get(__name__)
 
 
 class InstallPyDeps(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodeps__install_py_deps'
+	bl_idname = ct.OperatorType.InstallPyDeps
 	bl_label = 'Install BLMaxwell Python Deps'
-
-	path_addon_pydeps: bpy.props.StringProperty(
-		name='Path to Addon Python Dependencies',
-		default='',
-	)
-	path_addon_reqs: bpy.props.StringProperty(
-		name='Path to Addon Python Dependencies',
-		default='',
-	)
 
 	@classmethod
 	def poll(cls, _: bpy.types.Context):
 		return not pydeps.DEPS_OK
 
-	def execute(self, _: bpy.types.Context):
-		if self.path_addon_pydeps == '' or self.path_addon_reqs == '':
-			msg = f"A path for operator {self.bl_idname} isn't set"
-			raise ValueError(msg)
+	####################
+	# - Property: PyDeps Path
+	####################
+	bl__pydeps_path: bpy.props.StringProperty(
+		default='',
+	)
 
-		path_addon_pydeps = Path(self.path_addon_pydeps)
-		path_addon_reqs = Path(self.path_addon_reqs)
+	@property
+	def pydeps_path(self):
+		return Path(bpy.path.abspath(self.bl__pydeps_path))
+
+	@pydeps_path.setter
+	def pydeps_path(self, path: Path) -> None:
+		self.bl__pydeps_path = str(path.resolve())
+
+	####################
+	# - Property: requirements.lock
+	####################
+	bl__pydeps_reqlock_path: bpy.props.StringProperty(
+		default='',
+	)
+
+	@property
+	def pydeps_reqlock_path(self):
+		return Path(bpy.path.abspath(self.bl__pydeps_reqlock_path))
+
+	@pydeps_reqlock_path.setter
+	def pydeps_reqlock_path(self, path: Path) -> None:
+		self.bl__pydeps_reqlock_path = str(path.resolve())
+
+	####################
+	# - Execution
+	####################
+	def execute(self, _: bpy.types.Context):
 		log.info(
 			'Running Install PyDeps w/requirements.txt (%s) to path: %s',
-			path_addon_reqs,
-			path_addon_pydeps,
+			self.pydeps_reqlock_path,
+			self.pydeps_path,
 		)
 
 		# Create the Addon-Specific Folder (if Needed)
 		## It MUST, however, have a parent already
-		path_addon_pydeps.mkdir(parents=False, exist_ok=True)
+		self.pydeps_path.mkdir(parents=False, exist_ok=True)
 
 		# Determine Path to Blender's Bundled Python
 		## bpy.app.binary_path_python was deprecated in 2.91.
@@ -59,9 +77,9 @@ class InstallPyDeps(bpy.types.Operator):
 				'pip',
 				'install',
 				'-r',
-				str(path_addon_reqs),
+				str(self.pydeps_reqlock_path),
 				'--target',
-				str(path_addon_pydeps),
+				str(self.pydeps_path),
 			]
 			log.info(
 				'Running pip w/cmdline: %s',
@@ -72,10 +90,8 @@ class InstallPyDeps(bpy.types.Operator):
 			log.exception('Failed to install PyDeps')
 			return {'CANCELLED'}
 
-		registration.run_delayed_registration(
-			registration.EVENT__DEPS_SATISFIED,
-			path_addon_pydeps,
-		)
+		# Report PyDeps Changed
+		ct.addon.prefs().on_addon_pydeps_changed()
 		return {'FINISHED'}
 
 
@@ -85,4 +101,4 @@ class InstallPyDeps(bpy.types.Operator):
 BL_REGISTER = [
 	InstallPyDeps,
 ]
-BL_KEYMAP_ITEM_DEFS = []
+BL_HOTKEYS = []

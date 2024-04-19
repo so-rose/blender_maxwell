@@ -60,14 +60,14 @@ class ViewerNode(base.MaxwellSimNode):
 		name='Auto-Plot',
 		description='Whether to auto-plot anything plugged into the viewer node',
 		default=False,
-		update=lambda self, context: self.sync_prop('auto_plot', context),
+		update=lambda self, context: self.on_prop_changed('auto_plot', context),
 	)
 
 	auto_3d_preview: bpy.props.BoolProperty(
 		name='Auto 3D Preview',
 		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
 		default=True,
-		update=lambda self, context: self.sync_prop('auto_3d_preview', context),
+		update=lambda self, context: self.on_prop_changed('auto_3d_preview', context),
 	)
 
 	####################

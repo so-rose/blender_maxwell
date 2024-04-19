@@ -1,7 +1,9 @@
+import random
 import tomllib
 from pathlib import Path
 
 import bpy
+import bpy_restrict_state
 
 PATH_ADDON_ROOT = Path(__file__).resolve().parent.parent
 with (PATH_ADDON_ROOT / 'pyproject.toml').open('rb') as f:
@@ -32,11 +34,47 @@ ADDON_CACHE.mkdir(exist_ok=True)
 
 
 ####################
-# - Addon Prefs Info
+# - Dynamic Addon Information
 ####################
+def is_loading() -> bool:
+	"""Checks whether the addon is currently loading.
+
+	While an addon is loading, `bpy.context` is temporarily very limited.
+	For example, operators can't run while the addon is loading.
+
+	By checking whether `bpy.context` is limited like this, we can determine whether the addon is currently loading.
+
+	Notes:
+		Since `bpy_restrict_state._RestrictContext` is a very internal thing, this function may be prone to breakage on Blender updates.
+
+		**Keep an eye out**!
+
+	Returns:
+		Whether the addon has been fully loaded, such that `bpy.context` is fully accessible.
+	"""
+	return isinstance(bpy.context, bpy_restrict_state._RestrictContext)
+
+
+def operator(name: str, *operator_args, **operator_kwargs) -> None:
+	# Parse Operator Name
+	operator_namespace, operator_name = name.split('.')
+	if operator_namespace != NAME:
+		msg = f'Tried to call operator {operator_name}, but addon operators may only use the addon operator namespace "{operator_namespace}.<name>"'
+		raise RuntimeError(msg)
+
+	# Addon Not Loading: Run Operator
+	if not is_loading():
+		operator = getattr(getattr(bpy.ops, NAME), operator_name)
+		operator(*operator_args, **operator_kwargs)
+	else:
+		msg = f'Tried to call operator "{operator_name}" while addon is loading'
+		raise RuntimeError(msg)
+
+
 def prefs() -> bpy.types.AddonPreferences | None:
 	if (addon := bpy.context.preferences.addons.get(NAME)) is None:
-		return None
+		msg = 'Addon is not installed'
+		raise RuntimeError(msg)
 
 	return addon.preferences
 

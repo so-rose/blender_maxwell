@@ -8,7 +8,7 @@ from blender_maxwell.utils.blender_type_enum import (
 
 @append_cls_name_to_values
 class NodeType(BlenderTypeEnum):
-	#KitchenSink = enum.auto()
+	# KitchenSink = enum.auto()
 
 	# Analysis
 	Viz = enum.auto()
@@ -24,17 +24,17 @@ class NodeType(BlenderTypeEnum):
 	UnitSystem = enum.auto()
 
 	## Inputs / Scene
-	#Time = enum.auto()
+	# Time = enum.auto()
 	## Inputs / Web Importers
 	Tidy3DWebImporter = enum.auto()
 	## Inputs / File Importers
 	Tidy3DFileImporter = enum.auto()
 	## Inputs / Constants
+	ExprConstant = enum.auto()
 	ScientificConstant = enum.auto()
 	NumberConstant = enum.auto()
 	PhysicalConstant = enum.auto()
 	BlenderConstant = enum.auto()
-
 
 	# Outputs
 	Viewer = enum.auto()
@@ -48,43 +48,43 @@ class NodeType(BlenderTypeEnum):
 	PointDipoleSource = enum.auto()
 	PlaneWaveSource = enum.auto()
 	UniformCurrentSource = enum.auto()
-	#ModeSource = enum.auto()
-	#GaussianBeamSource = enum.auto()
-	#AstigmaticGaussianBeamSource = enum.auto()
-	#TFSFSource = enum.auto()
-	#EHEquivalenceSource = enum.auto()
-	#EHSource = enum.auto()
+	# ModeSource = enum.auto()
+	# GaussianBeamSource = enum.auto()
+	# AstigmaticGaussianBeamSource = enum.auto()
+	# TFSFSource = enum.auto()
+	# EHEquivalenceSource = enum.auto()
+	# EHSource = enum.auto()
 	## Sources / Temporal Shapes
 	GaussianPulseTemporalShape = enum.auto()
-	#ContinuousWaveTemporalShape = enum.auto()
-	#ArrayTemporalShape = enum.auto()
+	# ContinuousWaveTemporalShape = enum.auto()
+	# ArrayTemporalShape = enum.auto()
 
 	# Mediums
 	LibraryMedium = enum.auto()
-	#PECMedium = enum.auto()
-	#IsotropicMedium = enum.auto()
-	#AnisotropicMedium = enum.auto()
-	#TripleSellmeierMedium = enum.auto()
-	#SellmeierMedium = enum.auto()
-	#PoleResidueMedium = enum.auto()
-	#DrudeMedium = enum.auto()
-	#DrudeLorentzMedium = enum.auto()
-	#DebyeMedium = enum.auto()
+	# PECMedium = enum.auto()
+	# IsotropicMedium = enum.auto()
+	# AnisotropicMedium = enum.auto()
+	# TripleSellmeierMedium = enum.auto()
+	# SellmeierMedium = enum.auto()
+	# PoleResidueMedium = enum.auto()
+	# DrudeMedium = enum.auto()
+	# DrudeLorentzMedium = enum.auto()
+	# DebyeMedium = enum.auto()
 
 	## Mediums / Non-Linearities
-	#AddNonLinearity = enum.auto()
-	#ChiThreeSusceptibilityNonLinearity = enum.auto()
-	#TwoPhotonAbsorptionNonLinearity = enum.auto()
-	#KerrNonLinearity = enum.auto()
+	# AddNonLinearity = enum.auto()
+	# ChiThreeSusceptibilityNonLinearity = enum.auto()
+	# TwoPhotonAbsorptionNonLinearity = enum.auto()
+	# KerrNonLinearity = enum.auto()
 
 	# Structures
-	#ObjectStructure = enum.auto()
+	# ObjectStructure = enum.auto()
 	GeoNodesStructure = enum.auto()
-	#ScriptedStructure = enum.auto()
+	# ScriptedStructure = enum.auto()
 	## Structures / Primitives
 	BoxStructure = enum.auto()
 	SphereStructure = enum.auto()
-	#CylinderStructure = enum.auto()
+	# CylinderStructure = enum.auto()
 
 	# Bounds
 	BoundConds = enum.auto()
@@ -99,22 +99,22 @@ class NodeType(BlenderTypeEnum):
 	# Monitors
 	EHFieldMonitor = enum.auto()
 	PowerFluxMonitor = enum.auto()
-	#EpsilonTensorMonitor = enum.auto()
-	#DiffractionMonitor = enum.auto()
+	# EpsilonTensorMonitor = enum.auto()
+	# DiffractionMonitor = enum.auto()
 	## Monitors / Projected
-	#CartesianNearFieldProjectionMonitor = enum.auto()
-	#ObservationAngleNearFieldProjectionMonitor = enum.auto()
-	#KSpaceNearFieldProjectionMonitor = enum.auto()
+	# CartesianNearFieldProjectionMonitor = enum.auto()
+	# ObservationAngleNearFieldProjectionMonitor = enum.auto()
+	# KSpaceNearFieldProjectionMonitor = enum.auto()
 
 	# Sims
 	FDTDSim = enum.auto()
 	SimDomain = enum.auto()
 	SimGrid = enum.auto()
 	## Sims / Sim Grid Axis
-	#AutomaticSimGridAxis = enum.auto()
-	#ManualSimGridAxis = enum.auto()
-	#UniformSimGridAxis = enum.auto()
-	#ArraySimGridAxis = enum.auto()
+	# AutomaticSimGridAxis = enum.auto()
+	# ManualSimGridAxis = enum.auto()
+	# UniformSimGridAxis = enum.auto()
+	# ArraySimGridAxis = enum.auto()
 
 	# Utilities
 	Combine = enum.auto()

@@ -28,7 +28,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 		name='Range',
 		description='Whether to use a wavelength/frequency range',
 		default=False,
-		update=lambda self, context: self.sync_prop('use_range', context),
+		update=lambda self, context: self.on_prop_changed('use_range', context),
 	)
 
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
@@ -74,7 +74,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.FlowKind.LazyValueRange,
+		kind=ct.FlowKind.LazyArrayRange,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
@@ -93,12 +93,12 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.FlowKind.LazyValueRange,
+		kind=ct.FlowKind.LazyArrayRange,
 		# Data
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
-			'WL': ct.FlowKind.LazyValueRange,
-			'Freq': ct.FlowKind.LazyValueRange,
+			'WL': ct.FlowKind.LazyArrayRange,
+			'Freq': ct.FlowKind.LazyArrayRange,
 		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)

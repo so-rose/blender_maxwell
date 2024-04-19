@@ -1,18 +1,10 @@
 import bpy
 import sympy as sp
 
-from blender_maxwell.utils.pydantic_sympy import ConstrSympyExpr
+import blender_maxwell.utils.extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
-
-Real3DVector = ConstrSympyExpr(
-	allow_variables=False,
-	allow_units=False,
-	allowed_sets={'integer', 'rational', 'real'},
-	allowed_structures={'matrix'},
-	allowed_matrix_shapes={(3, 1)},
-)
 
 
 ####################
@@ -31,7 +23,7 @@ class Real3DVectorBLSocket(base.MaxwellSimSocket):
 		size=3,
 		default=(0.0, 0.0, 0.0),
 		precision=4,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################
@@ -44,11 +36,11 @@ class Real3DVectorBLSocket(base.MaxwellSimSocket):
 	# - Computation of Default Value
 	####################
 	@property
-	def value(self) -> Real3DVector:
+	def value(self) -> spux.Real3DVector:
 		return sp.Matrix(tuple(self.raw_value))
 
 	@value.setter
-	def value(self, value: Real3DVector) -> None:
+	def value(self, value: spux.Real3DVector) -> None:
 		self.raw_value = tuple(value)
 
 
@@ -58,7 +50,7 @@ class Real3DVectorBLSocket(base.MaxwellSimSocket):
 class Real3DVectorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Real3DVector
 
-	default_value: Real3DVector = sp.Matrix([0.0, 0.0, 0.0])
+	default_value: spux.Real3DVector = sp.Matrix([0.0, 0.0, 0.0])
 
 	def init(self, bl_socket: Real3DVectorBLSocket) -> None:
 		bl_socket.value = self.default_value

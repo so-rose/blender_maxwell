@@ -29,7 +29,7 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 		name='Show Bounds Definition',
 		description='Toggle to show bound faces',
 		default=False,
-		update=(lambda self, context: self.sync_prop('show_definition', context)),
+		update=(lambda self, context: self.on_prop_changed('show_definition', context)),
 	)
 
 	x_pos: bpy.props.EnumProperty(
@@ -37,42 +37,42 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 		description='+x choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('x_pos', context)),
+		update=(lambda self, context: self.on_prop_changed('x_pos', context)),
 	)
 	x_neg: bpy.props.EnumProperty(
 		name='-x Bound Face',
 		description='-x choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('x_neg', context)),
+		update=(lambda self, context: self.on_prop_changed('x_neg', context)),
 	)
 	y_pos: bpy.props.EnumProperty(
 		name='+y Bound Face',
 		description='+y choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('y_pos', context)),
+		update=(lambda self, context: self.on_prop_changed('y_pos', context)),
 	)
 	y_neg: bpy.props.EnumProperty(
 		name='-y Bound Face',
 		description='-y choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('y_neg', context)),
+		update=(lambda self, context: self.on_prop_changed('y_neg', context)),
 	)
 	z_pos: bpy.props.EnumProperty(
 		name='+z Bound Face',
 		description='+z choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('z_pos', context)),
+		update=(lambda self, context: self.on_prop_changed('z_pos', context)),
 	)
 	z_neg: bpy.props.EnumProperty(
 		name='-z Bound Face',
 		description='-z choice of default boundary face',
 		items=BOUND_FACE_ITEMS,
 		default='PML',
-		update=(lambda self, context: self.sync_prop('z_neg', context)),
+		update=(lambda self, context: self.on_prop_changed('z_neg', context)),
 	)
 
 	####################

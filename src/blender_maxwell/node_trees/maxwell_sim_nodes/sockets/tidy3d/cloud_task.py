@@ -88,13 +88,13 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		name='Folder of Cloud Tasks',
 		description='An existing folder on the Tidy3D Cloud',
 		items=lambda self, _: self.retrieve_folders(),
-		update=(lambda self, context: self.sync_prop('existing_folder_id', context)),
+		update=(lambda self, context: self.on_prop_changed('existing_folder_id', context)),
 	)
 	existing_task_id: bpy.props.EnumProperty(
 		name='Existing Cloud Task',
 		description='An existing task on the Tidy3D Cloud, within the given folder',
 		items=lambda self, _: self.retrieve_tasks(),
-		update=(lambda self, context: self.sync_prop('existing_task_id', context)),
+		update=(lambda self, context: self.on_prop_changed('existing_task_id', context)),
 	)
 
 	# (Potential) New Task
@@ -102,7 +102,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		name='New Cloud Task Name',
 		description='Name of a new task to submit to the Tidy3D Cloud',
 		default='',
-		update=(lambda self, context: self.sync_prop('new_task_name', context)),
+		update=(lambda self, context: self.on_prop_changed('new_task_name', context)),
 	)
 
 	####################
@@ -114,7 +114,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		self.existing_task_id = folder_task_ids[0][0]
 		## There's guaranteed to at least be one element, even if it's "NONE".
 
-		self.sync_prop('existing_folder_id', context)
+		self.on_prop_changed('existing_folder_id', context)
 
 	def retrieve_folders(self) -> list[tuple]:
 		folders = tdcloud.TidyCloudFolders.folders()

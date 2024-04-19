@@ -43,7 +43,7 @@ class MapMathNode(base.MaxwellSimNode):
 		name='Op',
 		description='Operation to apply to the input',
 		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.sync_prop('operation', context),
+		update=lambda self, context: self.on_prop_changed('operation', context),
 	)
 
 	def search_operations(self) -> list[tuple[str, str, str]]:
@@ -101,9 +101,13 @@ class MapMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Data',
+		kind=ct.FlowKind.LazyValueFunc,
 		props={'active_socket_set', 'operation'},
 		input_sockets={'Data', 'Mapper'},
-		input_socket_kinds={'Mapper': ct.FlowKind.LazyValue},
+		input_socket_kinds={
+			'Data': ct.FlowKind.LazyValueFunc,
+			'Mapper': ct.FlowKind.LazyValueFunc,
+		},
 		input_sockets_optional={'Mapper': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):
@@ -150,8 +154,9 @@ class MapMathNode(base.MaxwellSimNode):
 		}[props['active_socket_set']][props['operation']]
 
 		# Compose w/Lazy Root Function Data
-		return input_sockets['Data'].compose(
-			function=mapping_func,
+		return input_sockets['Data'].compose_within(
+			mapping_func,
+			supports_jax=True,
 		)
 
 

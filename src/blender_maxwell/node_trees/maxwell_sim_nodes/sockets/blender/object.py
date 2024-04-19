@@ -39,7 +39,7 @@ class BlenderObjectBLSocket(base.MaxwellSimSocket):
 		name='Blender Object',
 		description='Represents a Blender object',
 		type=bpy.types.Object,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

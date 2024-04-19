@@ -58,7 +58,7 @@ class FilterMathNode(base.MaxwellSimNode):
 		name='Op',
 		description='Operation to reduce the input axis with',
 		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.sync_prop('operation', context),
+		update=lambda self, context: self.on_prop_changed('operation', context),
 	)
 
 	def search_operations(self) -> list[tuple[str, str, str]]:

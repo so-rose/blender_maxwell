@@ -23,7 +23,7 @@ class PhysicalAngleBLSocket(base.MaxwellSimSocket):
 		description='Represents the unitless part of the acceleration',
 		default=0.0,
 		precision=4,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

@@ -23,7 +23,7 @@ class RationalNumberBLSocket(base.MaxwellSimSocket):
 		size=2,
 		default=(1, 1),
 		subtype='NONE',
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

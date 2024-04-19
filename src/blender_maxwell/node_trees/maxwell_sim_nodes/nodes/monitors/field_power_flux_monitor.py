@@ -68,7 +68,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			'Direction',
 		},
 		input_socket_kinds={
-			'Freqs': ct.FlowKind.LazyValueRange,
+			'Freqs': ct.FlowKind.LazyArrayRange,
 		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={

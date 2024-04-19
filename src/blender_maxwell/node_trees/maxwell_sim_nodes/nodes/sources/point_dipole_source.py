@@ -42,7 +42,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 			('EZ', 'Ez', 'Electric field in z-dir'),
 		],
 		default='EX',
-		update=(lambda self, context: self.sync_prop('pol_axis', context)),
+		update=(lambda self, context: self.on_prop_changed('pol_axis', context)),
 	)
 
 	####################

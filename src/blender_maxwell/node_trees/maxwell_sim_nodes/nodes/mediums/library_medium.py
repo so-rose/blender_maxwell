@@ -54,7 +54,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			if mat_key != 'graphene'  ## For some reason, it's unique...
 		],
 		default='Au',
-		update=(lambda self, context: self.sync_prop('material', context)),
+		update=(lambda self, context: self.on_prop_changed('material', context)),
 	)
 
 	@property

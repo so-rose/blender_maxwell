@@ -6,10 +6,10 @@ from types import MappingProxyType
 
 import jax
 import jax.numpy as jnp
+import jaxtyping as jtyp
 import numba
 import sympy as sp
 import sympy.physics.units as spu
-import typing_extensions as typx
 
 from blender_maxwell.utils import extra_sympy_units as spux
 
@@ -48,7 +48,7 @@ class FlowKind(enum.StrEnum):
 	Array = enum.auto()
 
 	# Lazy
-	LazyValue = enum.auto()
+	LazyValueFunc = enum.auto()
 	LazyArrayRange = enum.auto()
 
 	# Auxiliary
@@ -107,14 +107,14 @@ class ArrayFlow:
 			None if unitless.
 	"""
 
-	values: jax.Array
+	values: jtyp.Shaped[jtyp.Array, '...']
 	unit: spu.Quantity | None = None
 
-	def correct_unit(self, real_unit: spu.Quantity) -> typ.Self:
+	def correct_unit(self, corrected_unit: spu.Quantity) -> typ.Self:
 		if self.unit is not None:
-			return ArrayFlow(values=self.values, unit=real_unit)
+			return ArrayFlow(values=self.values, unit=corrected_unit)
 
-		msg = f'Tried to correct unit of unitless LazyDataValueRange "{real_unit}"'
+		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
 		raise ValueError(msg)
 
 	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
@@ -137,28 +137,119 @@ LazyFunction: typ.TypeAlias = typ.Callable[[typ.Any, ...], ValueFlow]
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class LazyValueFuncFlow:
-	r"""Encapsulates a lazily evaluated data value as a composable function with bound and free arguments.
+	r"""Wraps a composable function, providing useful information and operations.
 
-	- **Bound Args**: Arguments that are realized when **defining** the lazy value.
-		Both positional values and keyword values are supported.
-	- **Free Args**: Arguments that are specified when evaluating the lazy value.
-		Both positional values and keyword values are supported.
+	# Data Flow as Function Composition
+	When using nodes to do math, it can be a good idea to express a **flow of data as the composition of functions**.
 
-	The **root function** is encapsulated using `from_function`, and must accept arguments in the following order:
+	Each node creates a new function, which uses the still-unknown (aka. **lazy**) output of the previous function to plan some calculations.
+	Some new arguments may also be added, of course.
 
-	$$
-		f_0:\ \ \ \ (\underbrace{b_1, b_2, ...}_{\text{Bound}}\ ,\ \underbrace{r_1, r_2, ...}_{\text{Free}}) \to \text{output}_0
-	$$
-
-	Subsequent **composed functions** are encapsulated from the _root function_, and are created with `root_function.compose`.
-	They must accept arguments in the following order:
+	## Root Function
+	Of course, one needs to select a "bottom" function, which has no previous function as input.
+	Thus, the first step is to define this **root function**:
 
 	$$
-		f_k:\ \ \ \ (\underbrace{b_1, b_2, ...}_{\text{Bound}}\ ,\ \text{output}_{k-1} ,\ \underbrace{r_p, r_{p+1}, ...}_{\text{Free}}) \to \text{output}_k
+		f_0:\ \ \ \ \biggl(
+			\underbrace{a_1, a_2, ..., a_p}_{\texttt{args}},\ 
+			\underbrace{
+				\begin{bmatrix} k_1 \\ v_1\end{bmatrix},
+				\begin{bmatrix} k_2 \\ v_2\end{bmatrix},
+				...,
+				\begin{bmatrix} k_q \\ v_q\end{bmatrix}
+			}_{\texttt{kwargs}}
+		\biggr) \to \text{output}_0
 	$$
+
+	We'll express this simple snippet like so:
+
+	```python
+	# Presume 'A0', 'KV0' contain only the args/kwargs for f_0
+	## 'A0', 'KV0' are of length 'p' and 'q'
+	def f_0(*args, **kwargs): ...
+
+	lazy_value_func_0 = LazyValueFuncFlow(
+		func=f_0,
+		func_args=[(a_i, type(a_i)) for a_i in A0],
+		func_kwargs={k: v for k,v in KV0},
+	)
+	output_0 = lazy_value_func.func(*A0_computed, **KV0_computed)
+	```
+
+	So far so good.
+	But of course, nothing interesting has really happened yet.
+
+	## Composing Functions
+	The key thing is the next step: The function that uses the result of $f_0$!
+
+	$$
+		f_1:\ \ \ \ \biggl(
+			f_0(...),\ \ 
+			\underbrace{\{a_i\}_p^{p+r}}_{\texttt{args[p:]}},\ 
+			\underbrace{\biggl\{
+				\begin{bmatrix} k_i \\ v_i\end{bmatrix}
+			\biggr\}_q^{q+s}}_{\texttt{kwargs[p:]}}
+		\biggr) \to \text{output}_1
+	$$
+
+	Notice that _$f_1$ needs the arguments of both $f_0$ and $f_1$_.
+	Tracking arguments is already getting out of hand; we already have to use `...` to keep it readeable!
+
+	But doing so with `LazyValueFunc` is not so complex:
+
+	```python
+	# Presume 'A1', 'K1' contain only the args/kwarg names for f_1
+	## 'A1', 'KV1' are therefore of length 'r' and 's'
+	def f_1(output_0, *args, **kwargs): ...
+
+	lazy_value_func_1 = lazy_value_func_0.compose_within(
+		enclosing_func=f_1,
+		enclosing_func_args=[(a_i, type(a_i)) for a_i in A1],
+		enclosing_func_kwargs={k: type(v) for k,v in K1},
+	)
+
+	A_computed = A0_computed + A1_computed
+	KW_computed = KV0_computed + KV1_computed
+	output_1 = lazy_value_func_1.func(*A_computed, **KW_computed)
+	```
+
+	We only need the arguments to $f_1$, and `LazyValueFunc` figures out how to make one function with enough arguments to call both.
+
+	## Isn't Laying Functions Slow/Hard?
+	Imagine that each function represents the action of a node, each of which performs expensive calculations on huge `numpy` arrays (**as one does when processing electromagnetic field data**).
+	At the end, a node might run the entire procedure with all arguments:
+
+	```python
+	output_n = lazy_value_func_n.func(*A_all, **KW_all)
+	```
+	
+	It's rough: Most non-trivial pipelines drown in the time/memory overhead of incremental `numpy` operations - individually fast, but collectively iffy.
+
+	The killer feature of `LazyValueFuncFlow` is a sprinkle of black magic:
+	
+	```python
+	func_n_jax = lazy_value_func_n.func_jax
+	output_n = func_n_jax(*A_all, **KW_all)  ## Runs on your GPU
+	```
+
+	What happened was, **the entire pipeline** was compiled and optimized for high performance on not just your CPU, _but also (possibly) your GPU_.
+	All the layered function calls and inefficient incremental processing is **transformed into a high-performance program**.
+
+	Thank `jax` - specifically, `jax.jit` (https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit), which internally enables this magic with a single function call.
+	
+	## Other Considerations
+	**Auto-Differentiation**: Incredibly, `jax.jit` isn't the killer feature of `jax`. The function that comes out of `LazyValueFuncFlow` can also be differentiated with `jax.grad` (read: high-performance Jacobians for optimizing input parameters).
+
+	Though designed for machine learning, there's no reason other fields can't enjoy their inventions!
+
+	**Impact of Independent Caching**: JIT'ing can be slow.
+	That's why `LazyValueFuncFlow` has its own `FlowKind` "lane", which means that **only changes to the processing procedures will cause recompilation**.
+
+	Generally, adjustable values that affect the output will flow via the `Param` "lane", which has its own incremental caching, and only meets the compiled function when it's "plugged in" for final evaluation.
+	The effect is a feeling of snappiness and interactivity, even as the volume of data grows.
 
 	Attributes:
-		function: The function to be lazily evaluated.
+		func: The function that the object encapsulates.
 		bound_args: Arguments that will be packaged into function, which can't be later modifier.
 		func_kwargs: Arguments to be specified by the user at the time of use.
 		supports_jax: Whether the contained `self.function` can be compiled with JAX's JIT compiler.
@@ -166,37 +257,29 @@ class LazyValueFuncFlow:
 	"""
 
 	func: LazyFunction
-	func_kwargs: dict[str, type]
+	func_args: list[tuple[str, type]] = MappingProxyType({})
+	func_kwargs: dict[str, type] = MappingProxyType({})
 	supports_jax: bool = False
 	supports_numba: bool = False
-
-	@staticmethod
-	def from_func(
-		func: LazyFunction,
-		supports_jax: bool = False,
-		supports_numba: bool = False,
-		**func_kwargs: dict[str, type],
-	) -> typ.Self:
-		return LazyValueFuncFlow(
-			func=func,
-			func_kwargs=func_kwargs,
-			supports_jax=supports_jax,
-			supports_numba=supports_numba,
-		)
 
 	# Composition
 	def compose_within(
 		self,
 		enclosing_func: LazyFunction,
+		enclosing_func_args: list[tuple[str, type]] = (),
+		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
 		supports_jax: bool = False,
 		supports_numba: bool = False,
-		**enclosing_func_kwargs: dict[str, type],
 	) -> typ.Self:
 		return LazyValueFuncFlow(
-			function=lambda **kwargs: enclosing_func(
-				self.func(**{k: v for k, v in kwargs if k in self.func_kwargs}),
+			function=lambda *args, **kwargs: enclosing_func(
+				self.func(
+					*list(args[len(self.func_args) :]),
+					**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
+				),
 				**kwargs,
 			),
+			func_args=self.func_args + enclosing_func_args,
 			func_kwargs=self.func_kwargs | enclosing_func_kwargs,
 			supports_jax=self.supports_jax and supports_jax,
 			supports_numba=self.supports_numba and supports_numba,
@@ -224,89 +307,295 @@ class LazyValueFuncFlow:
 ####################
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class LazyArrayRangeFlow:
-	symbols: set[sp.Symbol]
+	r"""Represents a linearly/logarithmically spaced array using symbolic boundary expressions, with support for units and lazy evaluation.
 
-	start: sp.Basic
-	stop: sp.Basic
+	# Advantages
+	Whenever an array can be represented like this, the advantages over an `ArrayFlow` are numerous.
+
+	## Memory
+	`ArrayFlow` generally has a memory scaling of $O(n)$.
+	Naturally, `LazyArrayRangeFlow` is always constant, since only the boundaries and steps are stored.
+
+	## Symbolic
+	Both boundary points are symbolic expressions, within which pre-defined `sp.Symbol`s can participate in a constrained manner (ex. an integer symbol).
+
+	One need not know the value of the symbols immediately - such decisions can be deferred until later in the computational flow.
+
+	## Performant Unit-Aware Operations
+	While `ArrayFlow`s are also unit-aware, the time-cost of _any_ unit-scaling operation scales with $O(n)$.
+	`LazyArrayRangeFlow`, by contrast, scales as $O(1)$.
+
+	As a result, more complicated operations (like symbolic or unit-based) that might be difficult to perform interactively in real-time on an `ArrayFlow` will work perfectly with this object, even with added complexity
+
+	## High-Performance Composition and Gradiant
+	With `self.as_func`, a `jax` function is produced that generates the array according to the symbolic `start`, `stop` and `steps`.
+	There are two nice things about this:
+
+	- **Gradient**: The gradient of the output array, with respect to any symbols used to define the input bounds, can easily be found using `jax.grad` over `self.as_func`.
+	- **JIT**: When `self.as_func` is composed with other `jax` functions, and `jax.jit` is run to optimize the entire thing, the "cost of array generation" _will often be optimized away significantly or entirely_.
+
+	Thus, as part of larger computations, the performance properties of `LazyArrayRangeFlow` is extremely favorable.
+
+	## Numerical Properties
+	Since the bounds support exact (ex. rational) calculations and symbolic manipulations (_by virtue of being symbolic expressions_), the opportunities for certain kinds of numerical instability are mitigated.
+
+	Attributes:
+		start: An expression generating a scalar, unitless, complex value for the array's lower bound.
+			_Integer, rational, and real values are also supported._
+		stop: An expression generating a scalar, unitless, complex value for the array's upper bound.
+			_Integer, rational, and real values are also supported._
+		steps: The amount of steps (**inclusive**) to generate from `start` to `stop`.
+		scaling: The method of distributing `step` values between the two endpoints.
+			Generally, the linear default is sufficient.
+
+		unit: The unit of the generated array values
+
+		int_symbols: Set of integer-valued variables from which `start` and/or `stop` are determined.
+		real_symbols: Set of real-valued variables from which `start` and/or `stop` are determined.
+		complex_symbols: Set of complex-valued variables from which `start` and/or `stop` are determined.
+	"""
+
+	start: spux.ScalarUnitlessComplexExpr
+	stop: spux.ScalarUnitlessComplexExpr
 	steps: int
-	scaling: typx.Literal['lin', 'geom', 'log'] = 'lin'
+	scaling: typ.Literal['lin', 'geom', 'log'] = 'lin'
 
-	unit: spu.Quantity | None = False
+	unit: spux.Unit | None = None
 
-	def correct_unit(self, real_unit: spu.Quantity) -> typ.Self:
+	int_symbols: set[spux.IntSymbol] = frozenset()
+	real_symbols: set[spux.RealSymbol] = frozenset()
+	complex_symbols: set[spux.ComplexSymbol] = frozenset()
+
+	@functools.cached_property
+	def symbols(self) -> list[sp.Symbol]:
+		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
+
+		The order is guaranteed to be **deterministic**.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
+		return sorted(
+			self.int_symbols | self.real_symbols | self.complex_symbols,
+			key=lambda sym: sym.name,
+		)
+
+	####################
+	# - Units
+	####################
+	def correct_unit(self, corrected_unit: spux.Unit) -> typ.Self:
+		"""Replaces the unit without rescaling the unitless bounds.
+
+		Parameters:
+			corrected_unit: The unit to replace the current unit with.
+
+		Returns:
+			A new `LazyArrayRangeFlow` with replaced unit.
+
+		Raises:
+			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
+		"""
 		if self.unit is not None:
 			return LazyArrayRangeFlow(
-				symbols=self.symbols,
-				unit=real_unit,
 				start=self.start,
 				stop=self.stop,
 				steps=self.steps,
 				scaling=self.scaling,
+				unit=corrected_unit,
+				int_symbols=self.int_symbols,
+				real_symbols=self.real_symbols,
+				complex_symbols=self.complex_symbols,
 			)
 
-		msg = f'Tried to correct unit of unitless LazyDataValueRange "{real_unit}"'
+		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
 		raise ValueError(msg)
 
-	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
+	def rescale_to_unit(self, unit: spux.Unit) -> typ.Self:
+		"""Replaces the unit, **with** rescaling of the bounds.
+
+		Parameters:
+			unit: The unit to convert the bounds to.
+
+		Returns:
+			A new `LazyArrayRangeFlow` with replaced unit.
+
+		Raises:
+			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
+		"""
 		if self.unit is not None:
 			return LazyArrayRangeFlow(
-				symbols=self.symbols,
-				unit=unit,
 				start=spu.convert_to(self.start, unit),
 				stop=spu.convert_to(self.stop, unit),
 				steps=self.steps,
 				scaling=self.scaling,
+				unit=unit,
+				symbols=self.symbols,
+				int_symbols=self.int_symbols,
+				real_symbols=self.real_symbols,
+				complex_symbols=self.complex_symbols,
 			)
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
 		raise ValueError(msg)
 
+	####################
+	# - Bound Operations
+	####################
 	def rescale_bounds(
 		self,
-		bound_cb: typ.Callable[[sp.Expr], sp.Expr],
+		scaler: typ.Callable[
+			[spux.ScalarUnitlessComplexExpr], spux.ScalarUnitlessComplexExpr
+		],
 		reverse: bool = False,
 	) -> typ.Self:
-		"""Call a function on both bounds (start and stop), creating a new `LazyDataValueRange`."""
+		"""Apply a function to the bounds, effectively rescaling the represented array.
+
+		Notes:
+			**It is presumed that the bounds are scaled with the same factor**.
+			Breaking this presumption may have unexpected results.
+
+			The scalar, unitless, complex-valuedness of the bounds must also be respected; additionally, new symbols must not be introduced.
+
+		Parameters:
+			scaler: The function that scales each bound.
+			reverse: Whether to reverse the bounds after running the `scaler`.
+
+		Returns:
+			A rescaled `LazyArrayRangeFlow`.
+		"""
 		return LazyArrayRangeFlow(
-			symbols=self.symbols,
-			unit=self.unit,
 			start=spu.convert_to(
-				bound_cb(self.start if not reverse else self.stop), self.unit
+				scaler(self.start if not reverse else self.stop), self.unit
 			),
 			stop=spu.convert_to(
-				bound_cb(self.stop if not reverse else self.start), self.unit
+				scaler(self.stop if not reverse else self.start), self.unit
 			),
 			steps=self.steps,
 			scaling=self.scaling,
+			unit=self.unit,
+			int_symbols=self.int_symbols,
+			real_symbols=self.real_symbols,
+			complex_symbols=self.complex_symbols,
 		)
 
+	####################
+	# - Lazy Representation
+	####################
+	@functools.cached_property
+	def array_generator(
+		self,
+	) -> typ.Callable[
+		[int | float | complex, int | float | complex, int],
+		jtyp.Inexact[jtyp.Array, ' steps'],
+	]:
+		"""Compute the correct `jnp.*space` array generator, where `*` is one of the supported scaling methods.
+
+		Returns:
+			A `jax` function that takes a valid `start`, `stop`, and `steps`, and returns a 1D `jax` array.
+		"""
+		jnp_nspace = {
+			'lin': jnp.linspace,
+			'geom': jnp.geomspace,
+			'log': jnp.logspace,
+		}.get(self.scaling)
+		if jnp_nspace is None:
+			msg = f'ArrayFlow scaling method {self.scaling} is unsupported'
+			raise RuntimeError(msg)
+
+		return jnp_nspace
+
+	@functools.cached_property
+	def as_func(
+		self,
+	) -> typ.Callable[[int | float | complex, ...], jtyp.Inexact[jtyp.Array, ' steps']]:
+		"""Create a function that can compute the non-lazy output array as a function of the symbols in the expressions for `start` and `stop`.
+
+		Notes:
+			The ordering of the symbols is identical to `self.symbols`, which is guaranteed to be a deterministically sorted list of symbols.
+
+		Returns:
+			A `LazyValueFuncFlow` that, given the input symbols defined in `self.symbols`,
+		"""
+		# Compile JAX Functions for Start/End Expressions
+		## FYI, JAX-in-JAX works perfectly fine.
+		start_jax = sp.lambdify(self.symbols, self.start, 'jax')
+		stop_jax = sp.lambdify(self.symbols, self.stop, 'jax')
+
+		# Compile ArrayGen Function
+		def gen_array(
+			*args: list[int | float | complex],
+		) -> jtyp.Inexact[jtyp.Array, ' steps']:
+			return self.array_generator(start_jax(*args), stop_jax(*args), self.steps)
+
+		# Return ArrayGen Function
+		return gen_array
+
+	@functools.cached_property
+	def as_lazy_value_func(self) -> LazyValueFuncFlow:
+		"""Creates a `LazyValueFuncFlow` using the output of `self.as_func`.
+
+		This is useful for ex. parameterizing the first array in the node graph, without binding an entire computed array.
+
+		Notes:
+			The the function enclosed in the `LazyValueFuncFlow` is identical to the one returned by `self.as_func`.
+
+		Returns:
+			A `LazyValueFuncFlow` containing `self.as_func`, as well as appropriate supporting settings.
+		"""
+		return LazyValueFuncFlow(
+			func=self.as_func,
+			func_args=[
+				(sym.name, spux.sympy_to_python_type(sym)) for sym in self.symbols
+			],
+			supports_jax=True,
+		)
+
+	####################
+	# - Realization
+	####################
 	def realize(
-		self, symbol_values: dict[sp.Symbol, ValueFlow] = MappingProxyType({})
-	) -> ArrayFlow:
+		self,
+		symbol_values: dict[spux.Symbol, ValueFlow] = MappingProxyType({}),
+		kind: typ.Literal[FlowKind.Array, FlowKind.LazyValueFunc] = FlowKind.Array,
+	) -> ArrayFlow | LazyValueFuncFlow:
+		"""Apply a function to the bounds, effectively rescaling the represented array.
+
+		Notes:
+			**It is presumed that the bounds are scaled with the same factor**.
+			Breaking this presumption may have unexpected results.
+
+			The scalar, unitless, complex-valuedness of the bounds must also be respected; additionally, new symbols must not be introduced.
+
+		Parameters:
+			scaler: The function that scales each bound.
+			reverse: Whether to reverse the bounds after running the `scaler`.
+
+		Returns:
+			A rescaled `LazyArrayRangeFlow`.
+		"""
+		if not set(self.symbols).issubset(set(symbol_values.keys())):
+			msg = f'Provided symbols ({set(symbol_values.keys())}) do not provide values for all expression symbols ({self.symbols}) that may be found in the boundary expressions (start={self.start}, end={self.end})'
+			raise ValueError(msg)
+
 		# Realize Symbols
-		if self.unit is None:
-			start = spux.sympy_to_python(self.start.subs(symbol_values))
-			stop = spux.sympy_to_python(self.stop.subs(symbol_values))
-		else:
-			start = spux.sympy_to_python(
-				spux.scale_to_unit(self.start.subs(symbol_values), self.unit)
-			)
-			stop = spux.sympy_to_python(
-				spux.scale_to_unit(self.stop.subs(symbol_values), self.unit)
-			)
+		realized_start = spux.sympy_to_python(
+			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
+		realized_stop = spux.sympy_to_python(
+			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
 
 		# Return Linspace / Logspace
-		if self.scaling == 'lin':
-			return ArrayFlow(
-				values=jnp.linspace(start, stop, self.steps), unit=self.unit
-			)
-		if self.scaling == 'geom':
-			return ArrayFlow(jnp.geomspace(start, stop, self.steps), self.unit)
-		if self.scaling == 'log':
-			return ArrayFlow(jnp.logspace(start, stop, self.steps), self.unit)
+		def gen_array() -> jtyp.Inexact[jtyp.Array, ' steps']:
+			return self.array_generator(realized_start, realized_stop, self.steps)
 
-		msg = f'ArrayFlow scaling method {self.scaling} is unsupported'
-		raise RuntimeError(msg)
+		if kind == FlowKind.Array:
+			return ArrayFlow(values=gen_array(), unit=self.unit)
+		if kind == FlowKind.LazyValueFunc:
+			return LazyValueFuncFlow(func=gen_array, supports_jax=True)
+
+		msg = f'Invalid kind: {kind}'
+		raise TypeError(msg)
 
 
 ####################
@@ -318,4 +607,35 @@ ParamsFlow: typ.TypeAlias = dict[str, typ.Any]
 ####################
 # - Lazy Value Func
 ####################
-InfoFlow: typ.TypeAlias = dict[str, typ.Any]
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class InfoFlow:
+	func_args: list[tuple[str, type]] = MappingProxyType({})
+	func_kwargs: dict[str, type] = MappingProxyType({})
+
+	# Dimension Information
+	has_ndims: bool = False
+	dim_names: list[str] = ()
+	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = MappingProxyType({})
+
+	## TODO: Validation, esp. length of dims. Pydantic?
+
+	def compose_within(
+		self,
+		enclosing_func_args: list[tuple[str, type]] = (),
+		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
+	) -> typ.Self:
+		return InfoFlow(
+			func_args=self.func_args + enclosing_func_args,
+			func_kwargs=self.func_kwargs | enclosing_func_kwargs,
+		)
+
+	def call_lazy_value_func(
+		self,
+		lazy_value_func: LazyValueFuncFlow,
+		*args: list[typ.Any],
+		**kwargs: dict[str, typ.Any],
+	) -> tuple[list[typ.Any], dict[str, typ.Any]]:
+		if lazy_value_func.supports_jax:
+			lazy_value_func.func_jax(*args, **kwargs)
+
+		lazy_value_func.func(*args, **kwargs)

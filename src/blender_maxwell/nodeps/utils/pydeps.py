@@ -1,3 +1,5 @@
+"""Tools for fearless managemenet of addon-specific Python dependencies."""
+
 import contextlib
 import importlib.metadata
 import os
@@ -13,8 +15,8 @@ log = simple_logger.get(__name__)
 ####################
 # - Globals
 ####################
-DEPS_OK: bool | None = None
-DEPS_ISSUES: list[str] | None = None
+DEPS_OK: bool = False  ## Presume no (but we don't know yet)
+DEPS_ISSUES: list[str] = []  ## No known issues (yet)
 
 
 ####################
@@ -22,6 +24,15 @@ DEPS_ISSUES: list[str] | None = None
 ####################
 @contextlib.contextmanager
 def importable_addon_deps(path_deps: Path):
+	"""Temporarily modifies `sys.path` with a light touch and minimum of side-effects.
+
+	Warnings:
+		There are a lot of gotchas with the import system, and this is an enormously imperfect "solution".
+
+	Parameters:
+		path_deps:
+			Corresponds to the directory into which `pip install --target` was used to install packages.
+	"""
 	os_path = os.fspath(path_deps)
 
 	if os_path not in sys.path:
@@ -30,9 +41,10 @@ def importable_addon_deps(path_deps: Path):
 		try:
 			yield
 		finally:
-			pass
+			# TODO: Re-add
 			# log.info('Removing Path from sys.path: %s', str(os_path))
 			# sys.path.remove(os_path)
+			pass
 	else:
 		try:
 			yield
@@ -42,38 +54,63 @@ def importable_addon_deps(path_deps: Path):
 
 @contextlib.contextmanager
 def syspath_from_bpy_prefs() -> bool:
-	import bpy
+	"""Temporarily modifies `sys.path` using the dependencies found in addon preferences.
 
-	addon_prefs = bpy.context.preferences.addons[ct.addon.NAME].preferences
-	if hasattr(addon_prefs, 'path_addon_pydeps'):
+	Warnings:
+		There are a lot of gotchas with the import system, and this is an enormously imperfect "solution".
+
+	Parameters:
+		path_deps: Path to the directory where Python modules can be found.
+			Corresponds to the directory into which `pip install --target` was used to install packages.
+	"""
+	with importable_addon_deps(ct.addon.prefs().pydeps_path):
 		log.info('Retrieved PyDeps Path from Addon Prefs')
-		path_pydeps = addon_prefs.path_addon_pydeps
-		with importable_addon_deps(path_pydeps):
-			yield True
-	else:
-		log.info("Couldn't PyDeps Path from Addon Prefs")
-		yield False
+		yield True
 
 
 ####################
-# - Check PyDeps
+# - Passive PyDeps Checkers
 ####################
-def _check_pydeps(
+def conform_pypi_package_deplock(deplock: str) -> str:
+	"""Conforms a "deplock" string (`<package>==<version>`) so that comparing it with other "deplock" strings will conform to PyPi's matching rules.
+
+	- **Case Sensitivity**: PyPi considers packages with non-matching cases to be the same. _Therefore, we cast all deplocks to lowercase._
+	- **Special Characters**: PyPi considers `-` and `_` to be the same character. _Therefore, we replace `_` with `-`_.
+
+	See <https://peps.python.org/pep-0426/#name> for the specification.
+
+	Parameters:
+		deplock: The string formatted like `<package>==<version>`.
+
+	Returns:
+		The conformed deplock string.
+	"""
+	return deplock.lower().replace('_', '-')
+
+
+def deplock_conflicts(
 	path_requirementslock: Path,
 	path_deps: Path,
-) -> dict[str, tuple[str, str]]:
-	"""Check if packages defined in a 'requirements.lock' file are currently installed.
+) -> list[str]:
+	"""Check if packages defined in a 'requirements.lock' file are **strictly** realized by a particular dependency path.
 
-	Returns a list of any issues (if empty, then all dependencies are correctly satisfied).
+	**Strict** means not only that everything is satisfied, but that _the exact versions_ are satisfied, and that _no extra packages_ are installed either.
+
+	Parameters:
+		path_requirementslock: Path to the `requirements.lock` file.
+			Generally, one would use `ct.addon.PATH_REQS` to use the `requirements.lock` file shipped with the addon.
+		path_deps: Path to the directory where Python modules can be found.
+			Corresponds to the directory into which `pip install --target` was used to install packages.
+
+	Returns:
+		A list of messages explaining mismatches between the currently installed dependencies, and the given `requirements.lock` file.
+		There are three kinds of conflicts:
+
+		- **Version**: The wrong version of something is installed.
+		- **Missing**: Something should be installed that isn't.
+		- **Superfluous**: Something is installed that shouldn't be.
 	"""
-
-	def conform_pypi_package_deplock(deplock: str):
-		"""Conforms a <package>==<version> de-lock to match if pypi considers them the same (PyPi is case-insensitive and considers -/_ to be the same).
-
-		See <https://peps.python.org/pep-0426/#name>
-		"""
-		return deplock.lower().replace('_', '-')
-
+	# DepLocks: Required
 	with path_requirementslock.open('r') as file:
 		required_depslock = {
 			conform_pypi_package_deplock(line)
@@ -81,18 +118,15 @@ def _check_pydeps(
 			if (line := raw_line.strip()) and not line.startswith('#')
 		}
 
-	# Investigate Issues
-	installed_deps = importlib.metadata.distributions(
-		path=[str(path_deps.resolve())]  ## resolve() is just-in-case
-	)
+	# DepLocks: Installed
 	installed_depslock = {
 		conform_pypi_package_deplock(
 			f'{dep.metadata["Name"]}=={dep.metadata["Version"]}'
 		)
-		for dep in installed_deps
+		for dep in importlib.metadata.distributions(path=[str(path_deps.resolve())])
 	}
 
-	# Determine Missing/Superfluous/Conflicting
+	# Determine Diff of Required vs. Installed
 	req_not_inst = required_depslock - installed_depslock
 	inst_not_req = installed_depslock - required_depslock
 	conflicts = {
@@ -102,7 +136,6 @@ def _check_pydeps(
 		if req.split('==')[0] == inst.split('==')[0]
 	}
 
-	# Assemble and Return Issues
 	return (
 		[
 			f'{name}: Have {inst_ver}, Need {req_ver}'
@@ -122,20 +155,48 @@ def _check_pydeps(
 
 
 ####################
-# - Refresh PyDeps
+# - Passive PyDeps Checker
 ####################
-def check_pydeps(path_deps: Path):
+def check_pydeps(path_requirementslock: Path, path_deps: Path):
+	"""Check if all dependencies are satisfied without `deplock_conflicts()` conflicts, and update globals in response.
+
+	Notes:
+		Use of the globals `DEPS_OK` and `DEPS_ISSUES` should be preferred in general, since they are very fast to access.
+
+		**Only**, use `check_pydeps()` after any operation something that might have changed the dependency status; both to check the result, but also to update the globals.
+
+	Parameters:
+		path_requirementslock: Path to the `requirements.lock` file.
+			Generally, one would use `ct.addon.PATH_REQS` to use the `requirements.lock` file shipped with the addon.
+		path_deps: Path to the directory where Python modules can be found.
+			Corresponds to the directory into which `pip install --target` was used to install packages.
+
+	Returns:
+		A list of messages explaining mismatches between the currently installed dependencies, and the given `requirements.lock` file.
+		There are three kinds of conflicts:
+
+		- **Version**: The wrong version of something is installed.
+		- **Missing**: Something should be installed that isn't.
+		- **Superfluous**: Something is installed that shouldn't be.
+	"""
 	global DEPS_OK  # noqa: PLW0603
 	global DEPS_ISSUES  # noqa: PLW0603
 
-	if len(issues := _check_pydeps(ct.addon.PATH_REQS, path_deps)) > 0:
-		log.info('PyDeps Check Failed')
+	log.info(
+		'Analyzing PyDeps at: %s',
+		str(path_deps),
+	)
+	if len(issues := deplock_conflicts(path_requirementslock, path_deps)) > 0:
+		log.info(
+			'PyDeps Check Failed - adjust Addon Preferences for: %s', ct.addon.NAME
+		)
 		log.debug('%s', ', '.join(issues))
+		log.debug('PyDeps Conflicts: %s', ', '.join(issues))
 
 		DEPS_OK = False
 		DEPS_ISSUES = issues
 	else:
-		log.info('PyDeps Check Succeeded')
+		log.info('PyDeps Check Succeeded - DEPS_OK and DEPS_ISSUES have been updated')
 		DEPS_OK = True
 		DEPS_ISSUES = []
 

@@ -69,7 +69,7 @@ class CombineNode(base.MaxwellSimNode):
 		default=1,
 		min=1,
 		# max=MAX_AMOUNT,
-		update=lambda self, context: self.sync_prop('amount', context),
+		update=lambda self, context: self.on_prop_changed('amount', context),
 	)
 
 	####################

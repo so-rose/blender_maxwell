@@ -56,7 +56,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 			self.cache__units = ''
 			self.cache__uncertainty = ''
 
-		self.sync_prop('sci_constant', context)
+		self.on_prop_changed('sci_constant', context)
 
 	####################
 	# - UI

@@ -19,7 +19,7 @@ class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
 		min=0.01,
 		# step=10,
 		precision=2,
-		update=(lambda self, context: self.sync_prop('min_steps_per_wl', context)),
+		update=(lambda self, context: self.on_prop_changed('min_steps_per_wl', context)),
 	)
 
 	####################

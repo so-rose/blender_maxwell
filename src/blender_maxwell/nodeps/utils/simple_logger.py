@@ -179,7 +179,7 @@ def sync_bootstrap_logging(
 			file_path=file_path,
 			file_level=file_level,
 		)
-	logger_logger.info('Bootstrapped Logging w/Settings %s', str(CACHE))
+	logger_logger.info('Bootstrapped Simple Logging w/Settings %s', str(CACHE))
 
 
 def sync_all_loggers(

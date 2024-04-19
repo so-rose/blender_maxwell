@@ -1,7 +1,5 @@
 import enum
 
-import typing_extensions as typx
-
 from blender_maxwell.utils.staticproperty import staticproperty
 
 
@@ -48,7 +46,7 @@ class FlowEvent(enum.StrEnum):
 
 	# Properties
 	@staticproperty
-	def flow_direction() -> typx.Literal['input', 'output']:
+	def flow_direction() -> typ.Literal['input', 'output']:
 		"""Describes the direction in which the event should flow.
 
 		Doesn't include `FlowEvent`s that aren't meant to be triggered:

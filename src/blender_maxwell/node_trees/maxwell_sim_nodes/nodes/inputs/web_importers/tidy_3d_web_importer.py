@@ -3,7 +3,6 @@ from pathlib import Path
 
 from blender_maxwell.utils import logger
 
-from ...... import info
 from ......services import tdcloud
 from .... import contracts as ct
 from .... import sockets
@@ -18,8 +17,8 @@ def _sim_data_cache_path(task_id: str) -> Path:
 	Arguments:
 		task_id: The ID of the Tidy3D cloud task.
 	"""
-	(info.ADDON_CACHE / task_id).mkdir(exist_ok=True)
-	return info.ADDON_CACHE / task_id / 'sim_data.hdf5'
+	(ct.addon.ADDON_CACHE / task_id).mkdir(exist_ok=True)
+	return ct.addon.ADDON_CACHE / task_id / 'sim_data.hdf5'
 
 
 ####################

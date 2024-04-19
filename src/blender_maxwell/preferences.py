@@ -3,13 +3,11 @@ from pathlib import Path
 
 import bpy
 
-from . import info, registration
+from . import contracts as ct
+from . import registration
 from .nodeps.operators import install_deps, uninstall_deps
 from .nodeps.utils import pydeps, simple_logger
 
-####################
-# - Constants
-####################
 log = simple_logger.get(__name__)
 
 
@@ -17,46 +15,66 @@ log = simple_logger.get(__name__)
 # - Preferences
 ####################
 class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
-	"""Manages user preferences and settings for the Blender Maxwell addon."""
+	"""Manages user preferences and settings for the Blender Maxwell addon.
 
-	bl_idname = info.ADDON_NAME  ## MUST match addon package name
+	Unfortunately, many of the niceities based on dependencies (ex. `bl_cache.BLField`) aren't available here.
+
+
+	Attributes:
+		bl_idname: Matches `ct.addon.NAME`.
+		use_default_pydeps_path: Whether to use the default PyDeps path
+	"""
+
+	bl_idname = ct.addon.NAME
 
 	####################
 	# - Properties
 	####################
-	# Use of Default PyDeps Path
+	# PyDeps Default Path
 	use_default_pydeps_path: bpy.props.BoolProperty(
 		name='Use Default PyDeps Path',
 		description='Whether to use the default PyDeps path',
 		default=True,
-		update=lambda self, context: self.sync_use_default_pydeps_path(context),
-	)
-	cache__pydeps_path_while_using_default: bpy.props.StringProperty(
-		name='Cached Addon PyDeps Path',
-		default=(_default_pydeps_path := str(info.DEFAULT_PATH_DEPS)),
+		update=lambda self, context: self.on_addon_pydeps_changed(context),
 	)
 
-	# Custom PyDeps Path
+	# PyDeps Path
 	bl__pydeps_path: bpy.props.StringProperty(
 		name='Addon PyDeps Path',
 		description='Path to Addon Python Dependencies',
 		subtype='FILE_PATH',
-		default=_default_pydeps_path,
-		update=lambda self, _: self.sync_pydeps_path(),
-	)
-	cache__backup_pydeps_path: bpy.props.StringProperty(
-		name='Previous Addon PyDeps Path',
-		default=_default_pydeps_path,
+		default=str(ct.addon.DEFAULT_PATH_DEPS),
+		update=lambda self, _: self.on_addon_pydeps_changed(),
 	)
 
-	# Log Settings
+	cache__backup_pydeps_path: bpy.props.StringProperty(
+		default=str(ct.addon.DEFAULT_PATH_DEPS),
+	)
+
+	@property
+	def pydeps_path(self) -> Path:
+		if self.use_default_pydeps_path:
+			return ct.addon.DEFAULT_PATH_DEPS
+
+		return Path(bpy.path.abspath(self.bl__pydeps_path))
+
+	@pydeps_path.setter
+	def pydeps_path(self, path: Path) -> None:
+		if not self.use_default_pydeps_path:
+			self.bl__pydeps_path = str(path.resolve())
+		else:
+			msg = f'Can\'t set "pydeps_path" to {path} while "use_default_pydeps_path" is "True"'
+			raise ValueError(msg)
+
+	# Logging
+	## Console Logging
 	use_log_console: bpy.props.BoolProperty(
 		name='Log to Console',
 		description='Whether to use the console for addon logging',
 		default=True,
-		update=lambda self, _: self.sync_addon_logging(),
+		update=lambda self, _: self.on_addon_logging_changed(),
 	)
-	bl__log_level_console: bpy.props.EnumProperty(
+	log_level_console: bpy.props.EnumProperty(
 		name='Console Log Level',
 		description='Level of addon logging to expose in the console',
 		items=[
@@ -66,24 +84,18 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			('ERROR', 'Error', 'Error'),
 			('CRITICAL', 'Critical', 'Critical'),
 		],
-		default='DEBUG',
-		update=lambda self, _: self.sync_addon_logging(),
+		default='INFO',
+		update=lambda self, _: self.on_addon_logging_changed(),
 	)
 
+	## File Logging
 	use_log_file: bpy.props.BoolProperty(
 		name='Log to File',
 		description='Whether to use a file for addon logging',
 		default=True,
-		update=lambda self, _: self.sync_addon_logging(),
+		update=lambda self, _: self.on_addon_logging_changed(),
 	)
-	bl__log_file_path: bpy.props.StringProperty(
-		name='Log Path',
-		description='Path to the Addon Log File',
-		subtype='FILE_PATH',
-		default=str(info.DEFAULT_LOG_PATH),
-		update=lambda self, _: self.sync_addon_logging(),
-	)
-	bl__log_level_file: bpy.props.EnumProperty(
+	log_level_file: bpy.props.EnumProperty(
 		name='File Log Level',
 		description='Level of addon logging to expose in the file',
 		items=[
@@ -93,61 +105,60 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			('ERROR', 'Error', 'Error'),
 			('CRITICAL', 'Critical', 'Critical'),
 		],
-		default='DEBUG',
-		update=lambda self, _: self.sync_addon_logging(),
+		default='INFO',
+		update=lambda self, _: self.on_addon_logging_changed(),
 	)
 
-	# TODO: LOGGING SETTINGS
-
-	####################
-	# - Property Methods
-	####################
-	@property
-	def pydeps_path(self) -> Path:
-		return Path(bpy.path.abspath(self.bl__pydeps_path))
-
-	@pydeps_path.setter
-	def pydeps_path(self, value: Path) -> None:
-		self.bl__pydeps_path = str(value.resolve())
+	bl__log_file_path: bpy.props.StringProperty(
+		name='Log Path',
+		description='Path to the Addon Log File',
+		subtype='FILE_PATH',
+		default=str(ct.addon.DEFAULT_LOG_PATH),
+		update=lambda self, _: self.on_addon_logging_changed(),
+	)
 
 	@property
-	def log_path(self) -> Path:
+	def log_file_path(self) -> Path:
 		return Path(bpy.path.abspath(self.bl__log_file_path))
 
+	@pydeps_path.setter
+	def log_file_path(self, path: Path) -> None:
+		self.bl__log_file_path = str(path.resolve())
+
 	####################
-	# - Property Sync
+	# - Events: Properties Changed
 	####################
-	def sync_addon_logging(self, logger_to_setup: logging.Logger | None = None) -> None:
+	def on_addon_logging_changed(
+		self, single_logger_to_setup: logging.Logger | None = None
+	) -> None:
 		"""Configure one, or all, active addon logger(s).
 
 		Parameters:
-			logger_to_setup:
-				When set to None, all addon loggers will be configured
+			single_logger_to_setup: When set, only this logger will be setup.
+				Otherwise, **all addon loggers will be setup**.
 		"""
 		if pydeps.DEPS_OK:
-			log.info('Getting Logger (DEPS_OK = %s)', str(pydeps.DEPS_OK))
 			with pydeps.importable_addon_deps(self.pydeps_path):
 				from blender_maxwell.utils import logger
 		else:
-			log.info('Getting Simple Logger (DEPS_OK = %s)', str(pydeps.DEPS_OK))
 			logger = simple_logger
 
 		# Retrieve Configured Log Levels
-		log_level_console = logger.LOG_LEVEL_MAP[self.bl__log_level_console]
-		log_level_file = logger.LOG_LEVEL_MAP[self.bl__log_level_file]
+		log_level_console = logger.LOG_LEVEL_MAP[self.log_level_console]
+		log_level_file = logger.LOG_LEVEL_MAP[self.log_level_file]
 
 		log_setup_kwargs = {
 			'console_level': log_level_console if self.use_log_console else None,
-			'file_path': self.log_path if self.use_log_file else None,
+			'file_path': self.log_file_path if self.use_log_file else None,
 			'file_level': log_level_file,
 		}
 
 		# Sync Single Logger / All Loggers
-		if logger_to_setup is not None:
+		if single_logger_to_setup is not None:
 			logger.setup_logger(
 				logger.console_handler,
 				logger.file_handler,
-				logger_to_setup,
+				single_logger_to_setup,
 				**log_setup_kwargs,
 			)
 		else:
@@ -158,77 +169,55 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 				**log_setup_kwargs,
 			)
 
-	def sync_use_default_pydeps_path(self, _: bpy.types.Context):
-		# Switch to Default
-		if self.use_default_pydeps_path:
-			log.info(
-				'Switching to Default PyDeps Path %s',
-				str(info.DEFAULT_PATH_DEPS.resolve()),
-			)
-			self.cache__pydeps_path_while_using_default = self.bl__pydeps_path
-			self.bl__pydeps_path = str(info.DEFAULT_PATH_DEPS.resolve())
+	def on_addon_pydeps_changed(self, show_popup_if_deps_invalid: bool = False) -> None:
+		"""Checks if the Python dependencies are valid, and runs any delayed setup (inclusing `ct.BLClass` registrations) in response.
 
-		# Switch from Default
-		else:
-			log.info(
-				'Switching from Default PyDeps Path %s to Cached PyDeps Path %s',
-				str(info.DEFAULT_PATH_DEPS.resolve()),
-				self.cache__pydeps_path_while_using_default,
-			)
-			self.bl__pydeps_path = self.cache__pydeps_path_while_using_default
-			self.cache__pydeps_path_while_using_default = ''
+		Notes:
+			**The addon does not load until this method allows it**.
 
-	def sync_pydeps_path(self):
-		if self.cache__backup_pydeps_path != self.bl__pydeps_path:
-			log.info(
-				'Syncing PyDeps Path from/to: %s => %s',
-				self.cache__backup_pydeps_path,
-				self.bl__pydeps_path,
-			)
-		else:
-			log.info(
-				'Syncing PyDeps Path In-Place @ %s',
-				str(self.bl__pydeps_path),
-			)
+		Parameters:
+			show_popup_if_deps_invalid: If True, a failed dependency check will `invoke()` the operator `ct.OperatorType.ManagePyDeps`, which is a popup that guides the user through
+				**NOTE**: Must be called after addon registration.
 
-		# Error: Default Path in Use
-		if self.use_default_pydeps_path:
-			self.bl__pydeps_path = self.cache__backup_pydeps_path
-			msg = "Can't update pydeps path while default path is being used"
-			raise ValueError(msg)
-
-		# Error: PyDeps Already Installed
-		if pydeps.DEPS_OK:
-			self.bl__pydeps_path = self.cache__backup_pydeps_path
-			msg = "Can't update pydeps path while dependencies are installed"
-			raise ValueError(msg)
-
-		# Re-Check PyDeps
-		log.info(
-			'Checking PyDeps of New Path %s',
-			str(self.pydeps_path),
-		)
-		if pydeps.check_pydeps(self.pydeps_path):
+		Notes:
+			Run by `__init__.py` after registering a barebones addon (including this class), and after queueing a delayed registration.
+		"""
+		if pydeps.check_pydeps(ct.addon.PATH_REQS, self.pydeps_path):
 			# Re-Sync Loggers
-			## We can now upgrade to the fancier loggers.
-			self.sync_addon_logging()
+			## We can now upgrade all loggers to the fancier loggers.
+			for _log in simple_logger.simple_loggers:
+				log.debug('Upgrading Logger (%s)', str(_log))
+				self.on_addon_logging_changed(single_logger_to_setup=_log)
 
-			# Run Delayed Registrations
+			# Run Registrations Waiting on DEPS_SATISFIED
 			## Since the deps are OK, we can now register the whole addon.
-			registration.run_delayed_registration(
-				registration.EVENT__DEPS_SATISFIED,
-				self.pydeps_path,
-			)
+			if (
+				registration.BLRegisterEvent.DepsSatisfied
+				in registration.DELAYED_REGISTRATIONS
+			):
+				registration.run_delayed_registration(
+					registration.BLRegisterEvent.DepsSatisfied,
+					self.pydeps_path,
+				)
 
-		# Backup New PyDeps Path
-		self.cache__backup_pydeps_path = self.bl__pydeps_path
+		elif show_popup_if_deps_invalid:
+			ct.addon.operator(
+				ct.OperatorType.ManagePyDeps,
+				'INVOKE_DEFAULT',
+				bl__pydeps_path=str(self.pydeps_path),
+				bl__pydeps_reqlock_path=str(ct.addon.PATH_REQS),
+			)
+		## TODO: else:
+		## TODO: Can we 'downgrade' the loggers back to simple loggers?
+		## TODO: Can we undo the delayed registration?
+		## TODO: Do we need the fancy pants sys.modules handling for all this?
 
 	####################
 	# - UI
 	####################
 	def draw(self, _: bpy.types.Context) -> None:
 		layout = self.layout
-		num_pydeps_issues = len(pydeps.DEPS_ISSUES) if pydeps.DEPS_ISSUES else 0
+		num_pydeps_issues = len(pydeps.DEPS_ISSUES)
 
 		# Box w/Split: Log Level
 		box = layout.box()
@@ -244,7 +233,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 
 		row = col.row()
 		row.enabled = self.use_log_console
-		row.prop(self, 'bl__log_level_console')
+		row.prop(self, 'log_level_console')
 
 		## Split Col: File Logging
 		col = split.column()
@@ -257,7 +246,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 
 		row = col.row()
 		row.enabled = self.use_log_file
-		row.prop(self, 'bl__log_level_file')
+		row.prop(self, 'log_level_file')
 
 		# Box: Dependency Status
 		box = layout.box()
@@ -296,8 +285,8 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			install_deps.InstallPyDeps.bl_idname,
 			text='Install PyDeps',
 		)
-		op.path_addon_pydeps = str(self.pydeps_path)
-		op.path_addon_reqs = str(info.PATH_REQS)
+		op.bl__pydeps_path = str(self.pydeps_path)
+		op.bl__pydeps_reqlock_path = str(ct.addon.PATH_REQS)
 
 		## Row: Uninstall
 		row = box.row(align=True)
@@ -305,7 +294,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			uninstall_deps.UninstallPyDeps.bl_idname,
 			text='Uninstall PyDeps',
 		)
-		op.path_addon_pydeps = str(self.pydeps_path)
+		op.bl__pydeps_path = str(self.pydeps_path)
 
 
 ####################

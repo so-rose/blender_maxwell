@@ -18,7 +18,7 @@ class BlenderImageBLSocket(base.MaxwellSimSocket):
 		name='Blender Image',
 		description='Represents a Blender Image',
 		type=bpy.types.Image,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################

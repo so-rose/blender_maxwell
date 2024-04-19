@@ -18,7 +18,7 @@ class BlenderTextBLSocket(base.MaxwellSimSocket):
 		name='Blender Text',
 		description='Represents a Blender text datablock',
 		type=bpy.types.Text,
-		update=(lambda self, context: self.sync_prop('raw_value', context)),
+		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
 	)
 
 	####################
