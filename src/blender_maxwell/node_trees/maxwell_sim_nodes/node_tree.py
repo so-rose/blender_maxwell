@@ -196,7 +196,7 @@ class NodeLinkCache:
 class MaxwellSimTree(bpy.types.NodeTree):
 	bl_idname = ct.TreeType.MaxwellSim.value
 	bl_label = 'Maxwell Sim Editor'
-	bl_icon = ct.Icon.SimNodeEditor.value
+	bl_icon = ct.Icon.SimNodeEditor
 
 	####################
 	# - Lock Methods

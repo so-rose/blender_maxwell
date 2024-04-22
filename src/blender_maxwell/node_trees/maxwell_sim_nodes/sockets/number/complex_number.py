@@ -92,7 +92,7 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 	# - Computation of Default Value
 	####################
 	@property
-	def value(self) -> spux.Complex:
+	def value(self) -> spux.ComplexNumber:
 		"""Return the complex number as a sympy expression, of a form determined by the coordinate system.
 
 		- **Cartesian**: $(a,b) -> a + ib$
@@ -109,7 +109,7 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 		}[self.coord_sys]
 
 	@value.setter
-	def value(self, value: spux.Complex) -> None:
+	def value(self, value: spux.ComplexNumber) -> None:
 		"""Set the complex number from a sympy expression, by numerically simplifying it into coordinate-system determined components.
 
 		- **Cartesian**: $(a,b) -> a + ib$
@@ -130,7 +130,7 @@ class ComplexNumberBLSocket(base.MaxwellSimSocket):
 class ComplexNumberSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.ComplexNumber
 
-	default_value: spux.Complex = sp.S(0)
+	default_value: spux.ComplexNumber = sp.S(0)
 	coord_sys: typ.Literal['CARTESIAN', 'POLAR'] = 'CARTESIAN'
 
 	def init(self, bl_socket: ComplexNumberBLSocket) -> None:

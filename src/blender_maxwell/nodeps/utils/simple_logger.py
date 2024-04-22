@@ -2,6 +2,7 @@ import logging
 import typing as typ
 from pathlib import Path
 
+log = logging.getLogger(__name__)
 ## TODO: Hygiene; don't try to own all root loggers.
 
 LogLevel: typ.TypeAlias = int
@@ -18,8 +19,6 @@ LOG_LEVEL_MAP: dict[str, LogLevel] = {
 	'CRITICAL': logging.CRITICAL,
 }
 
-SIMPLE_LOGGER_PREFIX = 'simple::'
-
 STREAM_LOG_FORMAT = 11 * ' ' + '%(levelname)-8s %(message)s (%(name)s)'
 FILE_LOG_FORMAT = STREAM_LOG_FORMAT
 
@@ -27,6 +26,7 @@ FILE_LOG_FORMAT = STREAM_LOG_FORMAT
 # - Globals
 ####################
 CACHE = {
+	'simple_loggers': set(),
 	'console_level': None,
 	'file_path': None,
 	'file_level': logging.NOTSET,
@@ -72,7 +72,7 @@ def file_handler(path_log_file: Path, level: LogLevel) -> logging.FileHandler:
 ####################
 # - Logger Setup
 ####################
-def setup_logger(
+def update_logger(
 	cb_console_handler: typ.Callable[[LogLevel], LogHandler],
 	cb_file_handler: typ.Callable[[Path, LogLevel], LogHandler],
 	logger: logging.Logger,
@@ -117,37 +117,10 @@ def setup_logger(
 		logger.addHandler(cb_file_handler(file_path, file_level))
 
 
-def get(module_name) -> logging.Logger:
-	"""Get a simple logger from the module name.
-
-	Should be used by calling ex. `LOG = simple_logger.get(__name__)` in the module wherein logging is desired.
-	Should **only** be used if the dependencies aren't yet available for using `blender_maxwell.utils.logger`.
-
-	Uses the global `CACHE` to store `console_level`, `file_path`, and `file_level`, since addon preferences aren't yet available.
-
-	Parameters:
-		module_name: The name of the module to create a logger for.
-			Should be set to `__name__`.
-	"""
-	logger = logging.getLogger(SIMPLE_LOGGER_PREFIX + module_name)
-
-	# Reuse Cached Arguments from Last sync_*
-	setup_logger(
-		console_handler,
-		file_handler,
-		logger,
-		console_level=CACHE['console_level'],
-		file_path=CACHE['file_path'],
-		file_level=CACHE['file_level'],
-	)
-
-	return logger
-
-
 ####################
-# - Logger Sync
+# - Logger Initialization
 ####################
-def sync_bootstrap_logging(
+def init_simple_logger_defaults(
 	console_level: LogLevel | None = None,
 	file_path: Path | None = None,
 	file_level: LogLevel = logging.NOTSET,
@@ -164,25 +137,58 @@ def sync_bootstrap_logging(
 		file_level: The file log level threshold to store in `CACHE`.
 			Only needs to be set if `file_path` is not `None`.
 	"""
+	CACHE['simple_loggers'].add(__name__)
 	CACHE['console_level'] = console_level
 	CACHE['file_path'] = file_path
 	CACHE['file_level'] = file_level
 
-	logger_logger = logging.getLogger(__name__)
-	for name in logging.root.manager.loggerDict:
-		logger = logging.getLogger(name)
-		setup_logger(
-			console_handler,
-			file_handler,
-			logger,
-			console_level=console_level,
-			file_path=file_path,
-			file_level=file_level,
-		)
-	logger_logger.info('Bootstrapped Simple Logging w/Settings %s', str(CACHE))
+	# Setup __name__ Logger
+	update_logger(
+		console_handler,
+		file_handler,
+		log,
+		console_level=console_level,
+		file_path=file_path,
+		file_level=file_level,
+	)
+	log.info('Initialized Simple Logging w/Settings %s', str(CACHE))
 
 
-def sync_all_loggers(
+####################
+# - Logger Access
+####################
+def get(module_name) -> logging.Logger:
+	"""Get a simple logger from the module name.
+
+	Should be used by calling ex. `LOG = simple_logger.get(__name__)` in the module wherein logging is desired.
+	Should **only** be used if the dependencies aren't yet available for using `blender_maxwell.utils.logger`.
+
+	Uses the global `CACHE` to store `console_level`, `file_path`, and `file_level`, since addon preferences aren't yet available.
+
+	Parameters:
+		module_name: The name of the module to create a logger for.
+			Should be set to `__name__`.
+	"""
+	logger = logging.getLogger(module_name)
+	CACHE['simple_loggers'].add(module_name)
+
+	# Reuse Cached Arguments from Last sync_*
+	update_logger(
+		console_handler,
+		file_handler,
+		logger,
+		console_level=CACHE['console_level'],
+		file_path=CACHE['file_path'],
+		file_level=CACHE['file_level'],
+	)
+
+	return logger
+
+
+####################
+# - Logger Sync
+####################
+def update_all_loggers(
 	cb_console_handler: typ.Callable[[LogLevel], LogHandler],
 	cb_file_handler: typ.Callable[[Path, LogLevel], LogHandler],
 	console_level: LogLevel | None,
@@ -191,8 +197,8 @@ def sync_all_loggers(
 ):
 	"""Update all loggers to conform to the given per-handler on/off state and log level.
 
-	This runs the corresponding `setup_logger()` for all active loggers.
-	Thus, all parameters are identical to `setup_logger()`.
+	This runs the corresponding `update_logger()` for all active loggers.
+	Thus, all parameters are identical to `update_logger()`.
 	"""
 	CACHE['console_level'] = console_level
 	CACHE['file_path'] = file_path
@@ -200,7 +206,7 @@ def sync_all_loggers(
 
 	for name in logging.root.manager.loggerDict:
 		logger = logging.getLogger(name)
-		setup_logger(
+		update_logger(
 			cb_console_handler,
 			cb_file_handler,
 			logger,
@@ -221,5 +227,9 @@ def simple_loggers():
 	return [
 		logging.getLogger(name)
 		for name in logging.root.manager.loggerDict
-		if name.startswith(SIMPLE_LOGGER_PREFIX)
+		if name in CACHE['simple_loggers']
 	]
+
+
+def clear_simple_loggers():
+	CACHE['simple_loggers'].clear()

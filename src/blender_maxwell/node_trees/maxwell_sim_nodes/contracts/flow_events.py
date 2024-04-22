@@ -1,4 +1,5 @@
 import enum
+import typing as typ
 
 from blender_maxwell.utils.staticproperty import staticproperty
 

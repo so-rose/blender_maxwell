@@ -1,5 +1,5 @@
-from blender_maxwell.utils.blender_type_enum import BlenderTypeEnum
+import enum
 
 
-class Icon(BlenderTypeEnum):
+class Icon(enum.StrEnum):
 	SimNodeEditor = 'MOD_SIMPLEDEFORM'

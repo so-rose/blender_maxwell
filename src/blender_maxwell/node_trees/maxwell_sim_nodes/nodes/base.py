@@ -4,8 +4,11 @@ Attributes:
 	MANDATORY_PROPS: Properties that must be defined on the `MaxwellSimNode`.
 """
 
+## TODO: Check whether input_socket_sets and output_socket_sets have the right shape? Or just use a type checker...
+
 import typing as typ
 import uuid
+from collections import defaultdict
 from types import MappingProxyType
 
 import bpy
@@ -65,6 +68,9 @@ class MaxwellSimNode(bpy.types.Node):
 	managed_obj_types: typ.ClassVar[
 		dict[ct.ManagedObjName, type[_managed_objs.ManagedObj]]
 	] = MappingProxyType({})
+
+	def reset_instance_id(self) -> None:
+		self.instance_id = str(uuid.uuid4())
 
 	####################
 	# - Class Methods
@@ -431,17 +437,17 @@ class MaxwellSimNode(bpy.types.Node):
 
 				# Create BL Socket from Socket
 				## Set 'display_shape' from 'socket_shape'
-				bl_socket = all_bl_sockets.new(
+				all_bl_sockets.new(
 					str(socket_def.socket_type.value),
 					socket_name,
 				)
-				bl_socket.display_shape = bl_socket.socket_shape
 
 				# Record Socket Creation
 				created_sockets[socket_name] = socket_def
 
 			# Initialize Just-Created BL Sockets
 			for socket_name, socket_def in created_sockets.items():
+				socket_def.preinit(all_bl_sockets[socket_name])
 				socket_def.init(all_bl_sockets[socket_name])
 
 	def _sync_sockets(self) -> None:
@@ -625,7 +631,17 @@ class MaxwellSimNode(bpy.types.Node):
 
 			return output_socket_methods[0](self)
 
-		msg = f'No output method for ({output_socket_name}, {kind.value!s}'
+		# Auxiliary Fallbacks
+		if kind == ct.FlowKind.Info:
+			return ct.InfoFlow()
+
+		if kind == ct.FlowKind.Params:
+			return ct.ParamsFlow()
+
+		if optional:
+			return None
+
+		msg = f'No output method for ({output_socket_name}, {kind})'
 		raise ValueError(msg)
 
 	####################
@@ -634,8 +650,9 @@ class MaxwellSimNode(bpy.types.Node):
 	def _should_recompute_output_socket(
 		self,
 		method_info: events.InfoOutputRequested,
-		input_socket_name: ct.SocketName,
-		prop_name: str,
+		input_socket_name: ct.SocketName | None,
+		input_socket_kinds: set[ct.FlowKind] | None,
+		prop_name: str | None,
 	) -> bool:
 		return (
 			prop_name is not None
@@ -643,6 +660,20 @@ class MaxwellSimNode(bpy.types.Node):
 			or input_socket_name is not None
 			and (
 				input_socket_name in method_info.depon_input_sockets
+				and (
+					input_socket_kinds is None
+					or (
+						isinstance(
+							_kind := method_info.depon_input_socket_kinds.get(
+								input_socket_name, ct.FlowKind.Value
+							),
+							set,
+						)
+						and input_socket_kinds.intersection(_kind)
+					)
+					or _kind == ct.FlowKind.Value
+					or _kind in input_socket_kinds
+				)
 				or (
 					method_info.depon_all_loose_input_sockets
 					and input_socket_name in self.loose_input_sockets
@@ -650,10 +681,56 @@ class MaxwellSimNode(bpy.types.Node):
 			)
 		)
 
+	@bl_cache.cached_bl_property(persist=False)
+	def _dependent_outputs(
+		self,
+	) -> dict[
+		tuple[ct.SocketName, ct.FlowKind], set[tuple[ct.SocketName, ct.FlowKind]]
+	]:
+		## TODO: Cleanup
+		## TODO: Detect cycles?
+		## TODO: Networkx?
+		altered_to_invalidated = defaultdict(set)
+		output_requested_methods = self.event_methods_by_event[
+			ct.FlowEvent.OutputRequested
+		]
+
+		for altered_method in output_requested_methods:
+			altered_info = altered_method.callback_info
+			altered_key = (altered_info.output_socket_name, altered_info.kind)
+
+			for invalidated_method in output_requested_methods:
+				invalidated_info = invalidated_method.callback_info
+
+				if (
+					altered_info.output_socket_name
+					in invalidated_info.depon_output_sockets
+				):
+					is_same_kind = (
+						altered_info.kind
+						== (
+							_kind := invalidated_info.depon_output_socket_kinds.get(
+								altered_info.output_socket_name
+							)
+						)
+						or (isinstance(_kind, set) and altered_info.kind in _kind)
+						or altered_info.kind == ct.FlowKind.Value
+					)
+
+					if is_same_kind:
+						invalidated_key = (
+							invalidated_info.output_socket_name,
+							invalidated_info.kind,
+						)
+						altered_to_invalidated[altered_key].add(invalidated_key)
+
+		return altered_to_invalidated
+
 	def trigger_event(
 		self,
 		event: ct.FlowEvent,
 		socket_name: ct.SocketName | None = None,
+		socket_kinds: set[ct.FlowKind] | None = None,
 		prop_name: ct.SocketName | None = None,
 	) -> None:
 		"""Recursively triggers events forwards or backwards along the node tree, allowing nodes in the update path to react.
@@ -671,16 +748,32 @@ class MaxwellSimNode(bpy.types.Node):
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
+		# Outflow Socket Kinds
+		## Something has happened, that much is for sure.
+		## Output methods might require invalidation of (outsck, FlowKind)s.
+		## Whichever FlowKinds we do happen to invalidate, we should mark.
+		## This way, each FlowKind gets its own invalidation chain.
+		altered_socket_kinds = set()
+
+		# Invalidate Caches on DataChanged
 		if event == ct.FlowEvent.DataChanged:
 			input_socket_name = socket_name  ## Trigger direction is forwards
 
 			# Invalidate Input Socket Cache
 			if input_socket_name is not None:
-				self._compute_input.invalidate(
-					input_socket_name=input_socket_name,
-					kind=...,
-					unit_system=...,
-				)
+				if socket_kinds is None:
+					self._compute_input.invalidate(
+						input_socket_name=input_socket_name,
+						kind=...,
+						unit_system=...,
+					)
+				else:
+					for socket_kind in socket_kinds:
+						self._compute_input.invalidate(
+							input_socket_name=input_socket_name,
+							kind=socket_kind,
+							unit_system=...,
+						)
 
 			# Invalidate Output Socket Cache
 			for output_socket_method in self.event_methods_by_event[
@@ -688,12 +781,40 @@ class MaxwellSimNode(bpy.types.Node):
 			]:
 				method_info = output_socket_method.callback_info
 				if self._should_recompute_output_socket(
-					method_info, socket_name, prop_name
+					method_info, socket_name, socket_kinds, prop_name
 				):
+					out_sckname = method_info.output_socket_name
+					kind = method_info.kind
+
+					# Invalidate Output Directly
+					# log.critical(
+					# '[%s] Invalidating: (%s, %s)',
+					# self.sim_node_name,
+					# out_sckname,
+					# str(kind),
+					# )
+					altered_socket_kinds.add(kind)
 					self.compute_output.invalidate(
-						output_socket_name=method_info.output_socket_name,
-						kind=method_info.kind,
+						output_socket_name=out_sckname,
+						kind=kind,
 					)
+
+					# Invalidate Any Dependent Outputs
+					if (
+						dep_outs := self._dependent_outputs.get((out_sckname, kind))
+					) is not None:
+						for dep_out in dep_outs:
+							# log.critical(
+							# '![%s] Invalidating: (%s, %s)',
+							# self.sim_node_name,
+							# dep_out[0],
+							# dep_out[1],
+							# )
+							altered_socket_kinds.add(dep_out[1])
+							self.compute_output.invalidate(
+								output_socket_name=dep_out[0],
+								kind=dep_out[1],
+							)
 
 		# Run Triggered Event Methods
 		stop_propagation = False
@@ -711,7 +832,13 @@ class MaxwellSimNode(bpy.types.Node):
 				direc=ct.FlowEvent.flow_direction[event]
 			)
 			for bl_socket in triggered_sockets:
-				bl_socket.trigger_event(event)
+				# log.critical(
+				# '![%s] Propagating: (%s, %s)',
+				# self.sim_node_name,
+				# event,
+				# altered_socket_kinds,
+				# )
+				bl_socket.trigger_event(event, socket_kinds=altered_socket_kinds)
 
 	####################
 	# - Property Event: On Update
@@ -838,7 +965,7 @@ class MaxwellSimNode(bpy.types.Node):
 		"""
 		# Initialize Instance ID
 		## This is used by various caches from 'bl_cache'.
-		self.instance_id = str(uuid.uuid4())
+		self.reset_instance_id()
 
 		# Initialize Name
 		## This is used whenever a unique name pointing to this node is needed.
@@ -881,7 +1008,7 @@ class MaxwellSimNode(bpy.types.Node):
 			Blender runs this when instantiating this node from an existing node.
 		"""
 		# Generate New Instance ID
-		self.instance_id = str(uuid.uuid4())
+		self.reset_instance_id()
 
 		# Generate New Sim Node Name
 		## Blender will automatically add .001 so that `self.name` is unique.

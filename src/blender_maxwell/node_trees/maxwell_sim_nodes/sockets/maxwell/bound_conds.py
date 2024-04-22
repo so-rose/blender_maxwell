@@ -99,6 +99,8 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 			_col.prop(self, axis + '_neg', text='')
 			_col.prop(self, axis + '_pos', text='')
 
+	draw_value_array = draw_value
+
 	####################
 	# - Computation of Default Value
 	####################

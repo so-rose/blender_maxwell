@@ -21,8 +21,7 @@ class VizNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
-		'Freq': sockets.PhysicalFreqSocketDef(),
+		'Data': sockets.DataSocketDef(format='jax'),
 	}
 	output_sockets: typ.ClassVar = {
 		'Preview': sockets.AnySocketDef(),
@@ -57,12 +56,9 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	@events.on_show_plot(
 		managed_objs={'plot'},
-		input_sockets={'Data', 'Freq'},
+		input_sockets={'Data'},
+		input_socket_kinds={'Data': ct.FlowKind.Array},
 		props={'colormap'},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Freq': 'Tidy3DUnits',
-		},
 		stop_propagation=True,
 	)
 	def on_show_plot(
@@ -70,10 +66,9 @@ class VizNode(base.MaxwellSimNode):
 		managed_objs: dict,
 		input_sockets: dict,
 		props: dict,
-		unit_systems: dict,
 	):
 		managed_objs['plot'].map_2d_to_image(
-			input_sockets['Data'].as_bound_jax_func(),
+			input_sockets['Data'].values,
 			colormap=props['colormap'],
 			bl_select=True,
 		)

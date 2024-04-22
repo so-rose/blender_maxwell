@@ -258,3 +258,20 @@ SOCKET_UNITS = {
 		},
 	},
 }
+
+
+def unit_to_socket_type(unit: spux.Unit) -> ST:
+	"""Returns a SocketType that accepts the given unit.
+
+	Only the unit-compatibility is taken into account; in the case of overlap, several the ordering of `SOCKET_UNITS` determines which is returned.
+	This isn't super clean, but it's good enough for our needs right now.
+
+	Returns:
+		**The first `SocketType` in `SOCKET_UNITS`, which contains the given unit as a valid possibility.
+	"""
+	for socket_type, _units in SOCKET_UNITS.items():
+		if unit in _units['values'].values():
+			return socket_type
+
+	msg = f"Unit {unit} doesn't have an obvious SocketType."
+	raise ValueError(msg)

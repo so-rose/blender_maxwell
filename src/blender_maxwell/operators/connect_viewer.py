@@ -1,12 +1,13 @@
 import bpy
 
-from blender_maxwell.utils import logger as logger
+from blender_maxwell import contracts as ct
+from blender_maxwell.utils import logger
 
 log = logger.get(__name__)
 
 
 class ConnectViewerNode(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.connect_viewer_node'
+	bl_idname = ct.OperatorType.ConnectViewerNode
 	bl_label = 'Connect Viewer to Active'
 	bl_description = 'Connect active node to Viewer Node'
 	bl_options = {'REGISTER', 'UNDO'}
@@ -62,7 +63,7 @@ BL_REGISTER = [
 BL_HOTKEYS = [
 	{
 		'_': (
-			ConnectViewerNode.bl_idname,
+			ct.OperatorType.ConnectViewerNode,
 			'LEFTMOUSE',
 			'PRESS',
 		),

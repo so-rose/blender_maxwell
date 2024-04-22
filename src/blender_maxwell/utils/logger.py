@@ -12,9 +12,9 @@ from ..nodeps.utils.simple_logger import (
 	LOG_LEVEL_MAP,  # noqa: F401
 	LogLevel,
 	loggers,  # noqa: F401
-	setup_logger,  # noqa: F401
 	simple_loggers,  # noqa: F401
-	sync_all_loggers,  # noqa: F401
+	update_all_loggers,  # noqa: F401
+	update_logger,  # noqa: F401
 )
 
 OUTPUT_CONSOLE = rich.console.Console(
@@ -60,12 +60,3 @@ def get(module_name):
 	ct.addon.prefs().on_addon_logging_changed(single_logger_to_setup=logger)
 
 	return logger
-
-
-####################
-# - Logger Sync
-####################
-# def upgrade_simple_loggers():
-# """Upgrades simple loggers to rich-enabled loggers."""
-# for logger in simple_loggers():
-# setup_logger(console_handler, file_handler, logger)

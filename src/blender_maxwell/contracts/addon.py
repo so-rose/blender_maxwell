@@ -1,4 +1,4 @@
-import random
+import sys
 import tomllib
 from pathlib import Path
 
@@ -23,14 +23,19 @@ PATH_ASSETS = PATH_ADDON_ROOT / 'assets'
 ####################
 PATH_REQS = PATH_ADDON_ROOT / 'requirements.lock'
 DEFAULT_PATH_DEPS = PATH_ADDON_ROOT / '.addon_dependencies'
+DEFAULT_PATH_DEPS.mkdir(exist_ok=True)
 ## requirements.lock is written when packing the .zip.
 ## By default, the addon pydeps are kept in the addon dir.
+
+ORIGINAL_SYS_PATH = sys.path.copy()
 
 ####################
 # - Local Addon Cache
 ####################
 ADDON_CACHE = PATH_ADDON_ROOT / '.addon_cache'
 ADDON_CACHE.mkdir(exist_ok=True)
+
+PIP_INSTALL_LOG = ADDON_CACHE / 'pip_install.log'
 
 
 ####################
@@ -83,11 +88,6 @@ def prefs() -> bpy.types.AddonPreferences | None:
 # - Logging Info
 ####################
 DEFAULT_LOG_PATH = PATH_ADDON_ROOT / 'addon.log'
-DEFAULT_LOG_PATH.touch(exist_ok=True)
 ## By default, the addon file log writes to the addon dir.
 ## The initial .log_level contents are written when packing the .zip.
 ## Subsequent changes are managed by nodeps.utils.simple_logger.py.
-
-PATH_BOOTSTRAP_LOG_LEVEL = PATH_ADDON_ROOT / '.bootstrap_log_level'
-with PATH_BOOTSTRAP_LOG_LEVEL.open('r') as f:
-	BOOTSTRAP_LOG_LEVEL = int(f.read().strip())

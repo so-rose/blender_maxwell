@@ -1,6 +1,7 @@
 """Tools for fearless managemenet of addon-specific Python dependencies."""
 
 import contextlib
+import functools
 import importlib.metadata
 import os
 import sys
@@ -17,6 +18,8 @@ log = simple_logger.get(__name__)
 ####################
 DEPS_OK: bool = False  ## Presume no (but we don't know yet)
 DEPS_ISSUES: list[str] = []  ## No known issues (yet)
+DEPS_REQ_DEPLOCKS: set[str] = set()
+DEPS_INST_DEPLOCKS: set[str] = set()
 
 
 ####################
@@ -88,6 +91,28 @@ def conform_pypi_package_deplock(deplock: str) -> str:
 	return deplock.lower().replace('_', '-')
 
 
+def compute_required_deplocks(
+	path_requirementslock: Path,
+) -> set[str]:
+	with path_requirementslock.open('r') as file:
+		return {
+			conform_pypi_package_deplock(line)
+			for raw_line in file.readlines()
+			if (line := raw_line.strip()) and not line.startswith('#')
+		}
+
+
+def compute_installed_deplocks(
+	path_deps: Path,
+) -> set[str]:
+	return {
+		conform_pypi_package_deplock(
+			f'{dep.metadata["Name"]}=={dep.metadata["Version"]}'
+		)
+		for dep in importlib.metadata.distributions(path=[str(path_deps.resolve())])
+	}
+
+
 def deplock_conflicts(
 	path_requirementslock: Path,
 	path_deps: Path,
@@ -110,25 +135,12 @@ def deplock_conflicts(
 		- **Missing**: Something should be installed that isn't.
 		- **Superfluous**: Something is installed that shouldn't be.
 	"""
-	# DepLocks: Required
-	with path_requirementslock.open('r') as file:
-		required_depslock = {
-			conform_pypi_package_deplock(line)
-			for raw_line in file.readlines()
-			if (line := raw_line.strip()) and not line.startswith('#')
-		}
-
-	# DepLocks: Installed
-	installed_depslock = {
-		conform_pypi_package_deplock(
-			f'{dep.metadata["Name"]}=={dep.metadata["Version"]}'
-		)
-		for dep in importlib.metadata.distributions(path=[str(path_deps.resolve())])
-	}
+	required_deplocks = compute_required_deplocks(path_requirementslock)
+	installed_deplocks = compute_installed_deplocks(path_deps)
 
 	# Determine Diff of Required vs. Installed
-	req_not_inst = required_depslock - installed_depslock
-	inst_not_req = installed_depslock - required_depslock
+	req_not_inst = required_deplocks - installed_deplocks
+	inst_not_req = installed_deplocks - required_deplocks
 	conflicts = {
 		req.split('==')[0]: (req.split('==')[1], inst.split('==')[1])
 		for req in req_not_inst
@@ -181,6 +193,8 @@ def check_pydeps(path_requirementslock: Path, path_deps: Path):
 	"""
 	global DEPS_OK  # noqa: PLW0603
 	global DEPS_ISSUES  # noqa: PLW0603
+	global DEPS_REQ_DEPLOCKS  # noqa: PLW0603
+	global DEPS_INST_DEPLOCKS  # noqa: PLW0603
 
 	log.info(
 		'Analyzing PyDeps at: %s',
@@ -200,4 +214,6 @@ def check_pydeps(path_requirementslock: Path, path_deps: Path):
 		DEPS_OK = True
 		DEPS_ISSUES = []
 
+	DEPS_REQ_DEPLOCKS = compute_required_deplocks(path_requirementslock)
+	DEPS_INST_DEPLOCKS = compute_installed_deplocks(path_deps)
 	return DEPS_OK

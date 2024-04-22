@@ -32,11 +32,11 @@ class InfoOutputRequested:
 	depon_props: set[str]
 
 	depon_input_sockets: set[ct.SocketName]
-	depon_input_socket_kinds: dict[ct.SocketName, ct.FlowKind]
+	depon_input_socket_kinds: dict[ct.SocketName, ct.FlowKind | set[ct.FlowKind]]
 	depon_all_loose_input_sockets: bool
 
 	depon_output_sockets: set[ct.SocketName]
-	depon_output_socket_kinds: dict[ct.SocketName, ct.FlowKind]
+	depon_output_socket_kinds: dict[ct.SocketName, ct.FlowKind | set[ct.FlowKind]]
 	depon_all_loose_output_sockets: bool
 
 
@@ -59,10 +59,14 @@ def event_decorator(
 	props: set[PropName] = frozenset(),
 	input_sockets: set[ct.SocketName] = frozenset(),
 	input_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
-	input_socket_kinds: dict[ct.SocketName, ct.FlowKind] = MappingProxyType({}),
+	input_socket_kinds: dict[
+		ct.SocketName, ct.FlowKind | set[ct.FlowKind]
+	] = MappingProxyType({}),
 	output_sockets: set[ct.SocketName] = frozenset(),
 	output_sockets_optional: dict[ct.SocketName, bool] = MappingProxyType({}),
-	output_socket_kinds: dict[ct.SocketName, ct.FlowKind] = MappingProxyType({}),
+	output_socket_kinds: dict[
+		ct.SocketName, ct.FlowKind | set[ct.FlowKind]
+	] = MappingProxyType({}),
 	all_loose_input_sockets: bool = False,
 	all_loose_output_sockets: bool = False,
 	# Request Unit System Scaling
@@ -157,11 +161,9 @@ def event_decorator(
 					'input_sockets': {
 						input_socket_name: node._compute_input(
 							input_socket_name,
-							kind=input_socket_kinds.get(
-								input_socket_name, ct.FlowKind.Value
-							),
+							kind=_kind,
 							unit_system=(
-								unit_system := unit_systems.get(
+								unit_systems.get(
 									scale_input_sockets.get(input_socket_name)
 								)
 							),
@@ -169,6 +171,25 @@ def event_decorator(
 								input_socket_name, False
 							),
 						)
+						if not isinstance(
+							_kind := input_socket_kinds.get(
+								input_socket_name, ct.FlowKind.Value
+							),
+							set,
+						)
+						else {
+							kind: node._compute_input(
+								input_socket_name,
+								kind=kind,
+								unit_system=unit_systems.get(
+									scale_input_sockets.get(input_socket_name)
+								),
+								optional=input_sockets_optional.get(
+									input_socket_name, False
+								),
+							)
+							for kind in _kind
+						}
 						for input_socket_name in input_sockets
 					}
 				}
@@ -177,37 +198,39 @@ def event_decorator(
 			)
 
 			## Output Sockets
+			def _g_output_socket(output_socket_name: ct.SocketName, kind: ct.FlowKind):
+				if scale_output_sockets.get(output_socket_name) is None:
+					return node.compute_output(
+						output_socket_name,
+						kind=kind,
+						optional=output_sockets_optional.get(output_socket_name, False),
+					)
+
+				return ct.FlowKind.scale_to_unit_system(
+					kind,
+					node.compute_output(
+						output_socket_name,
+						kind=kind,
+						optional=output_sockets_optional.get(output_socket_name, False),
+					),
+					node.outputs[output_socket_name].socket_type,
+					unit_systems.get(scale_output_sockets.get(output_socket_name)),
+				)
+
 			method_kw_args |= (
 				{
 					'output_sockets': {
-						output_socket_name: ct.FlowKind.scale_to_unit_system(
-							(
-								output_socket_kind := output_socket_kinds.get(
-									output_socket_name, ct.FlowKind.Value
-								)
-							),
-							node.compute_output(
-								output_socket_name,
-								kind=output_socket_kind,
-								optional=output_sockets_optional.get(
-									output_socket_name, False
-								),
-							),
-							node.outputs[output_socket_name].socket_type,
-							unit_systems.get(
-								scale_output_sockets.get(output_socket_name)
-							),
-						)
-						if scale_output_sockets.get(output_socket_name) is not None
-						else node.compute_output(
-							output_socket_name,
-							kind=output_socket_kinds.get(
+						output_socket_name: _g_output_socket(output_socket_name, _kind)
+						if not isinstance(
+							_kind := output_socket_kinds.get(
 								output_socket_name, ct.FlowKind.Value
 							),
-							optional=output_sockets_optional.get(
-								output_socket_name, False
-							),
+							set,
 						)
+						else {
+							kind: _g_output_socket(output_socket_name, kind)
+							for kind in _kind
+						}
 						for output_socket_name in output_sockets
 					}
 				}
@@ -327,12 +350,12 @@ def computes_output_socket(
 			kind=kind,
 			depon_props=kwargs.get('props', set()),
 			depon_input_sockets=kwargs.get('input_sockets', set()),
-			depon_input_socket_kinds=kwargs.get('input_socket_kinds', set()),
+			depon_input_socket_kinds=kwargs.get('input_socket_kinds', {}),
 			depon_output_sockets=kwargs.get('output_sockets', set()),
-			depon_output_socket_kinds=kwargs.get('output_socket_kinds', set()),
-			depon_all_loose_input_sockets=kwargs.get('all_loose_input_sockets', set()),
+			depon_output_socket_kinds=kwargs.get('output_socket_kinds', {}),
+			depon_all_loose_input_sockets=kwargs.get('all_loose_input_sockets', False),
 			depon_all_loose_output_sockets=kwargs.get(
-				'all_loose_output_sockets', set()
+				'all_loose_output_sockets', False
 			),
 		),
 		**kwargs,  ## stop_propagation has no effect.

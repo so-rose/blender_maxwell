@@ -13,13 +13,15 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+X_COMPLEX = sp.Symbol('x', complex=True)
+
 
 class MapMathNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.MapMath
 	bl_label = 'Map Math'
 
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
+		'Data': sockets.DataSocketDef(format='jax'),
 	}
 	input_socket_sets: typ.ClassVar = {
 		'By Element': {},
@@ -27,13 +29,13 @@ class MapMathNode(base.MaxwellSimNode):
 		'By Matrix': {},
 		'Expr': {
 			'Mapper': sockets.ExprSocketDef(
-				symbols=[sp.Symbol('x')],
-				default_expr=sp.Symbol('x'),
+				complex_symbols=[X_COMPLEX],
+				default_expr=X_COMPLEX,
 			),
 		},
 	}
 	output_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
+		'Data': sockets.DataSocketDef(format='jax'),
 	}
 
 	####################
@@ -51,53 +53,56 @@ class MapMathNode(base.MaxwellSimNode):
 		if self.active_socket_set == 'By Element':
 			items += [
 				# General
-				('REAL', 'real', 'ℝ(L) (by el)'),
-				('IMAG', 'imag', 'Im(L) (by el)'),
-				('ABS', 'abs', '|L| (by el)'),
-				('SQ', 'square', 'L^2 (by el)'),
-				('SQRT', 'sqrt', 'sqrt(L) (by el)'),
-				('INV_SQRT', '1/sqrt', '1/sqrt(L) (by el)'),
+				('REAL', 'ℝ(v)', 'real(v) (by el)'),
+				('IMAG', 'Im(v)', 'imag(v) (by el)'),
+				('ABS', '|v|', 'abs(v) (by el)'),
+				('SQ', 'v²', 'v^2 (by el)'),
+				('SQRT', '√v', 'sqrt(v) (by el)'),
+				('INV_SQRT', '1/√v', '1/sqrt(v) (by el)'),
 				# Trigonometry
-				('COS', 'cos', 'cos(L) (by el)'),
-				('SIN', 'sin', 'sin(L) (by el)'),
-				('TAN', 'tan', 'tan(L) (by el)'),
-				('ACOS', 'acos', 'acos(L) (by el)'),
-				('ASIN', 'asin', 'asin(L) (by el)'),
-				('ATAN', 'atan', 'atan(L) (by el)'),
+				('COS', 'cos v', 'cos(v) (by el)'),
+				('SIN', 'sin v', 'sin(v) (by el)'),
+				('TAN', 'tan v', 'tan(v) (by el)'),
+				('ACOS', 'acos v', 'acos(v) (by el)'),
+				('ASIN', 'asin v', 'asin(v) (by el)'),
+				('ATAN', 'atan v', 'atan(v) (by el)'),
 			]
 		elif self.active_socket_set in 'By Vector':
 			items += [
-				('NORM_2', '2-Norm', '||L||_2 (by Vec)'),
+				('NORM_2', '||v||₂', 'norm(v, 2) (by Vec)'),
 			]
 		elif self.active_socket_set == 'By Matrix':
 			items += [
 				# Matrix -> Number
-				('DET', 'Determinant', 'det(L) (by Mat)'),
-				('COND', 'Condition', 'κ(L) (by Mat)'),
-				('NORM_FRO', 'Frobenius Norm', '||L||_F (by Mat)'),
-				('RANK', 'Rank', 'rank(L) (by Mat)'),
+				('DET', 'det V', 'det(V) (by Mat)'),
+				('COND', 'κ(V)', 'cond(V) (by Mat)'),
+				('NORM_FRO', '||V||_F', 'norm(V, frobenius) (by Mat)'),
+				('RANK', 'rank V', 'rank(V) (by Mat)'),
 				# Matrix -> Array
-				('DIAG', 'Diagonal', 'diag(L) (by Mat)'),
-				('EIG_VALS', 'Eigenvalues', 'eigvals(L) (by Mat)'),
-				('SVD_VALS', 'SVD', 'svd(L) -> diag(Σ) (by Mat)'),
+				('DIAG', 'diag V', 'diag(V) (by Mat)'),
+				('EIG_VALS', 'eigvals V', 'eigvals(V) (by Mat)'),
+				('SVD_VALS', 'svdvals V', 'diag(svd(V)) (by Mat)'),
 				# Matrix -> Matrix
-				('INV', 'Invert', 'L^(-1) (by Mat)'),
-				('TRA', 'Transpose', 'L^T (by Mat)'),
+				('INV', 'V⁻¹', 'V^(-1) (by Mat)'),
+				('TRA', 'Vt', 'V^T (by Mat)'),
 				# Matrix -> Matrices
-				('QR', 'QR', 'L -> Q·R (by Mat)'),
-				('CHOL', 'Cholesky', 'L -> L·Lh (by Mat)'),
-				('SVD', 'SVD', 'L -> U·Σ·Vh (by Mat)'),
+				('QR', 'qr V', 'qr(V) -> Q·R (by Mat)'),
+				('CHOL', 'chol V', 'cholesky(V) -> V·V† (by Mat)'),
+				('SVD', 'svd V', 'svd(V) -> U·Σ·V† (by Mat)'),
 			]
+		elif self.active_socket_set == 'Expr':
+			items += [('EXPR_EL', 'By Element', 'Expression-defined (by el)')]
 		else:
-			items += ['EXPR_EL', 'Expr (by el)', 'Expression-defined (by el)']
+			msg = f'Invalid socket set {self.active_socket_set}'
+			raise RuntimeError(msg)
+
 		return items
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		if self.active_socket_set not in {'Expr (Element)'}:
-			layout.prop(self, 'operation')
+		layout.prop(self, 'operation', text='')
 
 	####################
-	# - Compute
+	# - Compute: LazyValueFunc / Array
 	####################
 	@events.computes_output_socket(
 		'Data',
@@ -148,8 +153,8 @@ class MapMathNode(base.MaxwellSimNode):
 				'CHOL': lambda data: jnp.linalg.cholesky(data),
 				'SVD': lambda data: jnp.linalg.svd(data),
 			},
-			'By El (Expr)': {
-				'EXPR_EL': lambda data: input_sockets['Mapper'](data),
+			'Expr': {
+				'EXPR_EL': lambda data: input_sockets['Mapper'].func(data),
 			},
 		}[props['active_socket_set']][props['operation']]
 
@@ -158,6 +163,43 @@ class MapMathNode(base.MaxwellSimNode):
 			mapping_func,
 			supports_jax=True,
 		)
+
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.Array,
+		output_sockets={'Data'},
+		output_socket_kinds={
+			'Data': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Params},
+		},
+	)
+	def compute_array(self, output_sockets: dict) -> ct.ArrayFlow:
+		lazy_value_func = output_sockets['Data'][ct.FlowKind.LazyValueFunc]
+		params = output_sockets['Data'][ct.FlowKind.Params]
+		return ct.ArrayFlow(
+			values=lazy_value_func.func_jax(*params.func_args, **params.func_kwargs),
+			unit=None,  ## TODO: Unit Propagation
+		)
+
+	####################
+	# - Compute Auxiliary: Info / Params
+	####################
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.Info,
+		input_sockets={'Data'},
+		input_socket_kinds={'Data': ct.FlowKind.Info},
+	)
+	def compute_data_info(self, input_sockets: dict) -> ct.InfoFlow:
+		return input_sockets['Data']
+
+	@events.computes_output_socket(
+		'Data',
+		kind=ct.FlowKind.Params,
+		input_sockets={'Data'},
+		input_socket_kinds={'Data': ct.FlowKind.Params},
+	)
+	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow:
+		return input_sockets['Data']
 
 
 ####################

@@ -62,7 +62,6 @@ class WaveConstantNode(base.MaxwellSimNode):
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_freq_value(self, input_sockets: dict) -> sp.Expr:
-		log.critical(input_sockets)
 		if input_sockets['Freq'] is not None:
 			return input_sockets['Freq']
 

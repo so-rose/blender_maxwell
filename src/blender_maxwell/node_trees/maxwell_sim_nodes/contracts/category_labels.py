@@ -1,4 +1,4 @@
-from .node_cats import NodeCategory as NC
+from .category_types import NodeCategory as NC
 
 NODE_CAT_LABELS = {
 	# Analysis/

@@ -5,8 +5,7 @@ from pathlib import Path
 import bpy
 
 from ... import contracts as ct
-from ... import registration
-from ..utils import pydeps, simple_logger
+from ..utils import pip_process, pydeps, simple_logger
 
 log = simple_logger.get(__name__)
 
@@ -17,11 +16,13 @@ class InstallPyDeps(bpy.types.Operator):
 
 	@classmethod
 	def poll(cls, _: bpy.types.Context):
-		return not pydeps.DEPS_OK
+		return not pip_process.is_loaded() and not pydeps.DEPS_OK
 
 	####################
 	# - Property: PyDeps Path
 	####################
+	_timer = None
+
 	bl__pydeps_path: bpy.props.StringProperty(
 		default='',
 	)
@@ -52,47 +53,78 @@ class InstallPyDeps(bpy.types.Operator):
 	####################
 	# - Execution
 	####################
-	def execute(self, _: bpy.types.Context):
+	def execute(self, context: bpy.types.Context):
+		if pip_process.is_loaded():
+			self.report(
+				{'ERROR'},
+				'A PyDeps installation is already running. Please wait for it to complete.',
+			)
+			return {'FINISHED'}
+
 		log.info(
-			'Running Install PyDeps w/requirements.txt (%s) to path: %s',
-			self.pydeps_reqlock_path,
-			self.pydeps_path,
+			'Installing PyDeps to path: %s',
+			str(self.pydeps_path),
 		)
 
 		# Create the Addon-Specific Folder (if Needed)
 		## It MUST, however, have a parent already
 		self.pydeps_path.mkdir(parents=False, exist_ok=True)
 
-		# Determine Path to Blender's Bundled Python
-		## bpy.app.binary_path_python was deprecated in 2.91.
-		## sys.executable points to the correct bundled Python.
-		## See <https://developer.blender.org/docs/release_notes/2.91/python_api/>
-		python_exec = Path(sys.executable)
+		# Run Pip Install
+		pip_process.run(ct.addon.PATH_REQS, self.pydeps_path, ct.addon.PIP_INSTALL_LOG)
 
-		# Install Deps w/Bundled pip
-		try:
-			cmdline = [
-				str(python_exec),
-				'-m',
-				'pip',
-				'install',
-				'-r',
-				str(self.pydeps_reqlock_path),
-				'--target',
-				str(self.pydeps_path),
-			]
-			log.info(
-				'Running pip w/cmdline: %s',
-				' '.join(cmdline),
-			)
-			subprocess.check_call(cmdline)
-		except subprocess.CalledProcessError:
-			log.exception('Failed to install PyDeps')
-			return {'CANCELLED'}
+		# Set Timer
+		self._timer = context.window_manager.event_timer_add(
+			0.25, window=context.window
+		)
+		context.window_manager.modal_handler_add(self)
 
-		# Report PyDeps Changed
-		ct.addon.prefs().on_addon_pydeps_changed()
-		return {'FINISHED'}
+		return {'RUNNING_MODAL'}
+
+	def modal(
+		self, context: bpy.types.Context, event: bpy.types.Event
+	) -> ct.BLOperatorStatus:
+		# Non-Timer Event: Do Nothing
+		if event.type != 'TIMER':
+			return {'PASS_THROUGH'}
+
+		# No Process: Very Bad!
+		if not pip_process.is_loaded():
+			msg = 'Pip process was removed elsewhere than "install_deps" modal operator'
+			raise RuntimeError(msg)
+
+		# Not Running: Done!
+		if not pip_process.is_running():
+			# Report Result
+			if pip_process.returncode() == 0:
+				self.report({'INFO'}, 'PyDeps installation succeeded.')
+			else:
+				self.report(
+					{'ERROR'},
+					f'PyDeps installation returned status code: {pip_process.returncode()}. Please see the addon preferences, or the pip installation logs at: {ct.addon.PIP_INSTALL_LOG}',
+				)
+
+			# Reset Process and Timer
+			pip_process.reset()
+			context.window_manager.event_timer_remove(self._timer)
+
+			# Mark PyDeps Changed
+			ct.addon.prefs().on_addon_pydeps_changed()
+
+			return {'FINISHED'}
+
+		if ct.addon.PIP_INSTALL_LOG.is_file():
+			pip_process.update_progress(ct.addon.PIP_INSTALL_LOG)
+			context.area.tag_redraw()
+		return {'PASS_THROUGH'}
+
+	def cancel(self, context: bpy.types.Context):
+		# Kill / Reset Process and Delete Event Timer
+		pip_process.kill()
+		pip_process.reset()
+		context.window_manager.event_timer_remove(self._timer)
+
+		return {'CANCELLED'}
 
 
 ####################

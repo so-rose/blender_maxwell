@@ -262,6 +262,14 @@ def sympy_to_python(scalar: sp.Basic) -> int | float | complex | tuple | list:
 	raise ValueError(msg)
 
 
+def pretty_symbol(sym: sp.Symbol) -> str:
+	return f'{sym.name} ∈ ' + (
+		'ℂ'
+		if sym.is_complex
+		else ('ℝ' if sym.is_real else ('ℤ' if sym.is_integer else '?'))
+	)
+
+
 ####################
 # - Pydantic-Validated SympyExpr
 ####################
@@ -355,7 +363,7 @@ class _SympyExpr:
 
 
 SympyExpr = typx.Annotated[
-	SympyType,
+	sp.Basic,  ## Treat all sympy types as sp.Basic
 	_SympyExpr,
 ]
 
@@ -453,7 +461,7 @@ def ConstrSympyExpr(  # noqa: N802, PLR0913
 		return expr
 
 	return typx.Annotated[
-		SympyType,
+		sp.Basic,
 		_SympyExpr,
 		pyd.AfterValidator(validate_expr),
 	]

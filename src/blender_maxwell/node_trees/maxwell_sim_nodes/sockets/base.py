@@ -1,6 +1,7 @@
 import abc
 import functools
 import typing as typ
+import uuid
 
 import bpy
 import pydantic as pyd
@@ -30,6 +31,14 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 	"""
 
 	socket_type: ct.SocketType
+
+	def preinit(self, bl_socket: bpy.types.NodeSocket) -> None:
+		"""Pre-initialize a real Blender node socket from this socket definition.
+
+		Parameters:
+			bl_socket: The Blender node socket to alter using data from this SocketDef.
+		"""
+		bl_socket.reset_instance_id()
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
@@ -79,7 +88,8 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		if not initialized_classes:
 			msg = f'No "SocketDef" subclass found for name {obj[1]}. Please report this error'
 			RuntimeError(msg)
-		return next(initialized_classes)
+
+		return initialized_classes[0]
 
 
 ####################
@@ -118,6 +128,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Options
 	use_units: bool = False
 	use_prelock: bool = False
+	use_info_draw: bool = False
 
 	# Computed
 	bl_idname: str
@@ -126,6 +137,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# - Initialization
 	####################
 	## TODO: Common implementation of this for both sockets and nodes - perhaps a BLInstance base class?
+	def reset_instance_id(self) -> None:
+		self.instance_id = str(uuid.uuid4())
+
 	@classmethod
 	def set_prop(
 		cls,
@@ -432,6 +446,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	def trigger_event(
 		self,
 		event: ct.FlowEvent,
+		socket_kinds: set[ct.FlowKind] | None = None,
 	) -> None:
 		"""Responds to and triggers subsequent events along the node tree.
 
@@ -461,26 +476,34 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		# Input Socket | Input Flow
 		if not self.is_output and flow_direction == 'input':
 			for link in self.links:
-				link.from_socket.trigger_event(event)
+				link.from_socket.trigger_event(event, socket_kinds=socket_kinds)
 
 		# Input Socket | Output Flow
 		if not self.is_output and flow_direction == 'output':
 			if event == ct.FlowEvent.LinkChanged:
-				self.node.trigger_event(ct.FlowEvent.DataChanged, socket_name=self.name)
+				self.node.trigger_event(
+					ct.FlowEvent.DataChanged,
+					socket_name=self.name,
+					socket_kinds=socket_kinds,
+				)
 
-			self.node.trigger_event(event, socket_name=self.name)
+			self.node.trigger_event(
+				event, socket_name=self.name, socket_kinds=socket_kinds
+			)
 
 		# Output Socket | Input Flow
 		if self.is_output and flow_direction == 'input':
-			self.node.trigger_event(event, socket_name=self.name)
+			self.node.trigger_event(
+				event, socket_name=self.name, socket_kinds=socket_kinds
+			)
 
 		# Output Socket | Output Flow
 		if self.is_output and flow_direction == 'output':
 			for link in self.links:
-				link.to_socket.trigger_event(event)
+				link.to_socket.trigger_event(event, socket_kinds=socket_kinds)
 
 	####################
-	# - Data Chain
+	# - FlowKind: Auxiliary
 	####################
 	# Capabilities
 	@property
@@ -490,11 +513,40 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Notes:
 			See `ct.FlowKind` for more information.
 		"""
-		return ct.DataCapabilities(
+		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
 		)
 
+	# Info
+	@property
+	def info(self) -> ct.InfoFlow:
+		"""Signal that no information is declared by this socket.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Returns:
+			An empty `ct.InfoFlow`.
+		"""
+		return ct.InfoFlow()
+
+	# Param
+	@property
+	def params(self) -> ct.ParamsFlow:
+		"""Signal that no params are declared by this socket.
+
+		Notes:
+			See `ct.FlowKind` for more information.
+
+		Returns:
+			An empty `ct.ParamsFlow`.
+		"""
+		return ct.ParamsFlow()
+
+	####################
+	# - FlowKind: Auxiliary
+	####################
 	# Value
 	@property
 	def value(self) -> ct.ValueFlow:
@@ -591,7 +643,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		raise NotImplementedError(msg)
 
 	@lazy_array_range.setter
-	def lazy_array_range(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
+	def lazy_array_range(self, value: ct.LazyArrayRangeFlow) -> None:
 		"""Throws a descriptive error.
 
 		Notes:
@@ -601,60 +653,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			NotImplementedError: When used without being overridden.
 		"""
 		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.LazyArrayRange", but socket does not define it'
-		raise NotImplementedError(msg)
-
-	# Param
-	@property
-	def param(self) -> ct.ParamsFlow:
-		"""Throws a descriptive error.
-
-		Notes:
-			See `ct.FlowKind` for more information.
-
-		Raises:
-			NotImplementedError: When used without being overridden.
-		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Param", but socket does not define it'
-		raise NotImplementedError(msg)
-
-	@param.setter
-	def param(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
-		"""Throws a descriptive error.
-
-		Notes:
-			See `ct.FlowKind` for more information.
-
-		Raises:
-			NotImplementedError: When used without being overridden.
-		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Param", but socket does not define it'
-		raise NotImplementedError(msg)
-
-	# Info
-	@property
-	def info(self) -> ct.ParamsFlow:
-		"""Throws a descriptive error.
-
-		Notes:
-			See `ct.FlowKind` for more information.
-
-		Raises:
-			NotImplementedError: When used without being overridden.
-		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Info", but socket does not define it'
-		raise NotImplementedError(msg)
-
-	@info.setter
-	def info(self, value: tuple[ct.DataValue, ct.DataValue, int]) -> None:
-		"""Throws a descriptive error.
-
-		Notes:
-			See `ct.FlowKind` for more information.
-
-		Raises:
-			NotImplementedError: When used without being overridden.
-		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Info", but socket does not define it'
 		raise NotImplementedError(msg)
 
 	####################
@@ -674,8 +672,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		kind_data_map = {
 			ct.FlowKind.Value: lambda: self.value,
-			ct.FlowKind.ValueArray: lambda: self.value_array,
-			ct.FlowKind.LazyValueFunc: lambda: self.lazy_value,
+			ct.FlowKind.Array: lambda: self.array,
+			ct.FlowKind.LazyValueFunc: lambda: self.lazy_value_func,
 			ct.FlowKind.LazyArrayRange: lambda: self.lazy_array_range,
 			ct.FlowKind.Params: lambda: self.params,
 			ct.FlowKind.Info: lambda: self.info,
@@ -727,8 +725,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if len(linked_values) == 1:
 			return linked_values[0]
 
+		# Edge Case: While Dragging Link (but not yet removed)
+		## While the user is dragging a link:
+		## - self.is_linked = True, since the user hasn't confirmed anything.
+		## - self.links will be empty, since the link object was freed.
+		## When this particular condition is met, pretend that we're not linked.
+		if len(linked_values) == 0:
+			return self._compute_data(kind)
+
 		msg = f'Socket {self.bl_label} ({self.socket_type}): Multi-input sockets are not yet supported'
-		return NotImplementedError(msg)
+		raise NotImplementedError(msg)
 
 	####################
 	# - Theme
@@ -819,49 +825,55 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		col = layout.column(align=False)
 
-		# Label Row
+		# Row: Label
 		row = col.row(align=False)
+
+		## Lock Check
 		if self.locked:
 			row.enabled = False
 
-		## Linked Label
+		## Link Check
 		if self.is_linked:
 			row.label(text=text)
-			return
-
-		## User Label Row (incl. Units)
-		if self.use_units:
-			split = row.split(factor=0.6, align=True)
-
-			_row = split.row(align=True)
-			self.draw_label_row(_row, text)
-
-			_col = split.column(align=True)
-			_col.prop(self, 'active_unit', text='')
 		else:
-			self.draw_label_row(row, text)
+			# User Label Row (incl. Units)
+			if self.use_units:
+				split = row.split(factor=0.6, align=True)
 
-		# Prelock Row
-		row = col.row(align=False)
-		if self.use_prelock:
-			_col = row.column(align=False)
-			_col.enabled = True
-			self.draw_prelock(context, _col, node, text)
+				_row = split.row(align=True)
+				self.draw_label_row(_row, text)
 
-			if self.locked:
-				row = col.row(align=False)
+				_col = split.column(align=True)
+				_col.prop(self, 'active_unit', text='')
+			else:
+				self.draw_label_row(row, text)
+
+			# User Prelock Row
+			row = col.row(align=False)
+			if self.use_prelock:
+				_col = row.column(align=False)
+				_col.enabled = True
+				self.draw_prelock(context, _col, node, text)
+
+				if self.locked:
+					row = col.row(align=False)
+					row.enabled = False
+			elif self.locked:
 				row.enabled = False
-		elif self.locked:
-			row.enabled = False
 
-		# FlowKind Column(s)
-		col = row.column(align=True)
-		{
-			ct.FlowKind.Value: self.draw_value,
-			ct.FlowKind.Array: self.draw_value_array,
-			ct.FlowKind.LazyValueFunc: self.draw_lazy_value,
-			ct.FlowKind.LazyValueRange: self.draw_lazy_value_range,
-		}[self.active_kind](col)
+			# FlowKind Draw Row
+			col = row.column(align=True)
+			{
+				ct.FlowKind.Value: self.draw_value,
+				ct.FlowKind.Array: self.draw_array,
+				ct.FlowKind.LazyValueFunc: self.draw_lazy_value_func,
+				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
+			}[self.active_kind](col)
+
+		# Info Drawing
+		if self.use_info_draw:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			self.draw_info(info, col)
 
 	def draw_output(
 		self,
@@ -881,10 +893,18 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			node: The node within which the socket is embedded.
 			text: The socket's name in the UI.
 		"""
-		layout.label(text=text)
+		col = layout.column()
+		row = col.row()
+		row.alignment = 'RIGHT'
+		row.label(text=text)
+
+		# Draw FlowKind.Info related Information
+		if self.use_info_draw:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			self.draw_info(info, col)
 
 	####################
-	# - UI Methods
+	# - UI Methods: Active FlowKind
 	####################
 	def draw_label_row(
 		self,
@@ -922,7 +942,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			col: Target for defining UI elements.
 		"""
 
-	def draw_lazy_value(self, col: bpy.types.UILayout) -> None:
+	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
 		"""Draws the socket lazy value on its own line.
 
 		Notes:
@@ -937,6 +957,19 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Notes:
 			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyArrayRange`.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+
+	####################
+	# - UI Methods: Auxilliary
+	####################
+	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
+		"""Draws the socket info on its own line.
+
+		Notes:
+			Should be overriden by individual socket classes, if they might output a `FlowKind.Info`.
 
 		Parameters:
 			col: Target for defining UI elements.

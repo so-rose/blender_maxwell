@@ -1,15 +1,13 @@
 import enum
 
-from blender_maxwell.utils.blender_type_enum import (
-	BlenderTypeEnum,
-	append_cls_name_to_values,
-)
+from blender_maxwell.utils import blender_type_enum
 
 
-@append_cls_name_to_values
-class SocketType(BlenderTypeEnum):
+@blender_type_enum.append_cls_name_to_values
+class SocketType(blender_type_enum.BlenderTypeEnum):
 	# Base
 	Any = enum.auto()
+	Data = enum.auto()
 	Bool = enum.auto()
 	String = enum.auto()
 	FilePath = enum.auto()

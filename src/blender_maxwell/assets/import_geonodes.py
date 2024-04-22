@@ -183,7 +183,7 @@ def import_geonodes(
 # - GeoNodes Asset Shelf Panel for MaxwellSimTree
 ####################
 class NodeAssetPanel(bpy.types.Panel):
-	bl_idname = 'blender_maxwell.panel__node_asset_panel'
+	bl_idname = ct.PanelType.NodeAssetPanel
 	bl_label = 'Node GeoNodes Asset Panel'
 	bl_space_type = 'NODE_EDITOR'
 	bl_region_type = 'UI'

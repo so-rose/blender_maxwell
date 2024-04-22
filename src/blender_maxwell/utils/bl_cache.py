@@ -1,8 +1,12 @@
 """Implements various key caches on instances of Blender objects, especially nodes and sockets."""
 
+## TODO: Note that persist=True on cached_bl_property may cause a draw method to try and write to a Blender property, which Blender disallows.
+
+import enum
 import functools
 import inspect
 import typing as typ
+import uuid
 
 import bpy
 
@@ -13,6 +17,24 @@ log = logger.get(__name__)
 InstanceID: typ.TypeAlias = str  ## Stringified UUID4
 
 
+class Signal(enum.StrEnum):
+	"""A value used to signal the descriptor via its `__set__`.
+
+	Such a signal **must** be entirely unique: Even a well-thought-out string could conceivably produce a very nasty bug, where instead of setting a descriptor-managed attribute, the user would inadvertently signal the descriptor.
+
+	To make it effectively impossible to confuse any other object whatsoever with a signal, the enum values are set to per-session `uuid.uuid4()`.
+
+	Notes:
+		**Do not** use this enum for anything other than directly signalling a `bl_cache` descriptor via its setter.
+
+		**Do not** store this enum `Signal` in a variable or method binding that survives longer than the session.
+
+		**Do not** persist this enum; the values will change whenever `bl_cache` is (re)loaded.
+	"""
+
+	InvalidateCache: str = str(uuid.uuid4())  #'1569c45a-7cf3-4307-beab-5729c2f8fa4b'
+
+
 class BLInstance(typ.Protocol):
 	"""An instance of a blender object, ex. nodes/sockets.
 
@@ -21,6 +43,8 @@ class BLInstance(typ.Protocol):
 	"""
 
 	instance_id: InstanceID
+
+	def reset_instance_id(self) -> None: ...
 
 	@classmethod
 	def set_prop(
@@ -257,14 +281,20 @@ class CachedBLProperty:
 		If `self._persist` is `True`, the persistent cache will be checked and filled after the non-persistent cache.
 
 		Notes:
-			- The persistent cache keeps the
-			- The persistent cache is fast and has good compatibility (courtesy `msgspec` encoding), but isn't nearly as fast as
+			- The non-persistent cache keeps the object in memory.
+			- The persistent cache serializes the object and stores it as a string on the BLInstance. This is often fast enough, and has decent compatibility (courtesy `msgspec`), it isn't nearly as fast as the non-persistent cache, and there are gotchas.
 
 		Parameters:
 			bl_instance: The Blender object this prop
 		"""
 		if bl_instance is None:
 			return None
+		if not bl_instance.instance_id:
+			log.debug(
+				"Can't Get CachedBLProperty: Instance ID not (yet) defined on BLInstance %s",
+				str(bl_instance),
+			)
+			return
 
 		# Create Non-Persistent Cache Entry
 		## Prefer explicit cache management to 'defaultdict'
@@ -307,6 +337,19 @@ class CachedBLProperty:
 		Parameters:
 			bl_instance: The Blender object this prop
 		"""
+		if bl_instance is None:
+			return
+		if not bl_instance.instance_id:
+			log.debug(
+				"Can't Set CachedBLProperty: Instance ID not (yet) defined on BLInstance %s",
+				str(bl_instance),
+			)
+			return
+
+		if value == Signal.InvalidateCache:
+			self._invalidate_cache(bl_instance)
+			return
+
 		if self._setter_method is None:
 			msg = f'Tried to set "{value}" to "{self.prop_name}" on "{bl_instance.bl_label}", but a setter was not defined'
 			raise NotImplementedError(msg)
@@ -363,14 +406,6 @@ class CachedBLProperty:
 
 		Parameters:
 			bl_instance: The instance of the Blender object that contains this property.
-
-		Examples:
-			It is discouraged to run this directly, as any use-pattern that requires manually invalidating a property cache is **likely an anti-pattern**.
-
-			With that disclaimer, manual invocation looks like this:
-			```python
-			bl_instance.attr._invalidate_cache()
-			```
 		"""
 		# Invalidate Non-Persistent Cache
 		if CACHE_NOPERSIST.get(bl_instance.instance_id) is not None:
@@ -494,11 +529,6 @@ class BLField:
 		## 2. Set bpy.props.StringProperty string.
 		def setter(_self: BLInstance, value: AttrType) -> None:
 			encoded_value = serialize.encode(value).decode('utf-8')
-			log.debug(
-				'Writing BLField attr "%s" w/encoded value: %s',
-				bl_attr_name,
-				encoded_value,
-			)
 			setattr(_self, bl_attr_name, encoded_value)
 
 		# Initialize CachedBLProperty w/Getter and Setter

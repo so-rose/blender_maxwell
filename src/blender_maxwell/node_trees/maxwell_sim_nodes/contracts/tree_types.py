@@ -1,11 +1,8 @@
 import enum
 
-from blender_maxwell.utils.blender_type_enum import (
-	BlenderTypeEnum,
-	append_cls_name_to_values,
-)
+from blender_maxwell.utils import blender_type_enum
 
 
-@append_cls_name_to_values
-class TreeType(BlenderTypeEnum):
+@blender_type_enum.append_cls_name_to_values
+class TreeType(blender_type_enum.BlenderTypeEnum):
 	MaxwellSim = enum.auto()

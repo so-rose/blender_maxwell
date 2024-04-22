@@ -10,3 +10,5 @@ from .addon import NAME as ADDON_NAME
 @blender_type_enum.prefix_values_with(f'{ADDON_NAME.upper()}_PT_')
 class PanelType(enum.StrEnum):
 	"""Identifiers for addon-defined `bpy.types.Panel`."""
+
+	NodeAssetPanel = enum.auto()

@@ -3,6 +3,7 @@ import typing as typ
 import bpy
 import sympy as sp
 
+from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
 from ... import contracts as ct
@@ -18,7 +19,7 @@ class ConsoleViewOperator(bpy.types.Operator):
 	bl_label = 'View Plots'
 
 	@classmethod
-	def poll(cls, context):
+	def poll(cls, _: bpy.types.Context):
 		return True
 
 	def execute(self, context):
@@ -33,7 +34,7 @@ class RefreshPlotViewOperator(bpy.types.Operator):
 	bl_label = 'Refresh Plots'
 
 	@classmethod
-	def poll(cls, context):
+	def poll(cls, _: bpy.types.Context):
 		return True
 
 	def execute(self, context):
@@ -50,12 +51,20 @@ class ViewerNode(base.MaxwellSimNode):
 	bl_label = 'Viewer'
 
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
+		'Any': sockets.AnySocketDef(),
 	}
 
 	####################
 	# - Properties
 	####################
+	print_kind: bpy.props.EnumProperty(
+		name='Print Kind',
+		description='FlowKind of the input socket to print',
+		items=[(kind, kind.name, kind.name) for kind in list(ct.FlowKind)],
+		default=ct.FlowKind.Value,
+		update=lambda self, context: self.on_prop_changed('print_kind', context),
+	)
+
 	auto_plot: bpy.props.BoolProperty(
 		name='Auto-Plot',
 		description='Whether to auto-plot anything plugged into the viewer node',
@@ -73,7 +82,10 @@ class ViewerNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
-	def draw_operators(self, context, layout):
+	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
+		layout.prop(self, 'print_kind', text='')
+
+	def draw_operators(self, _: bpy.types.Context, layout: bpy.types.UILayout):
 		split = layout.split(factor=0.4)
 
 		# Split LHS
@@ -105,12 +117,13 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Methods
 	####################
 	def print_data_to_console(self):
-		if not self.inputs['Data'].is_linked:
+		if not self.inputs['Any'].is_linked:
 			return
 
-		log.info('Printing Data to Console')
-		data = self._compute_input('Data')
-		if isinstance(data, sp.Basic):
+		log.info('Printing to Console')
+		data = self._compute_input('Any', kind=self.print_kind, optional=True)
+
+		if isinstance(data, spux.SympyType):
 			console.print(sp.pretty(data, use_unicode=True))
 		else:
 			console.print(data)
@@ -119,16 +132,16 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Event Methods
 	####################
 	@events.on_value_changed(
-		socket_name='Data',
+		socket_name='Any',
 		prop_name='auto_plot',
 		props={'auto_plot'},
 	)
 	def on_changed_plot_preview(self, props):
-		if self.inputs['Data'].is_linked and props['auto_plot']:
+		if self.inputs['Any'].is_linked and props['auto_plot']:
 			self.trigger_event(ct.FlowEvent.ShowPlot)
 
 	@events.on_value_changed(
-		socket_name='Data',
+		socket_name='Any',
 		prop_name='auto_3d_preview',
 		props={'auto_3d_preview'},
 	)
@@ -137,7 +150,7 @@ class ViewerNode(base.MaxwellSimNode):
 
 		# Remove Non-Repreviewed Previews on Close
 		with node_tree.repreview_all():
-			if self.inputs['Data'].is_linked and props['auto_3d_preview']:
+			if self.inputs['Any'].is_linked and props['auto_3d_preview']:
 				self.trigger_event(ct.FlowEvent.ShowPreview)
 
 

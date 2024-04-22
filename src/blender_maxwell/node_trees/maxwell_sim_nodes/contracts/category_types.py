@@ -1,10 +1,10 @@
 import enum
 
-from blender_maxwell.utils.blender_type_enum import BlenderTypeEnum, wrap_values_in_MT
+from blender_maxwell.utils import blender_type_enum
 
 
-@wrap_values_in_MT
-class NodeCategory(BlenderTypeEnum):
+@blender_type_enum.wrap_values_in_MT
+class NodeCategory(blender_type_enum.BlenderTypeEnum):
 	MAXWELLSIM = enum.auto()
 
 	# Analysis/

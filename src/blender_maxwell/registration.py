@@ -87,7 +87,8 @@ def register_hotkeys(hotkey_defs: list[dict]):
 	global _ADDON_KEYMAP  # noqa: PLW0603
 	if _ADDON_KEYMAP is None:
 		_ADDON_KEYMAP = bpy.context.window_manager.keyconfigs.addon.keymaps.new(
-			name=f'{ct.addon.NAME} Keymap',
+			name='Node Editor',
+			space_type='NODE_EDITOR',
 		)
 		log.info(
 			'Registered Addon Keymap (Base for Keymap Items): %s',

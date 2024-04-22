@@ -28,15 +28,23 @@ Attributes:
 
 from pathlib import Path
 
-import bpy
-
-from . import contracts as ct
 from .nodeps.utils import simple_logger
 
-simple_logger.sync_bootstrap_logging(
-	console_level=ct.addon.BOOTSTRAP_LOG_LEVEL,
-)
+# Initialize Logging Defaults
+## Initial logger settings (ex. log level) must be set somehow.
+## The Addon ZIP-packer makes this decision, and packs it into files.
+## AddonPreferences will, once loaded, override this.
+_PATH_ADDON_ROOT = Path(__file__).resolve().parent
+_PATH_BOOTSTRAP_LOG_LEVEL = _PATH_ADDON_ROOT / '.bootstrap_log_level'
+with _PATH_BOOTSTRAP_LOG_LEVEL.open('r') as f:
+	_BOOTSTRAP_LOG_LEVEL = int(f.read().strip())
 
+simple_logger.init_simple_logger_defaults(console_level=_BOOTSTRAP_LOG_LEVEL)
+
+# Import Statements
+import bpy  # noqa: E402
+
+from . import contracts as ct  # noqa: E402
 from . import preferences, registration  # noqa: E402
 from .nodeps import operators as nodeps_operators  # noqa: E402
 from .nodeps.utils import pydeps  # noqa: E402

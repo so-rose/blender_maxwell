@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import jaxtyping as jtyp
 import numba
+import numpy as np
 import sympy as sp
 import sympy.physics.units as spu
 
@@ -80,8 +81,18 @@ class CapabilitiesFlow:
 	active_kind: FlowKind
 
 	is_universal: bool = False
+	must_match: dict[str, typ.Any] = dataclasses.field(default_factory=dict)
 
 	def is_compatible_with(self, other: typ.Self) -> bool:
+		return other.is_universal or (
+			self.socket_type == other.socket_type
+			and self.active_kind == other.active_kind
+			and all(
+				name in other.must_match
+				and self.must_match[name] == other.must_match[name]
+				for name in self.must_match
+			)
+		)
 		return (
 			self.socket_type == other.socket_type
 			and self.active_kind == other.active_kind
@@ -108,11 +119,55 @@ class ArrayFlow:
 	"""
 
 	values: jtyp.Shaped[jtyp.Array, '...']
-	unit: spu.Quantity | None = None
+	unit: spux.Unit | None = None
+
+	is_sorted: bool = False
+
+	def __len__(self) -> int:
+		return len(self.values)
+
+	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
+		"""Find the index of the value that is closest to the given value.
+
+		Units are taken into account; the given value will be scaled to the internal unit before direct use.
+
+		Parameters:
+			require_sorted: Require that `self.values` be sorted, so that use of the faster binary-search algorithm is guaranteed.
+
+		Returns:
+			The index of `self.values` that is closest to the value `value`.
+		"""
+		if not require_sorted:
+			raise NotImplementedError
+
+		# Scale Given Value to Internal Unit
+		scaled_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
+
+		# BinSearch for "Right IDX"
+		## >>> self.values[right_idx] > scaled_value
+		## >>> self.values[right_idx - 1] < scaled_value
+		right_idx = np.searchsorted(self.values, scaled_value, side='left')
+
+		# Case: Right IDX is Boundary
+		if right_idx == 0:
+			return right_idx
+		if right_idx == len(self.values):
+			return right_idx - 1
+
+		# Find Closest of [Right IDX - 1, Right IDX]
+		left_val = self.values[right_idx - 1]
+		right_val = self.values[right_idx]
+
+		if (scaled_value - left_val) <= (right_val - scaled_value):
+			return right_idx - 1
+
+		return right_idx
 
 	def correct_unit(self, corrected_unit: spu.Quantity) -> typ.Self:
 		if self.unit is not None:
-			return ArrayFlow(values=self.values, unit=corrected_unit)
+			return ArrayFlow(
+				values=self.values, unit=corrected_unit, is_sorted=self.is_sorted
+			)
 
 		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
 		raise ValueError(msg)
@@ -122,6 +177,7 @@ class ArrayFlow:
 			return ArrayFlow(
 				values=float(spux.scaling_factor(self.unit, unit)) * self.values,
 				unit=unit,
+				is_sorted=self.is_sorted,  ## TODO: Can we really say that?
 			)
 			## TODO: Is this scaling numerically stable?
 
@@ -257,8 +313,8 @@ class LazyValueFuncFlow:
 	"""
 
 	func: LazyFunction
-	func_args: list[tuple[str, type]] = MappingProxyType({})
-	func_kwargs: dict[str, type] = MappingProxyType({})
+	func_args: list[type] = dataclasses.field(default_factory=list)
+	func_kwargs: dict[str, type] = dataclasses.field(default_factory=dict)
 	supports_jax: bool = False
 	supports_numba: bool = False
 
@@ -266,21 +322,22 @@ class LazyValueFuncFlow:
 	def compose_within(
 		self,
 		enclosing_func: LazyFunction,
-		enclosing_func_args: list[tuple[str, type]] = (),
+		enclosing_func_args: list[type] = (),
 		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
 		supports_jax: bool = False,
 		supports_numba: bool = False,
 	) -> typ.Self:
 		return LazyValueFuncFlow(
-			function=lambda *args, **kwargs: enclosing_func(
+			func=lambda *args, **kwargs: enclosing_func(
 				self.func(
-					*list(args[len(self.func_args) :]),
+					*list(args[: len(self.func_args)]),
 					**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
 				),
-				**kwargs,
+				*args[len(self.func_args) :],
+				**{k: v for k, v in kwargs.items() if k not in self.func_kwargs},
 			),
-			func_args=self.func_args + enclosing_func_args,
-			func_kwargs=self.func_kwargs | enclosing_func_kwargs,
+			func_args=self.func_args + list(enclosing_func_args),
+			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			supports_jax=self.supports_jax and supports_jax,
 			supports_numba=self.supports_numba and supports_numba,
 		)
@@ -379,6 +436,9 @@ class LazyArrayRangeFlow:
 			self.int_symbols | self.real_symbols | self.complex_symbols,
 			key=lambda sym: sym.name,
 		)
+
+	def __len__(self):
+		return self.steps
 
 	####################
 	# - Units
@@ -590,7 +650,7 @@ class LazyArrayRangeFlow:
 			return self.array_generator(realized_start, realized_stop, self.steps)
 
 		if kind == FlowKind.Array:
-			return ArrayFlow(values=gen_array(), unit=self.unit)
+			return ArrayFlow(values=gen_array(), unit=self.unit, is_sorted=True)
 		if kind == FlowKind.LazyValueFunc:
 			return LazyValueFuncFlow(func=gen_array, supports_jax=True)
 
@@ -601,7 +661,20 @@ class LazyArrayRangeFlow:
 ####################
 # - Params
 ####################
-ParamsFlow: typ.TypeAlias = dict[str, typ.Any]
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class ParamsFlow:
+	func_args: list[typ.Any] = dataclasses.field(default_factory=list)
+	func_kwargs: dict[str, typ.Any] = dataclasses.field(default_factory=dict)
+
+	def compose_within(
+		self,
+		enclosing_func_args: list[tuple[type]] = (),
+		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
+	) -> typ.Self:
+		return ParamsFlow(
+			func_args=self.func_args + list(enclosing_func_args),
+			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
+		)
 
 
 ####################
@@ -609,33 +682,10 @@ ParamsFlow: typ.TypeAlias = dict[str, typ.Any]
 ####################
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class InfoFlow:
-	func_args: list[tuple[str, type]] = MappingProxyType({})
-	func_kwargs: dict[str, type] = MappingProxyType({})
-
 	# Dimension Information
-	has_ndims: bool = False
-	dim_names: list[str] = ()
-	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = MappingProxyType({})
+	dim_names: list[str] = dataclasses.field(default_factory=list)
+	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = dataclasses.field(
+		default_factory=dict
+	)  ## TODO: Rename to dim_idxs
 
 	## TODO: Validation, esp. length of dims. Pydantic?
-
-	def compose_within(
-		self,
-		enclosing_func_args: list[tuple[str, type]] = (),
-		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
-	) -> typ.Self:
-		return InfoFlow(
-			func_args=self.func_args + enclosing_func_args,
-			func_kwargs=self.func_kwargs | enclosing_func_kwargs,
-		)
-
-	def call_lazy_value_func(
-		self,
-		lazy_value_func: LazyValueFuncFlow,
-		*args: list[typ.Any],
-		**kwargs: dict[str, typ.Any],
-	) -> tuple[list[typ.Any], dict[str, typ.Any]]:
-		if lazy_value_func.supports_jax:
-			lazy_value_func.func_jax(*args, **kwargs)
-
-		lazy_value_func.func(*args, **kwargs)

@@ -74,8 +74,8 @@ class PhysicalFreqBLSocket(base.MaxwellSimSocket):
 		self.raw_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
 
 	@property
-	def lazy_array_range(self) -> ct.LazyArrayRange:
-		return ct.LazyArrayRange(
+	def lazy_array_range(self) -> ct.LazyArrayRangeFlow:
+		return ct.LazyArrayRangeFlow(
 			symbols=set(),
 			unit=self.unit,
 			start=sp.S(self.min_freq) * self.unit,
@@ -86,9 +86,13 @@ class PhysicalFreqBLSocket(base.MaxwellSimSocket):
 
 	@lazy_array_range.setter
 	def lazy_array_range(self, value: ct.LazyArrayRangeFlow) -> None:
-		self.min_freq = spux.sympy_to_python(spux.scale_to_unit(value[0], self.unit))
-		self.max_freq = spux.sympy_to_python(spux.scale_to_unit(value[1], self.unit))
-		self.steps = value[2]
+		self.min_freq = spux.sympy_to_python(
+			spux.scale_to_unit(value.start * value.unit, self.unit)
+		)
+		self.max_freq = spux.sympy_to_python(
+			spux.scale_to_unit(value.stop * value.unit, self.unit)
+		)
+		self.steps = value.steps
 
 
 ####################
@@ -103,7 +107,7 @@ class PhysicalFreqSocketDef(base.SocketDef):
 
 	min_freq: SympyExpr = 400.0 * spux.terahertz
 	max_freq: SympyExpr = 600.0 * spux.terahertz
-	steps: SympyExpr = 50
+	steps: int = 50
 
 	def init(self, bl_socket: PhysicalFreqBLSocket) -> None:
 		bl_socket.unit = self.default_unit

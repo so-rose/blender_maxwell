@@ -13,3 +13,5 @@ class OperatorType(enum.StrEnum):
 	InstallPyDeps = enum.auto()
 	UninstallPyDeps = enum.auto()
 	ManagePyDeps = enum.auto()
+
+	ConnectViewerNode = enum.auto()

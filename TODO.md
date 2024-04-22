@@ -3,6 +3,7 @@
 - [x] Implement Robust DataFlowKind for list-like / spectral-like composite types
 - [x] Unify random node/socket caches.
 - [x] Revalidate cache logic
+- [x] Finish math system
 - [ ] Finish the "Low-Hanging Fruit" Nodes
 - [ ] Move preview GN trees to the asset library.
 
@@ -10,8 +11,12 @@
 
 # Nodes
 ## Analysis
-- [ ] Extract
-- [ ] Viz
+- [x] Extract
+- [x] Viz
+- [x] Math / Map Math
+- [x] Math / Filter Math
+- [ ] Math / Reduce Math
+- [ ] Math / Operate Math
 
 ## Inputs
 - [x] Wave Constant
@@ -462,6 +467,10 @@ We're trying to do our part by reporting bugs we find!
 This is where we keep track of them for now.
 
 ## Blender Maxwell Bugs
+- [ ] Detaching data chained into Viz node makes for a very laggy error, as non-implemented LazyValueFunc suddenly can't propagate live into the Viz node.
+- [ ] Need to clear invalid searched StrProperties on copy
+- [ ] Enabled 3D preview is really slow for some reason when working with the math nodes.
+
 - [ ] BUG: CTRL+SHIFT+CLICK not on a node shows an error; should just do nothing.
 - [ ] Slow changing of socket sets / range on wave constant.
 - [ ] API auth shouldn't show if everything is fine in Cloud Task socket

@@ -1,13 +1,10 @@
 import enum
 
-from blender_maxwell.utils.blender_type_enum import (
-	BlenderTypeEnum,
-	append_cls_name_to_values,
-)
+from blender_maxwell.utils import blender_type_enum
 
 
-@append_cls_name_to_values
-class NodeType(BlenderTypeEnum):
+@blender_type_enum.append_cls_name_to_values
+class NodeType(blender_type_enum.BlenderTypeEnum):
 	# KitchenSink = enum.auto()
 
 	# Analysis

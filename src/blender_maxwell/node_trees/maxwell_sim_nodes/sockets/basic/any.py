@@ -1,4 +1,3 @@
-
 from ... import contracts as ct
 from .. import base
 
@@ -9,10 +8,10 @@ from .. import base
 class AnyBLSocket(base.MaxwellSimSocket):
 	socket_type = ct.SocketType.Any
 	bl_label = 'Any'
-	
+
 	@property
 	def capabilities(self):
-		return ct.DataCapabilities(
+		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
 			is_universal=True,

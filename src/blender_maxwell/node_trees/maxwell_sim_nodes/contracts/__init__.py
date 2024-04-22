@@ -18,8 +18,8 @@ from blender_maxwell.contracts import (
 	addon,
 )
 
-from .bl_socket_desc_map import BL_SOCKET_DESCR_TYPE_MAP
-from .bl_socket_types import BL_SOCKET_DESCR_ANNOT_STRING, BL_SOCKET_DIRECT_TYPE_MAP
+from .bl_socket_desc_map import BL_SOCKET_DESCR_ANNOT_STRING, BL_SOCKET_DESCR_TYPE_MAP
+from .bl_socket_types import BL_SOCKET_DIRECT_TYPE_MAP
 from .category_labels import NODE_CAT_LABELS
 from .category_types import NodeCategory
 from .flow_events import FlowEvent
@@ -37,9 +37,8 @@ from .icons import Icon
 from .mobj_types import ManagedObjType
 from .node_types import NodeType
 from .socket_colors import SOCKET_COLORS
-from .socket_shapes import SOCKET_SHAPES
 from .socket_types import SocketType
-from .socket_units import SOCKET_UNITS
+from .socket_units import SOCKET_UNITS, unit_to_socket_type
 from .tree_types import TreeType
 from .unit_systems import UNITS_BLENDER, UNITS_TIDY3D
 
@@ -65,6 +64,7 @@ __all__ = [
 	'TreeType',
 	'SocketType',
 	'SOCKET_UNITS',
+	'unit_to_socket_type',
 	'SOCKET_COLORS',
 	'SOCKET_SHAPES',
 	'UNITS_BLENDER',

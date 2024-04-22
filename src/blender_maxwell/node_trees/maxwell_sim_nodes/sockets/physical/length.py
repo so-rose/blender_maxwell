@@ -75,8 +75,8 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		self.raw_value = spux.sympy_to_python(spux.scale_to_unit(value, self.unit))
 
 	@property
-	def lazy_array_range(self) -> ct.LazyArrayRange:
-		return ct.LazyArrayRange(
+	def lazy_array_range(self) -> ct.LazyArrayRangeFlow:
+		return ct.LazyArrayRangeFlow(
 			symbols=set(),
 			unit=self.unit,
 			start=sp.S(self.min_len) * self.unit,
@@ -86,10 +86,14 @@ class PhysicalLengthBLSocket(base.MaxwellSimSocket):
 		)
 
 	@lazy_array_range.setter
-	def lazy_value_range(self, value: tuple[sp.Expr, sp.Expr, int]) -> None:
-		self.min_len = spux.sympy_to_python(spux.scale_to_unit(value[0], self.unit))
-		self.max_len = spux.sympy_to_python(spux.scale_to_unit(value[1], self.unit))
-		self.steps = value[2]
+	def lazy_array_range(self, value: ct.LazyArrayRangeFlow) -> None:
+		self.min_len = spux.sympy_to_python(
+			spux.scale_to_unit(value.start * value.unit, self.unit)
+		)
+		self.max_len = spux.sympy_to_python(
+			spux.scale_to_unit(value.stop * value.unit, self.unit)
+		)
+		self.steps = value.steps
 
 
 ####################

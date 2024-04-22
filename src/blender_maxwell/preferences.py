@@ -6,7 +6,7 @@ import bpy
 from . import contracts as ct
 from . import registration
 from .nodeps.operators import install_deps, uninstall_deps
-from .nodeps.utils import pydeps, simple_logger
+from .nodeps.utils import pip_process, pydeps, simple_logger
 
 log = simple_logger.get(__name__)
 
@@ -84,9 +84,10 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			('ERROR', 'Error', 'Error'),
 			('CRITICAL', 'Critical', 'Critical'),
 		],
-		default='INFO',
+		default='DEBUG',
 		update=lambda self, _: self.on_addon_logging_changed(),
 	)
+	## TODO: Derive default from BOOTSTRAP_LOG_LEVEL
 
 	## File Logging
 	use_log_file: bpy.props.BoolProperty(
@@ -105,7 +106,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			('ERROR', 'Error', 'Error'),
 			('CRITICAL', 'Critical', 'Critical'),
 		],
-		default='INFO',
+		default='DEBUG',
 		update=lambda self, _: self.on_addon_logging_changed(),
 	)
 
@@ -121,7 +122,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 	def log_file_path(self) -> Path:
 		return Path(bpy.path.abspath(self.bl__log_file_path))
 
-	@pydeps_path.setter
+	@log_file_path.setter
 	def log_file_path(self, path: Path) -> None:
 		self.bl__log_file_path = str(path.resolve())
 
@@ -155,7 +156,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 
 		# Sync Single Logger / All Loggers
 		if single_logger_to_setup is not None:
-			logger.setup_logger(
+			logger.update_logger(
 				logger.console_handler,
 				logger.file_handler,
 				single_logger_to_setup,
@@ -163,7 +164,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			)
 		else:
 			log.info('Re-Configuring All Loggers')
-			logger.sync_all_loggers(
+			logger.update_all_loggers(
 				logger.console_handler,
 				logger.file_handler,
 				**log_setup_kwargs,
@@ -185,9 +186,10 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		if pydeps.check_pydeps(ct.addon.PATH_REQS, self.pydeps_path):
 			# Re-Sync Loggers
 			## We can now upgrade all loggers to the fancier loggers.
-			for _log in simple_logger.simple_loggers:
+			for _log in simple_logger.simple_loggers():
 				log.debug('Upgrading Logger (%s)', str(_log))
 				self.on_addon_logging_changed(single_logger_to_setup=_log)
+			simple_logger.clear_simple_loggers()
 
 			# Run Registrations Waiting on DEPS_SATISFIED
 			## Since the deps are OK, we can now register the whole addon.
@@ -205,7 +207,6 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 				ct.OperatorType.ManagePyDeps,
 				'INVOKE_DEFAULT',
 				bl__pydeps_path=str(self.pydeps_path),
-				bl__pydeps_reqlock_path=str(ct.addon.PATH_REQS),
 			)
 		## TODO: else:
 		## TODO: Can we 'downgrade' the loggers back to simple loggers?
@@ -219,6 +220,9 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		layout = self.layout
 		num_pydeps_issues = len(pydeps.DEPS_ISSUES)
 
+		####################
+		# - Logging
+		####################
 		# Box w/Split: Log Level
 		box = layout.box()
 		row = box.row()
@@ -248,9 +252,11 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		row.enabled = self.use_log_file
 		row.prop(self, 'log_level_file')
 
+		####################
+		# - Dependencies
+		####################
 		# Box: Dependency Status
 		box = layout.box()
-		## Row: Header
 		row = box.row(align=True)
 		row.alignment = 'CENTER'
 		row.label(text='Python Dependencies')
@@ -273,7 +279,7 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 		## Row: More Information Panel
 		col = box.column(align=True)
 		header, panel = col.panel('pydeps_issues', default_closed=True)
-		header.label(text=f'Install Mismatches ({num_pydeps_issues})')
+		header.label(text=f'Show Conflicts ({num_pydeps_issues})')
 		if panel is not None:
 			grid = panel.grid_flow()
 			for issue in pydeps.DEPS_ISSUES:
@@ -295,6 +301,25 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 			text='Uninstall PyDeps',
 		)
 		op.bl__pydeps_path = str(self.pydeps_path)
+
+		## Row: Deps Install Progress
+		row = box.row()
+		num_req_deplocks = len(pydeps.DEPS_REQ_DEPLOCKS)
+		if pydeps.DEPS_OK:
+			row.progress(
+				text=f'{num_req_deplocks}/{num_req_deplocks} Installed',
+				factor=1.0,
+			)
+		elif pip_process.PROGRESS is not None:
+			row.progress(
+				text='/'.join(pip_process.PROGRESS_FRAC) + ' Installed',
+				factor=float(pip_process.PROGRESS),
+			)
+		else:
+			row.progress(
+				text=f'0/{num_req_deplocks} Installed',
+				factor=0.0,
+			)
 
 
 ####################

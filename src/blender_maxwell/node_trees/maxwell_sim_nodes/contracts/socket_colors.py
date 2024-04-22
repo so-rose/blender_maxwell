@@ -3,7 +3,8 @@ from .socket_types import SocketType as ST
 ## TODO: Don't just presume sRGB.
 SOCKET_COLORS = {
 	# Basic
-	ST.Any: (0.8, 0.8, 0.8, 1.0),  # Light Grey
+	ST.Any: (0.9, 0.9, 0.9, 1.0),  # Light Grey
+	ST.Data: (0.8, 0.8, 0.8, 1.0),  # Light Grey
 	ST.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.String: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
