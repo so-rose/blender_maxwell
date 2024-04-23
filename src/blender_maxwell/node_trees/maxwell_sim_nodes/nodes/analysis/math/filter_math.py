@@ -1,3 +1,4 @@
+import enum
 import typing as typ
 
 import bpy
@@ -14,6 +15,13 @@ log = logger.get(__name__)
 
 
 class FilterMathNode(base.MaxwellSimNode):
+	"""Reduces the dimensionality of data.
+
+	Attributes:
+		operation: Operation to apply to the input.
+		dim: Dims to use when filtering data
+	"""
+
 	node_type = ct.NodeType.FilterMath
 	bl_label = 'Filter Math'
 
@@ -31,31 +39,16 @@ class FilterMathNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	operation: bpy.props.EnumProperty(
-		name='Op',
-		description='Operation to filter with',
-		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.on_prop_changed('operation', context),
+	operation: enum.Enum = bl_cache.BLField(
+		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
 	)
 
-	dim: bpy.props.StringProperty(
-		name='Dim',
-		description='Dims to use when filtering data',
-		default='',
-		search=lambda self, _, edit_text: self.search_dims(edit_text),
-		update=lambda self, context: self.on_prop_changed('dim', context),
+	dim: str = bl_cache.BLField(
+		'', prop_ui=True, str_cb=lambda self, _, edit_text: self.search_dims(edit_text)
 	)
 
 	dim_names: list[str] = bl_cache.BLField([])
 	dim_lens: dict[str, int] = bl_cache.BLField({})
-
-	@property
-	def has_dim(self) -> bool:
-		return (
-			self.active_socket_set in ['By Dim', 'By Dim Value']
-			and self.inputs['Data'].is_linked
-			and self.dim_names
-		)
 
 	####################
 	# - Operation Search
@@ -77,7 +70,7 @@ class FilterMathNode(base.MaxwellSimNode):
 	# - Dim Search
 	####################
 	def search_dims(self, edit_text: str) -> list[tuple[str, str, str]]:
-		if self.has_dim:
+		if self.dim_names:
 			dims = [
 				(dim_name, dim_name)
 				for dim_name in self.dim_names
@@ -94,17 +87,23 @@ class FilterMathNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		layout.prop(self, 'operation', text='')
-		if self.has_dim:
-			layout.prop(self, 'dim', text='')
+		layout.prop(self, self.blfields['operation'], text='')
+		if self.dim_names:
+			layout.prop(self, self.blfields['dim'], text='')
 
 	####################
 	# - Events
 	####################
 	@events.on_value_changed(
+		prop_name='active_socket_set',
+	)
+	def on_socket_set_changed(self):
+		self.operation = bl_cache.Signal.ResetEnumItems
+
+	@events.on_value_changed(
 		socket_name={'Data'},
-		prop_name={'active_socket_set', 'dim'},
-		props={'active_socket_set', 'dim'},
+		prop_name={'active_socket_set'},
+		props={'active_socket_set'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Info},
 		input_sockets_optional={'Data': True},
@@ -121,21 +120,32 @@ class FilterMathNode(base.MaxwellSimNode):
 			self.dim_names = []
 			self.dim_lens = {}
 
-		# Add Input Value w/Unit from InfoFlow
-		## Socket Type is determined from the Unit
+		# Reset String Searcher
+		self.dim = bl_cache.Signal.ResetStrSearch
+
+	@events.on_value_changed(
+		prop_name='dim',
+		props={'active_socket_set', 'dim'},
+		input_sockets={'Data'},
+		input_socket_kinds={'Data': ct.FlowKind.Info},
+		input_sockets_optional={'Data': True},
+	)
+	def on_dim_change(self, props: dict, input_sockets: dict):
+		# Add/Remove Input Socket "Value"
 		if (
 			props['active_socket_set'] == 'By Dim Value'
-			and props['dim'] != ''
 			and props['dim'] in input_sockets['Data'].dim_names
 		):
-			socket_def = sockets.SOCKET_DEFS[
+			# Get Current and Wanted Socket Defs
+			current_socket_def = self.loose_input_sockets.get('Value')
+			wanted_socket_def = sockets.SOCKET_DEFS[
 				ct.unit_to_socket_type(input_sockets['Data'].dim_idx[props['dim']].unit)
 			]
-			if (
-				_val_socket_def := self.loose_input_sockets.get('Value')
-			) is None or _val_socket_def != socket_def:
+
+			# Determine Whether to Declare New Loose Input SOcket
+			if current_socket_def is None or current_socket_def != wanted_socket_def:
 				self.loose_input_sockets = {
-					'Value': socket_def(),
+					'Value': wanted_socket_def(),
 				}
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
@@ -151,17 +161,17 @@ class FilterMathNode(base.MaxwellSimNode):
 		input_socket_kinds={'Data': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info}},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):
+		# Retrieve Inputs
 		lazy_value_func = input_sockets['Data'][ct.FlowKind.LazyValueFunc]
 		info = input_sockets['Data'][ct.FlowKind.Info]
 
-		# Determine Bound/Free Parameters
-		if props['dim'] in info.dim_names:
+		# Compute Bound/Free Parameters
+		func_args = [int] if props['active_socket_set'] == 'By Dim Value' else []
+		if props['dim']:
 			axis = info.dim_names.index(props['dim'])
 		else:
-			msg = 'Dimension invalid'
+			msg = 'Dimension cannot be empty'
 			raise ValueError(msg)
-
-		func_args = [int] if props['active_socket_set'] == 'By Dim Value' else []
 
 		# Select Function
 		filter_func: typ.Callable[[jax.Array], jax.Array] = {
@@ -189,8 +199,11 @@ class FilterMathNode(base.MaxwellSimNode):
 		},
 	)
 	def compute_array(self, output_sockets: dict) -> ct.ArrayFlow:
+		# Retrieve Inputs
 		lazy_value_func = output_sockets['Data'][ct.FlowKind.LazyValueFunc]
 		params = output_sockets['Data'][ct.FlowKind.Params]
+
+		# Compute Array
 		return ct.ArrayFlow(
 			values=lazy_value_func.func_jax(*params.func_args, **params.func_kwargs),
 			unit=None,  ## TODO: Unit Propagation
@@ -207,14 +220,18 @@ class FilterMathNode(base.MaxwellSimNode):
 		input_socket_kinds={'Data': ct.FlowKind.Info},
 	)
 	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
+		# Retrieve Inputs
 		info = input_sockets['Data']
 
-		if props['dim'] in info.dim_names:
+		# Compute Bound/Free Parameters
+		## Empty Dimension -> Empty InfoFlow
+		if props['dim']:
 			axis = info.dim_names.index(props['dim'])
 		else:
 			return ct.InfoFlow()
 
-		# Compute Axis
+		# Compute Information
+		## Compute Info w/By-Operation Change to Dimensions
 		if (props['active_socket_set'], props['operation']) in [
 			('By Dim', 'SQUEEZE'),
 			('By Dim Value', 'FIX'),
@@ -228,6 +245,7 @@ class FilterMathNode(base.MaxwellSimNode):
 				},
 			)
 
+		# Fallback to Empty InfoFlow
 		return ct.InfoFlow()
 
 	@events.computes_output_socket(
@@ -238,20 +256,30 @@ class FilterMathNode(base.MaxwellSimNode):
 		input_socket_kinds={'Data': {ct.FlowKind.Info, ct.FlowKind.Params}},
 		input_sockets_optional={'Value': True},
 	)
-	def compute_data_params(self, props: dict, input_sockets: dict) -> ct.ParamsFlow:
+	def compute_composed_params(
+		self, props: dict, input_sockets: dict
+	) -> ct.ParamsFlow:
+		# Retrieve Inputs
 		info = input_sockets['Data'][ct.FlowKind.Info]
 		params = input_sockets['Data'][ct.FlowKind.Params]
 
+		# Compute Composed Parameters
+		## -> Only operations that add parameters.
+		## -> A dimension must be selected.
+		## -> There must be an input value.
 		if (
 			(props['active_socket_set'], props['operation'])
 			in [
 				('By Dim Value', 'FIX'),
 			]
-			and props['dim'] in info.dim_names
+			and props['dim']
 			and input_sockets['Value'] is not None
 		):
-			# Compute IDX Corresponding to Value
-			## Aka. "indexing by a float"
+			# Compute IDX Corresponding to Coordinate Value
+			## -> Each dimension declares a unit-aware real number at each index.
+			## -> "Value" is a unit-aware real number from loose input socket.
+			## -> This finds the dimensional index closest to "Value".
+			## Total Effect: Indexing by a unit-aware real number.
 			nearest_idx_to_value = info.dim_idx[props['dim']].nearest_idx_of(
 				input_sockets['Value'], require_sorted=True
 			)
@@ -269,6 +297,3 @@ BL_REGISTER = [
 	FilterMathNode,
 ]
 BL_NODES = {ct.NodeType.FilterMath: (ct.NodeCategory.MAXWELLSIM_ANALYSIS_MATH)}
-
-
-## TODO TODO Okay so just like, Value needs to be a Loose socket, events needs to be able to handle sets of kinds, the invalidator needs to be able to handle sets of kinds too. Given all that, we only need to propagate the output array unit; given all all that, we are 100% goddamn ready to fix that goddamn coordinate.

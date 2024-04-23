@@ -712,9 +712,11 @@ class BLField:
 				kwargs_prop['options'].add('SKIP_SAVE')
 
 			if self._str_cb is not None:
-				kwargs_prop |= lambda _self, context, edit_text: self._safe_str_cb(
-					_self, context, edit_text
-				)
+				kwargs_prop |= {
+					'search': lambda _self, context, edit_text: self._safe_str_cb(
+						_self, context, edit_text
+					)
+				}
 
 		## Path
 		elif AttrType is Path:
@@ -845,6 +847,16 @@ class BLField:
 			self._cached_bl_property.__set__(bl_instance, Signal.InvalidateCache)
 
 		elif value == Signal.ResetStrSearch:
+			# Set String to ''
+			## Prevents the presence of an invalid value not in the new search.
+			## -> Infinite recursion if we don't check current value for ''.
+			## -> May cause a hiccup (chains will trigger twice)
+			current_value = self._cached_bl_property.__get__(
+				bl_instance, bl_instance.__class__
+			)
+			if current_value != '':
+				self._cached_bl_property.__set__(bl_instance, '')
+
 			# Pop the Cached String Search Items
 			## The next time Blender does a str search, it'll update.
 			self._str_cb_cache.pop(bl_instance.instance_id, None)

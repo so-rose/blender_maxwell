@@ -195,7 +195,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Data',
-		kind=ct.FlowKind.Value,
+		kind=ct.FlowKind.Array,
 		props={'extract_filter'},
 		input_sockets={'Monitor Data'},
 	)
@@ -210,7 +210,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		'Data',
 		kind=ct.FlowKind.LazyValueFunc,
 		output_sockets={'Data'},
-		output_socket_kinds={'Data': ct.FlowKind.Value},
+		output_socket_kinds={'Data': ct.FlowKind.Array},
 	)
 	def compute_extracted_data_lazy(self, output_sockets: dict) -> ct.LazyValueFuncFlow:
 		return ct.LazyValueFuncFlow(

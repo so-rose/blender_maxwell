@@ -24,7 +24,7 @@ class FlowEvent(enum.StrEnum):
 		ShowPlot: Indicates that the node/socket should enable its plotted preview.
 			This should generally be used if the node is rendering to an image, for viewing through the Blender image editor.
 		LinkChanged: Indicates that a link to a node/socket was added/removed.
-			In nodes, this is accompanied by a `socket_name` to indicate which socket it is that had its links altered.
+			Is translated to `DataChanged` on sockets before propagation.
 		DataChanged: Indicates that data flowing through a node/socket was altered.
 			In nodes, this event is accompanied by a `socket_name` or `prop_name`, to indicate which socket/property it is that was changed.
 			**This event is essential**, as it invalidates all input/output socket caches along its path.

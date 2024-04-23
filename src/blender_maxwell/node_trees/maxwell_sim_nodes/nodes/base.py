@@ -753,8 +753,8 @@ class MaxwellSimNode(bpy.types.Node):
 		Notes:
 			This can be an unpredictably heavy function, depending on the node graph topology.
 
-			Doesn't currently accept `LinkChanged` (->Output) events; rather, these propagate as `DataChanged` events.
-			**This may change** if it becomes important for the node to differentiate between "change in data" and "change in link".
+			Doesn't accept `LinkChanged` events; they are translated to `DataChanged` on the socket.
+			This is on purpose: It seems to be a bad idea to try and differentiate between "changes in data" and "changes in linkage".
 
 		Parameters:
 			event: The event to report forwards/backwards along the node tree.
@@ -762,10 +762,12 @@ class MaxwellSimNode(bpy.types.Node):
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
 		# Outflow Socket Kinds
-		## Something has happened, that much is for sure.
-		## Output methods might require invalidation of (outsck, FlowKind)s.
-		## Whichever FlowKinds we do happen to invalidate, we should mark.
-		## This way, each FlowKind gets its own invalidation chain.
+		## -> Something has happened!
+		## -> The effect is yet to be determined...
+		## -> We will watch for which kinds actually invalidate.
+		## -> ...Then ONLY propagate kinds that have an invalidated outsck.
+		## -> This way, kinds get "their own" invalidation chains.
+		## -> ...While still respecting "crossovers".
 		altered_socket_kinds = set()
 
 		# Invalidate Caches on DataChanged
@@ -869,7 +871,6 @@ class MaxwellSimNode(bpy.types.Node):
 		"""
 		if hasattr(self, prop_name):
 			# Invalidate UI BLField Caches
-			log.critical((prop_name, self.ui_blfields))
 			if prop_name in self.ui_blfields:
 				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
 
