@@ -43,8 +43,8 @@ class FilterMathNode(base.MaxwellSimNode):
 		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
 	)
 
-	dim: str = bl_cache.BLField(
-		'', prop_ui=True, str_cb=lambda self, _, edit_text: self.search_dims(edit_text)
+	dim: enum.Enum = bl_cache.BLField(
+		None, prop_ui=True, enum_cb=lambda self, _: self.search_dims()
 	)
 
 	dim_names: list[str] = bl_cache.BLField([])
@@ -64,22 +64,24 @@ class FilterMathNode(base.MaxwellSimNode):
 				('FIX', 'del a | i≈v', 'Fix Coordinate'),
 			]
 
-		return items
+		return [(*item, '', i) for i, item in enumerate(items)]
 
 	####################
 	# - Dim Search
 	####################
-	def search_dims(self, edit_text: str) -> list[tuple[str, str, str]]:
+	def search_dims(self) -> list[ct.BLEnumElement]:
 		if self.dim_names:
 			dims = [
-				(dim_name, dim_name)
-				for dim_name in self.dim_names
-				if edit_text == '' or edit_text.lower() in dim_name.lower()
+				(dim_name, dim_name, dim_name, '', i)
+				for i, dim_name in enumerate(self.dim_names)
 			]
 
 			# Squeeze: Dimension Must Have Length=1
+			## We must also correct the "NUMBER" of the enum.
 			if self.operation == 'SQUEEZE':
-				return [dim for dim in dims if self.dim_lens[dim[0]] == 1]
+				filtered_dims = [dim for dim in dims if self.dim_lens[dim[0]] == 1]
+				return [(*dim[:-1], i) for i, dim in enumerate(filtered_dims)]
+
 			return dims
 		return []
 
@@ -107,6 +109,7 @@ class FilterMathNode(base.MaxwellSimNode):
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Info},
 		input_sockets_optional={'Data': True},
+		run_on_init=True,
 	)
 	def on_any_change(self, props: dict, input_sockets: dict):
 		# Set Dimension Names from InfoFlow
@@ -121,7 +124,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			self.dim_lens = {}
 
 		# Reset String Searcher
-		self.dim = bl_cache.Signal.ResetStrSearch
+		self.dim = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
 		prop_name='dim',
@@ -132,10 +135,7 @@ class FilterMathNode(base.MaxwellSimNode):
 	)
 	def on_dim_change(self, props: dict, input_sockets: dict):
 		# Add/Remove Input Socket "Value"
-		if (
-			props['active_socket_set'] == 'By Dim Value'
-			and props['dim'] in input_sockets['Data'].dim_names
-		):
+		if props['active_socket_set'] == 'By Dim Value' and props['dim'] != 'NONE':
 			# Get Current and Wanted Socket Defs
 			current_socket_def = self.loose_input_sockets.get('Value')
 			wanted_socket_def = sockets.SOCKET_DEFS[
@@ -167,7 +167,7 @@ class FilterMathNode(base.MaxwellSimNode):
 
 		# Compute Bound/Free Parameters
 		func_args = [int] if props['active_socket_set'] == 'By Dim Value' else []
-		if props['dim']:
+		if props['dim'] != 'NONE':
 			axis = info.dim_names.index(props['dim'])
 		else:
 			msg = 'Dimension cannot be empty'
@@ -225,7 +225,7 @@ class FilterMathNode(base.MaxwellSimNode):
 
 		# Compute Bound/Free Parameters
 		## Empty Dimension -> Empty InfoFlow
-		if props['dim']:
+		if props['dim'] != 'NONE':
 			axis = info.dim_names.index(props['dim'])
 		else:
 			return ct.InfoFlow()
@@ -272,7 +272,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			in [
 				('By Dim Value', 'FIX'),
 			]
-			and props['dim']
+			and props['dim'] != 'NONE'
 			and input_sockets['Value'] is not None
 		):
 			# Compute IDX Corresponding to Coordinate Value

@@ -1034,6 +1034,16 @@ class MaxwellSimNode(bpy.types.Node):
 		## Blender will automatically add .001 so that `self.name` is unique.
 		self.sim_node_name = self.name
 
+		# Event Methods
+		## Run any 'DataChanged' methods with 'run_on_init' set.
+		## -> Copying a node _arguably_ re-initializes the new node.
+		for event_method in [
+			event_method
+			for event_method in self.event_methods_by_event[ct.FlowEvent.DataChanged]
+			if event_method.callback_info.run_on_init
+		]:
+			event_method(self)
+
 	def free(self) -> None:
 		"""Cleans various instance-associated data up, so the node can be cleanly deleted.
 

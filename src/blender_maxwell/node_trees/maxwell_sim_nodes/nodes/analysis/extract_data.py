@@ -1,5 +1,6 @@
 import typing as typ
 
+import enum
 import bpy
 import jax
 import jax.numpy as jnp
@@ -15,7 +16,12 @@ log = logger.get(__name__)
 
 
 class ExtractDataNode(base.MaxwellSimNode):
-	"""Node for extracting data from particular objects."""
+	"""Node for extracting data from particular objects.
+
+	Attributes:
+		extract_filter: Identifier for data to extract from the input.
+
+	"""
 
 	node_type = ct.NodeType.ExtractData
 	bl_label = 'Extract'
@@ -32,11 +38,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	extract_filter: bpy.props.StringProperty(
-		name='Extract Filter',
-		description='Data to extract from the input',
-		search=lambda self, _, edit_text: self.search_extract_filters(edit_text),
-		update=lambda self, context: self.on_prop_changed('extract_filter', context),
+	extract_filter: enum.Enum = bl_cache.BLField(
+		None,
+		prop_ui=True,
+		enum_cb=lambda self, _: self.search_extract_filters(),
 	)
 
 	# Sim Data
@@ -49,41 +54,30 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Computed Properties
 	####################
-	@bl_cache.cached_bl_property(persist=False)
+	@property
 	def has_sim_data(self) -> bool:
-		return (
-			self.active_socket_set == 'Sim Data'
-			and self.inputs['Sim Data'].is_linked
-			and self.sim_data_monitor_nametype
-		)
+		return self.active_socket_set == 'Sim Data' and self.sim_data_monitor_nametype
 
-	@bl_cache.cached_bl_property(persist=False)
+	@property
 	def has_monitor_data(self) -> bool:
-		return (
-			self.active_socket_set == 'Monitor Data'
-			and self.inputs['Monitor Data'].is_linked
-			and self.monitor_data_type
-		)
+		return self.active_socket_set == 'Monitor Data' and self.monitor_data_type
 
 	####################
 	# - Extraction Filter Search
 	####################
-	def search_extract_filters(self, edit_text: str) -> list[tuple[str, str, str]]:
+	def search_extract_filters(self) -> list[ct.BLEnumElement]:
 		if self.has_sim_data:
 			return [
-				(
-					monitor_name,
-					monitor_type.removesuffix('Data'),
+				(monitor_name, monitor_name, monitor_type.removesuffix('Data'), '', i)
+				for i, (monitor_name, monitor_type) in enumerate(
+					self.sim_data_monitor_nametype.items()
 				)
-				for monitor_name, monitor_type in self.sim_data_monitor_nametype.items()
-				if edit_text == '' or edit_text.lower() in monitor_name.lower()
 			]
 
 		if self.has_monitor_data:
 			return [
-				(component_name, f'ℂ {component_name[1]}-Pol')
-				for component_name in self.monitor_data_components
-				if (edit_text == '' or edit_text.lower() in component_name.lower())
+				(component_name, component_name, f'ℂ {component_name[1]}-Pol', '', i)
+				for i, component_name in enumerate(self.monitor_data_components)
 			]
 
 		return []
@@ -92,7 +86,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		col.prop(self, 'extract_filter', text='')
+		col.prop(self, self.blfields['extract_filter'], text='')
 
 	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
 		if self.has_sim_data or self.has_monitor_data:
@@ -108,7 +102,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 			row = col.row()
 			box = row.box()
 			grid = box.grid_flow(row_major=True, columns=2, even_columns=True)
-			for name, desc in self.search_extract_filters(edit_text=''):
+			for name, desc in [
+				(name, desc) for idname, name, desc, *_ in self.search_extract_filters()
+			]:
 				grid.label(text=name)
 				grid.label(text=desc if desc else '')
 
@@ -120,6 +116,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		prop_name='active_socket_set',
 		input_sockets={'Sim Data', 'Monitor Data'},
 		input_sockets_optional={'Sim Data': True, 'Monitor Data': True},
+		run_on_init=True,
 	)
 	def on_sim_data_changed(self, input_sockets: dict):
 		if input_sockets['Sim Data'] is not None:
@@ -130,6 +127,8 @@ class ExtractDataNode(base.MaxwellSimNode):
 					'Sim Data'
 				].monitor_data.items()
 			}
+		elif self.sim_data_monitor_nametype:
+			self.sim_data_monitor_nametype = {}
 
 		if input_sockets['Monitor Data'] is not None:
 			# Monitor Data Type
@@ -168,18 +167,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 					'Htheta',
 					'Hphi',
 				]
+		else:
+			if self.monitor_data_type:
+				self.monitor_data_type = ''
+			if self.monitor_data_components:
+				self.monitor_data_components = []
 
 		# Invalidate Computed Property Caches
-		self.has_sim_data = bl_cache.Signal.InvalidateCache
-		self.has_monitor_data = bl_cache.Signal.InvalidateCache
-
-		# Reset Extraction Filter
-		## The extraction filter that was set before may not be valid anymore.
-		## If so, simply remove it.
-		if self.extract_filter not in [
-			el[0] for el in self.search_extract_filters(edit_text='')
-		]:
-			self.extract_filter = ''
+		self.extract_filter = bl_cache.Signal.ResetEnumItems
 
 	####################
 	# - Output: Value
@@ -225,16 +220,22 @@ class ExtractDataNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Info,
 		props={'monitor_data_type', 'extract_filter'},
 		input_sockets={'Monitor Data'},
+		input_socket_kinds={'Monitor Data': ct.FlowKind.Value},
 	)
 	def compute_extracted_data_info(
 		self, props: dict, input_sockets: dict
-	) -> ct.InfoFlow:  # noqa: PLR0911
-		if input_sockets['Monitor Data'] is None or not props['extract_filter']:
+	) -> ct.InfoFlow:
+		# Retrieve XArray
+		if (
+			input_sockets['Monitor Data'] is not None
+			and props['extract_filter'] != 'NONE'
+		):
+			xarr = getattr(input_sockets['Monitor Data'], props['extract_filter'])
+		else:
 			return ct.InfoFlow()
 
-		xarr = getattr(input_sockets['Monitor Data'], props['extract_filter'])
-
-		# XYZF: Field / Permittivity / FieldProjectionCartesian
+		# Compute InfoFlow from XArray
+		## XYZF: Field / Permittivity / FieldProjectionCartesian
 		if props['monitor_data_type'] in {
 			'Field',
 			'Permittivity',
@@ -257,7 +258,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# XYZT: FieldTime
+		## XYZT: FieldTime
 		if props['monitor_data_type'] == 'FieldTime':
 			return ct.InfoFlow(
 				dim_names=['x', 'y', 'z', 't'],
@@ -276,7 +277,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# F: Flux
+		## F: Flux
 		if props['monitor_data_type'] == 'Flux':
 			return ct.InfoFlow(
 				dim_names=['f'],
@@ -289,7 +290,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# T: FluxTime
+		## T: FluxTime
 		if props['monitor_data_type'] == 'FluxTime':
 			return ct.InfoFlow(
 				dim_names=['t'],
@@ -302,7 +303,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# RThetaPhiF: FieldProjectionAngle
+		## RThetaPhiF: FieldProjectionAngle
 		if props['monitor_data_type'] == 'FieldProjectionAngle':
 			return ct.InfoFlow(
 				dim_names=['r', 'theta', 'phi', 'f'],
@@ -328,7 +329,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# UxUyRF: FieldProjectionKSpace
+		## UxUyRF: FieldProjectionKSpace
 		if props['monitor_data_type'] == 'FieldProjectionKSpace':
 			return ct.InfoFlow(
 				dim_names=['ux', 'uy', 'r', 'f'],
@@ -352,7 +353,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 				},
 			)
 
-		# OrderxOrderyF: Diffraction
+		## OrderxOrderyF: Diffraction
 		if props['monitor_data_type'] == 'Diffraction':
 			return ct.InfoFlow(
 				dim_names=['orders_x', 'orders_y', 'f'],
