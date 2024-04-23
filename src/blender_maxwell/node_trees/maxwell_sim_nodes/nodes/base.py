@@ -72,6 +72,10 @@ class MaxwellSimNode(bpy.types.Node):
 	def reset_instance_id(self) -> None:
 		self.instance_id = str(uuid.uuid4())
 
+	# BLFields
+	blfields: typ.ClassVar[dict[str, str]] = MappingProxyType({})
+	ui_blfields: typ.ClassVar[set[str]] = frozenset()
+
 	####################
 	# - Class Methods
 	####################
@@ -88,6 +92,15 @@ class MaxwellSimNode(bpy.types.Node):
 			if not hasattr(cls, cls_attr):
 				msg = f'Node class {cls} does not define mandatory attribute "{cls_attr}".'
 				raise ValueError(msg)
+
+	@classmethod
+	def declare_blfield(
+		cls, attr_name: str, bl_attr_name: str, prop_ui: bool = False
+	) -> None:
+		cls.blfields = cls.blfields | {attr_name: bl_attr_name}
+
+		if prop_ui:
+			cls.ui_blfields = cls.ui_blfields | {attr_name}
 
 	@classmethod
 	def set_prop(
@@ -855,6 +868,12 @@ class MaxwellSimNode(bpy.types.Node):
 			prop_name: The name of the property that changed.
 		"""
 		if hasattr(self, prop_name):
+			# Invalidate UI BLField Caches
+			log.critical((prop_name, self.ui_blfields))
+			if prop_name in self.ui_blfields:
+				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
+
+			# Trigger Event
 			self.trigger_event(ct.FlowEvent.DataChanged, prop_name=prop_name)
 		else:
 			msg = f'Property {prop_name} not defined on node {self}'

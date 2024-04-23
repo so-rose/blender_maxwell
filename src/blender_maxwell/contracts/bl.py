@@ -15,10 +15,12 @@ BLImportMethod: typ.TypeAlias = typ.Literal['append', 'link']
 BLModifierType: typ.TypeAlias = typ.Literal['NODES', 'ARRAY']
 BLNodeTreeInterfaceID: typ.TypeAlias = str
 
-BLIconSet: frozenset[str] = frozenset(
+BLIcon: typ.TypeAlias = str
+BLIconSet: frozenset[BLIcon] = frozenset(
 	bpy.types.UILayout.bl_rna.functions['prop'].parameters['icon'].enum_items.keys()
 )
 
+BLEnumElement = tuple[BLEnumID, str, str, BLIcon, int]
 
 ####################
 # - Blender Structs
@@ -34,7 +36,57 @@ BLClass: typ.TypeAlias = (
 	| bpy.types.AssetShelf
 	| bpy.types.FileHandler
 )
+BLIDStruct: typ.TypeAlias = (
+	bpy.types.Action,
+	bpy.types.Armature,
+	bpy.types.Brush,
+	bpy.types.CacheFile,
+	bpy.types.Camera,
+	bpy.types.Collection,
+	bpy.types.Curve,
+	bpy.types.Curves,
+	bpy.types.FreestyleLineStyle,
+	bpy.types.GreasePencil,
+	bpy.types.Image,
+	bpy.types.Key,
+	bpy.types.Lattice,
+	bpy.types.Library,
+	bpy.types.Light,
+	bpy.types.LightProbe,
+	bpy.types.Mask,
+	bpy.types.Material,
+	bpy.types.Mesh,
+	bpy.types.MetaBall,
+	bpy.types.MovieClip,
+	bpy.types.NodeTree,
+	bpy.types.Object,
+	bpy.types.PaintCurve,
+	bpy.types.Palette,
+	bpy.types.ParticleSettings,
+	bpy.types.PointCloud,
+	bpy.types.Scene,
+	bpy.types.Screen,
+	bpy.types.Sound,
+	bpy.types.Speaker,
+	bpy.types.Text,
+	bpy.types.Texture,
+	bpy.types.VectorFont,
+	bpy.types.Volume,
+	bpy.types.WindowManager,
+	bpy.types.WorkSpace,
+	bpy.types.World,
+)
 BLKeymapItem: typ.TypeAlias = typ.Any  ## TODO: Better Type
+BLPropFlag: typ.TypeAlias = typ.Literal[
+	'HIDDEN',
+	'SKIP_SAVE',
+	'SKIP_PRESET',
+	'ANIMATABLE',
+	'LIBRARY_EDITABLE',
+	'PROPORTIONAL',
+	'TEXTEDIT_UPDATE',
+	'OUTPUT_PATH',
+]
 BLColorRGBA = tuple[float, float, float, float]
 
 

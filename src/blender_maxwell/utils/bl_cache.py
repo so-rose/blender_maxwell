@@ -7,9 +7,11 @@ import functools
 import inspect
 import typing as typ
 import uuid
+from pathlib import Path
 
 import bpy
 
+from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger, serialize
 
 log = logger.get(__name__)
@@ -32,7 +34,9 @@ class Signal(enum.StrEnum):
 		**Do not** persist this enum; the values will change whenever `bl_cache` is (re)loaded.
 	"""
 
-	InvalidateCache: str = str(uuid.uuid4())  #'1569c45a-7cf3-4307-beab-5729c2f8fa4b'
+	InvalidateCache: str = str(uuid.uuid4())
+	ResetEnumItems: str = str(uuid.uuid4())
+	ResetStrSearch: str = str(uuid.uuid4())
 
 
 class BLInstance(typ.Protocol):
@@ -47,6 +51,11 @@ class BLInstance(typ.Protocol):
 	def reset_instance_id(self) -> None: ...
 
 	@classmethod
+	def declare_blfield(
+		cls, attr_name: str, bl_attr_name: str, prop_ui: bool = False
+	) -> None: ...
+
+	@classmethod
 	def set_prop(
 		cls,
 		prop_name: str,
@@ -56,6 +65,25 @@ class BLInstance(typ.Protocol):
 		**kwargs,
 	) -> None: ...
 
+
+class BLEnumStrEnum(typ.Protocol):
+	@staticmethod
+	def to_name(value: typ.Self) -> str: ...
+
+	@staticmethod
+	def to_icon(value: typ.Self) -> ct.BLIcon: ...
+
+
+StringPropSubType: typ.TypeAlias = typ.Literal[
+	'FILE_PATH', 'DIR_PATH', 'FILE_NAME', 'BYTE_STRING', 'PASSWORD', 'NONE'
+]
+
+StrMethod: typ.TypeAlias = typ.Callable[
+	[BLInstance, bpy.types.Context, str], list[tuple[str, str]]
+]
+EnumMethod: typ.TypeAlias = typ.Callable[
+	[BLInstance, bpy.types.Context], list[ct.BLEnumElement]
+]
 
 PropGetMethod: typ.TypeAlias = typ.Callable[
 	[BLInstance], serialize.NaivelyEncodableType
@@ -327,7 +355,7 @@ class CachedBLProperty:
 			)
 		return value
 
-	def __set__(self, bl_instance: BLInstance, value: typ.Any) -> None:
+	def __set__(self, bl_instance: BLInstance | None, value: typ.Any) -> None:
 		"""Runs the user-provided setter, after invalidating the caches.
 
 		Notes:
@@ -416,7 +444,6 @@ class CachedBLProperty:
 			setattr(bl_instance, self._bl_prop_name, '')
 
 
-## TODO: How do we invalidate the data that the computed cached property depends on?
 ####################
 # - Property Decorators
 ####################
@@ -459,25 +486,120 @@ class BLField:
 	"""A descriptor that allows persisting arbitrary types in Blender objects, with cached reads."""
 
 	def __init__(
-		self, default_value: typ.Any, triggers_prop_update: bool = True
+		self,
+		default_value: typ.Any = None,
+		use_prop_update: bool = True,
+		## Static
+		prop_ui: bool = False,
+		prop_flags: set[ct.BLPropFlag] | None = None,
+		abs_min: int | float | None = None,
+		abs_max: int | float | None = None,
+		soft_min: int | float | None = None,
+		soft_max: int | float | None = None,
+		float_step: int | None = None,
+		float_prec: int | None = None,
+		str_secret: bool | None = None,
+		path_type: typ.Literal['dir', 'file'] | None = None,
+		## Static / Dynamic
+		enum_many: bool | None = None,
+		## Dynamic
+		str_cb: StrMethod | None = None,
+		enum_cb: EnumMethod | None = None,
 	) -> typ.Self:
 		"""Initializes and sets the attribute to a given default value.
 
+		The attribute **must** declare a type annotation, and it **must** match the type of `default_value`.
+
 		Parameters:
 			default_value: The default value to use if the value is read before it's set.
-			triggers_prop_update: Whether to run `bl_instance.on_prop_changed(attr_name)` whenever value is set.
+			use_prop_update: Configures the BLField to run `bl_instance.on_prop_changed(attr_name)` whenever value is set.
+				This is done by setting the `update` method.
+			enum_cb: Method used to generate new enum elements whenever `Signal.ResetEnum` is presented.
 
 		"""
 		log.debug(
-			'Initializing BLField (default_value=%s, triggers_prop_update=%s)',
+			'Initializing BLField (default_value=%s, use_prop_update=%s)',
 			str(default_value),
-			str(triggers_prop_update),
+			str(use_prop_update),
 		)
 		self._default_value: typ.Any = default_value
-		self._triggers_prop_update: bool = triggers_prop_update
+		self._use_prop_update: bool = use_prop_update
+
+		## Static
+		self._prop_ui = prop_ui
+		self._prop_flags = prop_flags
+		self._min = abs_min
+		self._max = abs_max
+		self._soft_min = soft_min
+		self._soft_max = soft_max
+		self._float_step = float_step
+		self._float_prec = float_prec
+		self._str_secret = str_secret
+		self._path_type = path_type
+
+		## Static / Dynamic
+		self._enum_many = enum_many
+
+		## Dynamic
+		self._set_ser_default = False
+		self._str_cb = str_cb
+		self._enum_cb = enum_cb
+
+		self._str_cb_cache = {}
+		self._enum_cb_cache = {}
+
+	####################
+	# - Safe Callbacks
+	####################
+	def _safe_str_cb(
+		self, _self: BLInstance, context: bpy.types.Context, edit_text: str
+	):
+		"""Wrapper around StringProperty.search which **guarantees** that returned strings will not be garbage collected.
+
+		Regenerate by passing `Signal.ResetStrSearch`.
+		"""
+		if self._str_cb_cache.get(_self.instance_id) is None:
+			self._str_cb_cache[_self.instance_id] = self._str_cb(
+				_self, context, edit_text
+			)
+
+		return self._str_cb_cache[_self.instance_id]
+
+	def _safe_enum_cb(self, _self: BLInstance, context: bpy.types.Context):
+		"""Wrapper around EnumProperty.items callback, which **guarantees** that returned strings will not be garbage collected.
+
+		The mechanism is simple: The user-generated callback is run once, then cached in the descriptor instance for subsequent use.
+		This guarantees that the user won't crash Blender by returning dynamically generated strings in the user-provided callback.
+
+		The cost, however, is that user-provided callback won't run eagerly anymore.
+		Thus, whenever the user wants the items in the enum to update, they must manually set the descriptor attribute to the value `Signal.ResetEnumItems`.
+		"""
+		if self._enum_cb_cache.get(_self.instance_id) is None:
+			# Retrieve Dynamic Enum Items
+			enum_items = self._enum_cb(_self, context)
+
+			# Ensure len(enum_items) >= 1
+			## There must always be one element to prevent invalid usage.
+			if len(enum_items) == 0:
+				self._enum_cb_cache[_self.instance_id] = [
+					(
+						'NONE',
+						'None',
+						'No items...',
+						'',
+						0 if not self._enum_many else 2**0,
+					)
+				]
+			else:
+				self._enum_cb_cache[_self.instance_id] = enum_items
+
+		return self._enum_cb_cache[_self.instance_id]
 
 	def __set_name__(self, owner: type[BLInstance], name: str) -> None:
-		"""Sets up getters/setters for attribute access, and sets up a `CachedBLProperty` to internally utilize them.
+		"""Sets up the descriptor on the class level, preparing it for per-instance use.
+
+		- The type annotation of the attribute is noted, as it might later guide (de)serialization of the field.
+		- An appropriate `bpy.props.Property` is chosen for the type annotaiton, with a default-case fallback of `bpy.props.StringProperty` containing serialized data.
 
 		Our getter/setter essentially reads/writes to a `bpy.props.StringProperty`, with
 
@@ -487,49 +609,205 @@ class BLField:
 		Notes:
 			Run by Python when setting an instance of this class to an attribute.
 
+			For StringProperty subtypes, see: <https://blender.stackexchange.com/questions/104875/what-do-the-different-options-for-subtype-enumerator-in-stringproperty-do>
+
 		Parameters:
 			owner: The class that contains an attribute assigned to an instance of this descriptor.
 			name: The name of the attribute that an instance of descriptor was assigned to.
 		"""
-		# Compute Name and Type of Property
-		## Also compute the internal
+		# Compute Name of Property
+		## Internal name uses 'blfield__' to avoid unfortunate overlaps.
 		attr_name = name
-		bl_attr_name = f'blattr__{name}'
-		if (AttrType := inspect.get_annotations(owner).get(name)) is None:  # noqa: N806
-			msg = f'BLField "{self.prop_name}" must define a type annotation, but doesn\'t.'
+		bl_attr_name = f'blfield__{name}'
+
+		owner.declare_blfield(attr_name, bl_attr_name, prop_ui=self._prop_ui)
+
+		# Compute Type of Property
+		## The type annotation of the BLField guides (de)serialization.
+		if (AttrType := inspect.get_annotations(owner).get(name)) is None:
+			msg = f'BLField "{self.prop_name}" must define a type annotation, but doesn\'t'
 			raise TypeError(msg)
 
 		# Define Blender Property (w/Update Sync)
-		encoded_default_value = serialize.encode(self._default_value).decode('utf-8')
-		log.debug(
-			'%s set to StringProperty w/default "%s" and no_update="%s"',
-			bl_attr_name,
-			encoded_default_value,
-			str(not self._triggers_prop_update),
-		)
+		default_value = None
+		no_default_value = False
+		prop_is_serialized = False
+		kwargs_prop = {}
+
+		## Reusable Snippets
+		def _add_min_max_kwargs():
+			kwargs_prop |= {'min': self._abs_min} if self._abs_min is not None else {}
+			kwargs_prop |= {'max': self._abs_max} if self._abs_max is not None else {}
+			kwargs_prop |= (
+				{'soft_min': self._soft_min} if self._soft_min is not None else {}
+			)
+			kwargs_prop |= (
+				{'soft_max': self._soft_max} if self._soft_max is not None else {}
+			)
+
+		def _add_float_kwargs():
+			kwargs_prop |= (
+				{'step': self._float_step} if self._float_step is not None else {}
+			)
+			kwargs_prop |= (
+				{'precision': self._float_prec} if self._float_prec is not None else {}
+			)
+
+		## Property Flags
+		kwargs_prop |= {
+			'options': self._prop_flags if self._prop_flags is not None else set()
+		}
+
+		## Scalar Bool
+		if AttrType is bool:
+			default_value = self._default_value
+			BLProp = bpy.props.BoolProperty
+
+		## Scalar Int
+		elif AttrType is int:
+			default_value = self._default_value
+			BLProp = bpy.props.IntProperty
+			_add_min_max_kwargs()
+
+		## Scalar Float
+		elif AttrType is float:
+			default_value = self._default_value
+			BLProp = bpy.props.FloatProperty
+			_add_min_max_kwargs()
+			_add_float_kwargs()
+
+		## Vector Bool
+		elif typ.get_origin(AttrType) is tuple and all(
+			T is bool for T in typ.get_args(AttrType)
+		):
+			default_value = self._default_value
+			BLProp = bpy.props.BoolVectorProperty
+			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+
+		## Vector Int
+		elif typ.get_origin(AttrType) is tuple and all(
+			T is int for T in typ.get_args(AttrType)
+		):
+			default_value = self._default_value
+			BLProp = bpy.props.IntVectorProperty
+			_add_min_max_kwargs()
+			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+
+		## Vector Float
+		elif typ.get_origin(AttrType) is tuple and all(
+			T is float for T in typ.get_args(AttrType)
+		):
+			default_value = self._default_value
+			BLProp = bpy.props.FloatVectorProperty
+			_add_min_max_kwargs()
+			_add_float_kwargs()
+			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+
+		## Generic String
+		elif AttrType is str:
+			default_value = self._default_value
+			BLProp = bpy.props.StringProperty
+			if self._str_secret:
+				kwargs_prop |= {'subtype': 'PASSWORD'}
+				kwargs_prop['options'].add('SKIP_SAVE')
+
+			if self._str_cb is not None:
+				kwargs_prop |= lambda _self, context, edit_text: self._safe_str_cb(
+					_self, context, edit_text
+				)
+
+		## Path
+		elif AttrType is Path:
+			if self._path_type is None:
+				msg = 'Path BLField must define "path_type"'
+				raise ValueError(msg)
+
+			default_value = self._default_value
+			BLProp = bpy.props.StringProperty
+			kwargs_prop |= {
+				'subtype': 'FILE_PATH' if self._path_type == 'file' else 'DIR_PATH'
+			}
+
+		## StrEnum
+		elif issubclass(AttrType, enum.StrEnum):
+			default_value = self._default_value
+			BLProp = bpy.props.EnumProperty
+			kwargs_prop |= {
+				'items': [
+					(
+						str(value),
+						AttrType.to_name(value),
+						AttrType.to_name(value),  ## TODO: From AttrType.__doc__
+						AttrType.to_icon(),
+						i if not self._enum_many else 2**i,
+					)
+					for i, value in enumerate(list(AttrType))
+				]
+			}
+			if self._enum_many:
+				kwargs_prop['options'].add('ENUM_FLAG')
+
+		## Dynamic Enum
+		elif AttrType is enum.Enum and self._enum_cb is not None:
+			if self._default_value is not None:
+				msg = 'When using dynamic enum, default value must be None'
+				raise ValueError(msg)
+			no_default_value = True
+
+			BLProp = bpy.props.EnumProperty
+			kwargs_prop |= {
+				'items': lambda _self, context: self._safe_enum_cb(_self, context),
+			}
+			if self._enum_many:
+				kwargs_prop['options'].add('ENUM_FLAG')
+
+		## BL Reference
+		elif AttrType in typ.get_args(ct.BLIDStruct):
+			default_value = self._default_value
+			BLProp = bpy.props.PointerProperty
+
+		## Serializable Object
+		else:
+			default_value = serialize.encode(self._default_value).decode('utf-8')
+			BLProp = bpy.props.StringProperty
+			prop_is_serialized = True
+
+		# Set Default Value (probably)
+		if not no_default_value:
+			kwargs_prop |= {'default': default_value}
+
+		# Set Blender Property on Class __annotations__
 		owner.set_prop(
 			bl_attr_name,
-			bpy.props.StringProperty,
-			name=f'Encoded Attribute for {attr_name}',
-			default=encoded_default_value,
-			no_update=not self._triggers_prop_update,
+			BLProp,
+			# Update Callback Options
+			no_update=not self._use_prop_update,
 			update_with_name=attr_name,
-		)
+			# Property Options
+			name=('[JSON] ' if prop_is_serialized else '') + f'BLField: {attr_name}',
+			**kwargs_prop,
+		)  ## TODO: Mine description from owner class __doc__
 
-		## Getter:
-		## 1. Initialize bpy.props.StringProperty to Default (if undefined).
-		## 2. Retrieve bpy.props.StringProperty string.
-		## 3. Decode using annotated type.
-		def getter(_self: BLInstance) -> AttrType:
-			return serialize.decode(AttrType, getattr(_self, bl_attr_name))
+		# Define Property Getter
+		if prop_is_serialized:
 
-		## Setter:
-		## 1. Initialize bpy.props.StringProperty to Default (if undefined).
-		## 3. Encode value (implicitly using the annotated type).
-		## 2. Set bpy.props.StringProperty string.
-		def setter(_self: BLInstance, value: AttrType) -> None:
-			encoded_value = serialize.encode(value).decode('utf-8')
-			setattr(_self, bl_attr_name, encoded_value)
+			def getter(_self: BLInstance) -> AttrType:
+				return serialize.decode(AttrType, getattr(_self, bl_attr_name))
+		else:
+
+			def getter(_self: BLInstance) -> AttrType:
+				return getattr(_self, bl_attr_name)
+
+		# Define Property Setter
+		if prop_is_serialized:
+
+			def setter(_self: BLInstance, value: AttrType) -> None:
+				encoded_value = serialize.encode(value).decode('utf-8')
+				setattr(_self, bl_attr_name, encoded_value)
+		else:
+
+			def setter(_self: BLInstance, value: AttrType) -> None:
+				setattr(_self, bl_attr_name, value)
 
 		# Initialize CachedBLProperty w/Getter and Setter
 		## This is the usual descriptor assignment procedure.
@@ -542,5 +820,34 @@ class BLField:
 	) -> typ.Any:
 		return self._cached_bl_property.__get__(bl_instance, owner)
 
-	def __set__(self, bl_instance: BLInstance, value: typ.Any) -> None:
-		self._cached_bl_property.__set__(bl_instance, value)
+	def __set__(self, bl_instance: BLInstance | None, value: typ.Any) -> None:
+		if value == Signal.ResetEnumItems:
+			# Set Enum to First Item
+			## Prevents the seemingly "missing" enum element bug.
+			## -> Caused by the old int still trying to hang on after.
+			## -> We can mitigate this by preemptively setting the enum.
+			## -> Infinite recursion if we don't check current value.
+			## -> May cause a hiccup (chains will trigger twice)
+			## To work, there **must** be a guaranteed-available string at 0,0.
+			first_old_value = self._safe_enum_cb(bl_instance, None)[0][0]
+			current_value = self._cached_bl_property.__get__(
+				bl_instance, bl_instance.__class__
+			)
+			if current_value != first_old_value:
+				self._cached_bl_property.__set__(bl_instance, first_old_value)
+
+			# Pop the Cached Enum Items
+			## The next time Blender asks for the enum items, it'll update.
+			self._enum_cb_cache.pop(bl_instance.instance_id, None)
+
+			# Invalidate the Getter Cache
+			## The next time the user runs __get__, they'll get the new value.
+			self._cached_bl_property.__set__(bl_instance, Signal.InvalidateCache)
+
+		elif value == Signal.ResetStrSearch:
+			# Pop the Cached String Search Items
+			## The next time Blender does a str search, it'll update.
+			self._str_cb_cache.pop(bl_instance.instance_id, None)
+
+		else:
+			self._cached_bl_property.__set__(bl_instance, value)

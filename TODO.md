@@ -497,6 +497,7 @@ Reported:
 Unreported:
 - The `__mp_main__` bug.
 - Animated properties within custom node trees don't update with the frame. See: <https://projects.blender.org/blender/blender/issues/66392>
+- Can't update `items` using `id_propertie_ui` of `EnumProperty`
 
 ## Tidy3D bugs
 Unreported:
@@ -532,10 +533,10 @@ We need Python properties to work together with Blender properties.
 
 ### Type Support
 We need support for arbitrary objects, but still backed by the persistance semantics of native Blender properties.
-- [ ] Add logic that matches appropriate types to native IntProperty, FloatProperty, IntVectorProperty, FloatVectorProperty.
+- [x] Add logic that matches appropriate types to native IntProperty, FloatProperty, IntVectorProperty, FloatVectorProperty.
 	- We want absolute minimal overhead for types that actually already do work in Blender.
 	- **REMEMBER8* they can do matrices too! https://developer.blender.org/docs/release_notes/3.0/python_api/#other-additions
-- [ ] Add logic that matches any bpy.types.ID subclass to a PointerProperty.
+- [x] Add logic that matches any bpy.types.ID subclass to a PointerProperty.
 	- This is important for certain kinds of properties ex. "select a Blender object".
 - [ ] Implement Enum property, (also see <https://developer.blender.org/docs/release_notes/4.1/python_api/#enum-id-properties>)
 	- Use this to bridge the enum UI to actual StrEnum objects.
@@ -545,7 +546,7 @@ We need support for arbitrary objects, but still backed by the persistance seman
 	- [ ] `description`: Use the docstring parser to extract the first description sentence of the attribute name from the subclass docstring, so we are both encouraged to document our nodes/sockets, and so we're not documenting twice.
 
 ### Niceness
-- [ ] Rename the internal property to 'blfield__'.
+- [x] Rename the internal property to 'blfield__'.
 - [ ] Add a method that extracts the internal property name, for places where we need the Blender property name.
 	- **Key use case**: `draw.prop(self, self.field_name._bl_prop_name)`, which is also nice b/c no implicit string-based reference.
 	- The work done above with types makes this as fast and useful as internal props. Just make sure we validate that the type can be usefully accessed like this.

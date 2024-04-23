@@ -1,3 +1,4 @@
+import enum
 import typing as typ
 
 import bpy
@@ -5,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import sympy as sp
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import logger, bl_cache
 
 from .... import contracts as ct
 from .... import sockets
@@ -17,6 +18,12 @@ X_COMPLEX = sp.Symbol('x', complex=True)
 
 
 class MapMathNode(base.MaxwellSimNode):
+	"""Applies a function by-structure to the data.
+
+	Attributes:
+		operation: Operation to apply to the input.
+	"""
+
 	node_type = ct.NodeType.MapMath
 	bl_label = 'Map Math'
 
@@ -41,14 +48,11 @@ class MapMathNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	operation: bpy.props.EnumProperty(
-		name='Op',
-		description='Operation to apply to the input',
-		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.on_prop_changed('operation', context),
+	operation: enum.Enum = bl_cache.BLField(
+		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
 	)
 
-	def search_operations(self) -> list[tuple[str, str, str]]:
+	def search_operations(self) -> list[ct.BLEnumElement]:
 		items = []
 		if self.active_socket_set == 'By Element':
 			items += [
@@ -92,14 +96,20 @@ class MapMathNode(base.MaxwellSimNode):
 			]
 		elif self.active_socket_set == 'Expr':
 			items += [('EXPR_EL', 'By Element', 'Expression-defined (by el)')]
-		else:
-			msg = f'Invalid socket set {self.active_socket_set}'
-			raise RuntimeError(msg)
 
-		return items
+		return [(*item, '', i) for i, item in enumerate(items)]
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		layout.prop(self, 'operation', text='')
+		layout.prop(self, self.blfields['operation'], text='')
+
+	####################
+	# - Events
+	####################
+	@events.on_value_changed(
+		prop_name='active_socket_set',
+	)
+	def on_operation_changed(self):
+		self.operation = bl_cache.Signal.ResetEnumItems
 
 	####################
 	# - Compute: LazyValueFunc / Array

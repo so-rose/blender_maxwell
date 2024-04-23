@@ -108,6 +108,7 @@ ignore = [
 	"E701", # class foo(Parent): pass or if simple: return are perfectly elegant
 	"ERA001", # 'Commented-out code' seems to be just about anything to ruff
 	"F722", # jaxtyping uses type annotations that ruff sees as "syntax error"
+	"N806", # Sometimes we like using types w/uppercase in functions, sue me
 
 	# Line Length - Controversy Incoming
 	## Hot Take: Let the Formatter Worry about Line Length

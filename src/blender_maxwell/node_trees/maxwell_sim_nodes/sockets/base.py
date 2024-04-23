@@ -2,13 +2,14 @@ import abc
 import functools
 import typing as typ
 import uuid
+from types import MappingProxyType
 
 import bpy
 import pydantic as pyd
 import sympy as sp
 
+from blender_maxwell.utils import bl_cache, logger, serialize
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger, serialize
 
 from .. import contracts as ct
 
@@ -133,12 +134,25 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	# Computed
 	bl_idname: str
 
+	# BLFields
+	blfields: typ.ClassVar[dict[str, str]] = MappingProxyType({})
+	ui_blfields: typ.ClassVar[set[str]] = frozenset()
+
 	####################
 	# - Initialization
 	####################
 	## TODO: Common implementation of this for both sockets and nodes - perhaps a BLInstance base class?
 	def reset_instance_id(self) -> None:
 		self.instance_id = str(uuid.uuid4())
+
+	@classmethod
+	def declare_blfield(
+		cls, attr_name: str, bl_attr_name: str, prop_ui: bool = False
+	) -> None:
+		cls.blfields = cls.blfields | {attr_name: bl_attr_name}
+
+		if prop_ui:
+			cls.ui_blfields = cls.ui_blfields | {attr_name}
 
 	@classmethod
 	def set_prop(
@@ -323,6 +337,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		# Valid Properties
 		elif hasattr(self, prop_name):
+			# Invalidate UI BLField Caches
+			if prop_name in self.ui_blfields:
+				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
+
+			# Trigger Event
 			self.trigger_event(ct.FlowEvent.DataChanged)
 
 		# Undefined Properties
