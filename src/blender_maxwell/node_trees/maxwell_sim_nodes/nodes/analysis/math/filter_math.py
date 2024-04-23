@@ -123,7 +123,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			self.dim_names = []
 			self.dim_lens = {}
 
-		# Reset String Searcher
+		# Reset Enum
 		self.dim = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(

@@ -740,7 +740,7 @@ class BLField:
 						str(value),
 						AttrType.to_name(value),
 						AttrType.to_name(value),  ## TODO: From AttrType.__doc__
-						AttrType.to_icon(),
+						AttrType.to_icon(value),
 						i if not self._enum_many else 2**i,
 					)
 					for i, value in enumerate(list(AttrType))
@@ -824,42 +824,53 @@ class BLField:
 
 	def __set__(self, bl_instance: BLInstance | None, value: typ.Any) -> None:
 		if value == Signal.ResetEnumItems:
-			# Set Enum to First Item
-			## Prevents the seemingly "missing" enum element bug.
-			## -> Caused by the old int still trying to hang on after.
-			## -> We can mitigate this by preemptively setting the enum.
-			## -> Infinite recursion if we don't check current value.
-			## -> May cause a hiccup (chains will trigger twice)
-			## To work, there **must** be a guaranteed-available string at 0,0.
-			first_old_value = self._safe_enum_cb(bl_instance, None)[0][0]
-			current_value = self._cached_bl_property.__get__(
-				bl_instance, bl_instance.__class__
-			)
-			if current_value != first_old_value:
-				self._cached_bl_property.__set__(bl_instance, first_old_value)
+			old_items = self._safe_enum_cb(bl_instance, None)
+			current_items = self._enum_cb(bl_instance, None)
 
-			# Pop the Cached Enum Items
-			## The next time Blender asks for the enum items, it'll update.
-			self._enum_cb_cache.pop(bl_instance.instance_id, None)
+			# Only Change if Changes Need Making
+			## <Proverb. 'Fun things to say in jail'. Ca 887BCE. >
+			if old_items != current_items:
+				# Set Enum to First Item
+				## Prevents the seemingly "missing" enum element bug.
+				## -> Caused by the old int still trying to hang on after.
+				## -> We can mitigate this by preemptively setting the enum.
+				## -> Infinite recursion if we don't check current value.
+				## -> May cause a hiccup (chains will trigger twice)
+				## To work, there **must** be a guaranteed-available string at 0,0.
+				first_old_value = old_items(bl_instance, None)[0][0]
+				current_value = self._cached_bl_property.__get__(
+					bl_instance, bl_instance.__class__
+				)
+				if current_value != first_old_value:
+					self._cached_bl_property.__set__(bl_instance, first_old_value)
 
-			# Invalidate the Getter Cache
-			## The next time the user runs __get__, they'll get the new value.
-			self._cached_bl_property.__set__(bl_instance, Signal.InvalidateCache)
+				# Pop the Cached Enum Items
+				## The next time Blender asks for the enum items, it'll update.
+				self._enum_cb_cache.pop(bl_instance.instance_id, None)
+
+				# Invalidate the Getter Cache
+				## The next time the user runs __get__, they'll get the new value.
+				self._cached_bl_property.__set__(bl_instance, Signal.InvalidateCache)
 
 		elif value == Signal.ResetStrSearch:
-			# Set String to ''
-			## Prevents the presence of an invalid value not in the new search.
-			## -> Infinite recursion if we don't check current value for ''.
-			## -> May cause a hiccup (chains will trigger twice)
-			current_value = self._cached_bl_property.__get__(
-				bl_instance, bl_instance.__class__
-			)
-			if current_value != '':
-				self._cached_bl_property.__set__(bl_instance, '')
+			old_items = self._safe_str_cb(bl_instance, None)
+			current_items = self._str_cb(bl_instance, None)
 
-			# Pop the Cached String Search Items
-			## The next time Blender does a str search, it'll update.
-			self._str_cb_cache.pop(bl_instance.instance_id, None)
+			# Only Change if Changes Need Making
+			if old_items != current_items:
+				# Set String to ''
+				## Prevents the presence of an invalid value not in the new search.
+				## -> Infinite recursion if we don't check current value for ''.
+				## -> May cause a hiccup (chains will trigger twice)
+				current_value = self._cached_bl_property.__get__(
+					bl_instance, bl_instance.__class__
+				)
+				if current_value != '':
+					self._cached_bl_property.__set__(bl_instance, '')
+
+				# Pop the Cached String Search Items
+				## The next time Blender does a str search, it'll update.
+				self._str_cb_cache.pop(bl_instance.instance_id, None)
 
 		else:
 			self._cached_bl_property.__set__(bl_instance, value)

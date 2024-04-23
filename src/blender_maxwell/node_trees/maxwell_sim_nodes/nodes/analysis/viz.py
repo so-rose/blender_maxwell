@@ -1,8 +1,9 @@
+import enum
 import typing as typ
 
 import bpy
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import bl_cache, image_ops, logger
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
@@ -12,7 +13,12 @@ log = logger.get(__name__)
 
 
 class VizNode(base.MaxwellSimNode):
-	"""Node for visualizing simulation data, by querying its monitors."""
+	"""Node for visualizing simulation data, by querying its monitors.
+
+	Attributes:
+		colormap: Colormap to apply to 0..1 output.
+
+	"""
 
 	node_type = ct.NodeType.Viz
 	bl_label = 'Viz'
@@ -34,31 +40,25 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	## - Properties
 	#####################
-	colormap: bpy.props.EnumProperty(
-		name='Colormap',
-		description='Colormap to apply to grayscale output',
-		items=[
-			('VIRIDIS', 'Viridis', 'Good default colormap'),
-			('GRAYSCALE', 'Grayscale', 'Barebones'),
-		],
-		default='VIRIDIS',
-		update=lambda self, context: self.on_prop_changed('colormap', context),
+	colormap: image_ops.Colormap = bl_cache.BLField(
+		image_ops.Colormap.Viridis, prop_ui=True
 	)
 
 	#####################
 	## - UI
 	#####################
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
-		col.prop(self, 'colormap')
+		col.prop(self, self.blfields['colormap'], text='')
 
 	#####################
 	## - Plotting
 	#####################
 	@events.on_show_plot(
 		managed_objs={'plot'},
+		props={'colormap'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Array},
-		props={'colormap'},
+		input_sockets_optional={'Data': True},
 		stop_propagation=True,
 	)
 	def on_show_plot(
@@ -67,11 +67,12 @@ class VizNode(base.MaxwellSimNode):
 		input_sockets: dict,
 		props: dict,
 	):
-		managed_objs['plot'].map_2d_to_image(
-			input_sockets['Data'].values,
-			colormap=props['colormap'],
-			bl_select=True,
-		)
+		if input_sockets['Data'] is not None:
+			managed_objs['plot'].map_2d_to_image(
+				input_sockets['Data'].values,
+				colormap=props['colormap'],
+				bl_select=True,
+			)
 
 
 ####################

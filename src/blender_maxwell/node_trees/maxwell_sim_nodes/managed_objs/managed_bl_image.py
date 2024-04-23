@@ -2,13 +2,10 @@ import io
 import typing as typ
 
 import bpy
-import jax
-import jax.numpy as jnp
-import matplotlib
 import matplotlib.axis as mpl_ax
 import numpy as np
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import image_ops, logger
 
 from .. import contracts as ct
 from . import base
@@ -17,64 +14,6 @@ log = logger.get(__name__)
 
 AREA_TYPE = 'IMAGE_EDITOR'
 SPACE_TYPE = 'IMAGE_EDITOR'
-
-# Colormap
-_MPL_CM = matplotlib.cm.get_cmap('viridis', 512)
-VIRIDIS_COLORMAP = jnp.array([_MPL_CM(i)[:3] for i in range(512)])
-
-
-####################
-# - Image Functions
-####################
-def apply_colormap(normalized_data, colormap):
-	# Linear interpolation between colormap points
-	n_colors = colormap.shape[0]
-	indices = normalized_data * (n_colors - 1)
-	lower_idx = jnp.floor(indices).astype(jnp.int32)
-	upper_idx = jnp.ceil(indices).astype(jnp.int32)
-	alpha = indices - lower_idx
-
-	lower_colors = jax.vmap(lambda i: colormap[i])(lower_idx)
-	upper_colors = jax.vmap(lambda i: colormap[i])(upper_idx)
-
-	return (1 - alpha)[..., None] * lower_colors + alpha[..., None] * upper_colors
-
-
-@jax.jit
-def rgba_image_from_2d_map__viridis(map_2d):
-	amplitude = jnp.abs(map_2d)
-	amplitude_normalized = (amplitude - amplitude.min()) / (
-		amplitude.max() - amplitude.min()
-	)
-	rgb_array = apply_colormap(amplitude_normalized, VIRIDIS_COLORMAP)
-	alpha_channel = jnp.ones_like(amplitude_normalized)
-	return jnp.dstack((rgb_array, alpha_channel))
-
-
-@jax.jit
-def rgba_image_from_2d_map__grayscale(map_2d):
-	amplitude = jnp.abs(map_2d)
-	amplitude_normalized = (amplitude - amplitude.min()) / (
-		amplitude.max() - amplitude.min()
-	)
-	rgb_array = jnp.stack([amplitude_normalized] * 3, axis=-1)
-	alpha_channel = jnp.ones_like(amplitude_normalized)
-	return jnp.dstack((rgb_array, alpha_channel))
-
-
-def rgba_image_from_2d_map(map_2d, colormap: str | None = None):
-	"""RGBA Image from a map of 2D coordinates to values.
-
-	Parameters:
-		map_2d: Shape (width, height, value).
-
-	Returns:
-		Image as a JAX array of shape (height, width, 4)
-	"""
-	if colormap == 'VIRIDIS':
-		return rgba_image_from_2d_map__viridis(map_2d)
-	if colormap == 'GRAYSCALE':
-		return rgba_image_from_2d_map__grayscale(map_2d)
 
 
 ####################
@@ -235,7 +174,7 @@ class ManagedBLImage(base.ManagedObj):
 		self, map_2d, colormap: str | None = 'VIRIDIS', bl_select: bool = False
 	):
 		self.data_to_image(
-			lambda _: rgba_image_from_2d_map(map_2d, colormap=colormap),
+			lambda _: image_ops.rgba_image_from_2d_map(map_2d, colormap=colormap),
 			bl_select=bl_select,
 		)
 
