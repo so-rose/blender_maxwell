@@ -47,8 +47,9 @@ class FilterMathNode(base.MaxwellSimNode):
 		None, prop_ui=True, enum_cb=lambda self, _: self.search_dims()
 	)
 
-	dim_names: list[str] = bl_cache.BLField([])
-	dim_lens: dict[str, int] = bl_cache.BLField({})
+	@property
+	def _info(self) -> ct.InfoFlow:
+		return self._compute_input('Data', kind=ct.FlowKind.Info)
 
 	####################
 	# - Operation Search
@@ -70,16 +71,16 @@ class FilterMathNode(base.MaxwellSimNode):
 	# - Dim Search
 	####################
 	def search_dims(self) -> list[ct.BLEnumElement]:
-		if self.dim_names:
+		if (info := self._info).dim_names:
 			dims = [
 				(dim_name, dim_name, dim_name, '', i)
-				for i, dim_name in enumerate(self.dim_names)
+				for i, dim_name in enumerate(info.dim_names)
 			]
 
 			# Squeeze: Dimension Must Have Length=1
 			## We must also correct the "NUMBER" of the enum.
 			if self.operation == 'SQUEEZE':
-				filtered_dims = [dim for dim in dims if self.dim_lens[dim[0]] == 1]
+				filtered_dims = [dim for dim in dims if info.dim_lens[dim[0]] == 1]
 				return [(*dim[:-1], i) for i, dim in enumerate(filtered_dims)]
 
 			return dims
@@ -90,7 +91,7 @@ class FilterMathNode(base.MaxwellSimNode):
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['operation'], text='')
-		if self.dim_names:
+		if self._info.dim_names:
 			layout.prop(self, self.blfields['dim'], text='')
 
 	####################
@@ -98,52 +99,49 @@ class FilterMathNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		prop_name='active_socket_set',
+		run_on_init=True,
 	)
 	def on_socket_set_changed(self):
 		self.operation = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
-		socket_name={'Data'},
-		prop_name={'active_socket_set'},
+		socket_name='Data',
+		prop_name='active_socket_set',
 		props={'active_socket_set'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Info},
-		input_sockets_optional={'Data': True},
-		run_on_init=True,
+		# run_on_init=True,
 	)
 	def on_any_change(self, props: dict, input_sockets: dict):
-		# Set Dimension Names from InfoFlow
-		if input_sockets['Data'].dim_names:
-			self.dim_names = input_sockets['Data'].dim_names
-			self.dim_lens = {
-				dim_name: len(dim_idx)
-				for dim_name, dim_idx in input_sockets['Data'].dim_idx.items()
-			}
-		else:
-			self.dim_names = []
-			self.dim_lens = {}
-
-		# Reset Enum
 		self.dim = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
+		socket_name='Data',
 		prop_name='dim',
 		props={'active_socket_set', 'dim'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Info},
-		input_sockets_optional={'Data': True},
+		# run_on_init=True,
 	)
 	def on_dim_change(self, props: dict, input_sockets: dict):
 		# Add/Remove Input Socket "Value"
-		if props['active_socket_set'] == 'By Dim Value' and props['dim'] != 'NONE':
+		if (
+			input_sockets['Data'] != ct.InfoFlow()
+			and props['active_socket_set'] == 'By Dim Value'
+			and props['dim'] != 'NONE'
+		):
 			# Get Current and Wanted Socket Defs
-			current_socket_def = self.loose_input_sockets.get('Value')
+			current_bl_socket = self.loose_input_sockets.get('Value')
 			wanted_socket_def = sockets.SOCKET_DEFS[
 				ct.unit_to_socket_type(input_sockets['Data'].dim_idx[props['dim']].unit)
 			]
 
 			# Determine Whether to Declare New Loose Input SOcket
-			if current_socket_def is None or current_socket_def != wanted_socket_def:
+			if (
+				current_bl_socket is None
+				or sockets.SOCKET_DEFS[current_bl_socket.socket_type]
+				!= wanted_socket_def
+			):
 				self.loose_input_sockets = {
 					'Value': wanted_socket_def(),
 				}
@@ -225,7 +223,7 @@ class FilterMathNode(base.MaxwellSimNode):
 
 		# Compute Bound/Free Parameters
 		## Empty Dimension -> Empty InfoFlow
-		if props['dim'] != 'NONE':
+		if input_sockets['Data'] != ct.InfoFlow() and props['dim'] != 'NONE':
 			axis = info.dim_names.index(props['dim'])
 		else:
 			return ct.InfoFlow()
@@ -243,6 +241,9 @@ class FilterMathNode(base.MaxwellSimNode):
 					for dim_name, dim_idx in info.dim_idx.items()
 					if dim_name != props['dim']
 				},
+				output_names=info.output_names,
+				output_mathtypes=info.output_mathtypes,
+				output_units=info.output_units,
 			)
 
 		# Fallback to Empty InfoFlow

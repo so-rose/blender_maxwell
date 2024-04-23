@@ -126,6 +126,10 @@ class ArrayFlow:
 	def __len__(self) -> int:
 		return len(self.values)
 
+	@functools.cached_property
+	def mathtype(self) -> spux.MathType:
+		return spux.MathType.from_pytype(type(self.values.item(0)))
+
 	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
 		"""Find the index of the value that is closest to the given value.
 
@@ -437,6 +441,27 @@ class LazyArrayRangeFlow:
 			key=lambda sym: sym.name,
 		)
 
+	@functools.cached_property
+	def mathtype(self) -> spux.MathType:
+		# Get Start Mathtype
+		if isinstance(self.start, spux.SympyType):
+			start_mathtype = spux.MathType.from_expr(self.start)
+		else:
+			start_mathtype = spux.MathType.from_pytype(self.start)
+
+		# Get Stop Mathtype
+		if isinstance(self.stop, spux.SympyType):
+			stop_mathtype = spux.MathType.from_expr(type(self.stop))
+		else:
+			stop_mathtype = spux.MathType.from_pytype(type(self.stop))
+
+		# Check Equal
+		if start_mathtype != stop_mathtype:
+			msg = "Mathtypes of start and stop don't agree. Please fix!"
+			raise ValueError(msg)
+
+		return start_mathtype
+
 	def __len__(self):
 		return self.steps
 
@@ -688,4 +713,31 @@ class InfoFlow:
 		default_factory=dict
 	)  ## TODO: Rename to dim_idxs
 
-	## TODO: Validation, esp. length of dims. Pydantic?
+	@functools.cached_property
+	def dim_lens(self) -> dict[str, int]:
+		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
+
+	@functools.cached_property
+	def dim_mathtypes(self) -> dict[str, int]:
+		return {
+			dim_name: dim_idx.mathtype for dim_name, dim_idx in self.dim_idx.items()
+		}
+
+	@functools.cached_property
+	def dim_units(self) -> dict[str, int]:
+		return {dim_name: dim_idx.unit for dim_name, dim_idx in self.dim_idx.items()}
+
+	@functools.cached_property
+	def dim_idx_arrays(self) -> list[ArrayFlow]:
+		return [
+			dim_idx.realize().values
+			if isinstance(dim_idx, LazyArrayRangeFlow)
+			else dim_idx.values
+			for dim_idx in self.dim_idx.values()
+		]
+		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
+
+	# Output Information
+	output_names: list[str] = dataclasses.field(default_factory=list)
+	output_mathtypes: dict[str, spux.MathType] = dataclasses.field(default_factory=dict)
+	output_units: dict[str, spux.Unit | None] = dataclasses.field(default_factory=dict)

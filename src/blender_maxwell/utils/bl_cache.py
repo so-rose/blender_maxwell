@@ -828,7 +828,6 @@ class BLField:
 			current_items = self._enum_cb(bl_instance, None)
 
 			# Only Change if Changes Need Making
-			## <Proverb. 'Fun things to say in jail'. Ca 887BCE. >
 			if old_items != current_items:
 				# Set Enum to First Item
 				## Prevents the seemingly "missing" enum element bug.
@@ -837,7 +836,7 @@ class BLField:
 				## -> Infinite recursion if we don't check current value.
 				## -> May cause a hiccup (chains will trigger twice)
 				## To work, there **must** be a guaranteed-available string at 0,0.
-				first_old_value = old_items(bl_instance, None)[0][0]
+				first_old_value = old_items[0][0]
 				current_value = self._cached_bl_property.__get__(
 					bl_instance, bl_instance.__class__
 				)

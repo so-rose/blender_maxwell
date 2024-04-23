@@ -10,9 +10,11 @@ Attributes:
 		Should be used via the `ConstrSympyExpr`, which also adds expression validation.
 """
 
+import enum
 import itertools
 import typing as typ
 
+import jax.numpy as jnp
 import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
@@ -20,6 +22,54 @@ import typing_extensions as typx
 from pydantic_core import core_schema as pyd_core_schema
 
 SympyType = sp.Basic | sp.Expr | sp.MatrixBase | sp.MutableDenseMatrix | spu.Quantity
+
+
+class MathType(enum.StrEnum):
+	Bool = enum.auto()
+	Integer = enum.auto()
+	Rational = enum.auto()
+	Real = enum.auto()
+	Complex = enum.auto()
+
+	@staticmethod
+	def from_expr(sp_obj: SympyType) -> type:
+		if isinstance(sp_obj, sp.logic.boolalg.Boolean):
+			return MathType.Bool
+		if sp_obj.is_integer:
+			return MathType.Integer
+		if sp_obj.is_rational or sp_obj.is_real:
+			return MathType.Real
+		if sp_obj.is_complex:
+			return MathType.Complex
+
+		msg = "Can't determine MathType from sympy object: {sp_obj}"
+		raise ValueError(msg)
+
+	@staticmethod
+	def from_pytype(dtype) -> type:
+		return {
+			bool: MathType.Bool,
+			int: MathType.Integer,
+			float: MathType.Real,
+			complex: MathType.Complex,
+			#jnp.int32: MathType.Integer,
+			#jnp.int64: MathType.Integer,
+			#jnp.float32: MathType.Real,
+			#jnp.float64: MathType.Real,
+			#jnp.complex64: MathType.Complex,
+			#jnp.complex128: MathType.Complex,
+			#jnp.bool_: MathType.Bool,
+		}[dtype]
+
+	@staticmethod
+	def to_dtype(value: typ.Self) -> type:
+		return {
+			MathType.Bool: bool,
+			MathType.Integer: int,
+			MathType.Rational: float,
+			MathType.Real: float,
+			MathType.Complex: complex,
+		}[value]
 
 
 ####################

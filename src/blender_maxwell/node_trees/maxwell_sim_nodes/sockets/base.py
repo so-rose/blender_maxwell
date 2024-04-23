@@ -505,10 +505,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 					socket_name=self.name,
 					socket_kinds=socket_kinds,
 				)
-
-			self.node.trigger_event(
-				event, socket_name=self.name, socket_kinds=socket_kinds
-			)
+			else:
+				self.node.trigger_event(
+					event, socket_name=self.name, socket_kinds=socket_kinds
+				)
 
 		# Output Socket | Input Flow
 		if self.is_output and flow_direction == 'input':

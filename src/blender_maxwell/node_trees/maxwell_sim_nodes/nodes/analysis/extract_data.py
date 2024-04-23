@@ -1,12 +1,13 @@
+import enum
 import typing as typ
 
-import enum
 import bpy
 import jax
 import jax.numpy as jnp
 import sympy.physics.units as spu
 
 from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from ... import sockets
@@ -45,11 +46,13 @@ class ExtractDataNode(base.MaxwellSimNode):
 	)
 
 	# Sim Data
-	sim_data_monitor_nametype: dict[str, str] = bl_cache.BLField({})
+	sim_data_monitor_nametype: dict[str, str] = bl_cache.BLField(
+		{}, use_prop_update=False
+	)
 
 	# Monitor Data
-	monitor_data_type: str = bl_cache.BLField('')
-	monitor_data_components: list[str] = bl_cache.BLField([])
+	monitor_data_type: str = bl_cache.BLField('', use_prop_update=False)
+	monitor_data_components: list[str] = bl_cache.BLField([], use_prop_update=False)
 
 	####################
 	# - Computed Properties
@@ -177,7 +180,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		self.extract_filter = bl_cache.Signal.ResetEnumItems
 
 	####################
-	# - Output: Value
+	# - Output: Sim Data -> Monitor Data
 	####################
 	@events.computes_output_socket(
 		'Monitor Data',
@@ -186,34 +189,52 @@ class ExtractDataNode(base.MaxwellSimNode):
 		input_sockets={'Sim Data'},
 	)
 	def compute_monitor_data(self, props: dict, input_sockets: dict):
-		return input_sockets['Sim Data'].monitor_data[props['extract_filter']]
+		if input_sockets['Sim Data'] is not None and props['extract_filter'] != 'NONE':
+			return input_sockets['Sim Data'].monitor_data[props['extract_filter']]
 
+		return None
+
+	####################
+	# - Output: Monitor Data -> Data
+	####################
 	@events.computes_output_socket(
 		'Data',
 		kind=ct.FlowKind.Array,
 		props={'extract_filter'},
 		input_sockets={'Monitor Data'},
+		input_socket_kinds={'Monitor Data': ct.FlowKind.Value},
 	)
-	def compute_data(self, props: dict, input_sockets: dict) -> jax.Array:
-		xarray_data = getattr(input_sockets['Monitor Data'], props['extract_filter'])
-		return jnp.array(xarray_data.data)  ## TODO: Can it be done without a copy?
+	def compute_data(self, props: dict, input_sockets: dict) -> jax.Array | None:
+		if (
+			input_sockets['Monitor Data'] is not None
+			and props['extract_filter'] != 'NONE'
+		):
+			xarray_data = getattr(
+				input_sockets['Monitor Data'], props['extract_filter']
+			)
+			return jnp.array(xarray_data.data)
+			## TODO: Let the array itself have its output unit too!
 
-	####################
-	# - Output: LazyValueFunc
-	####################
+		return None
+
 	@events.computes_output_socket(
 		'Data',
 		kind=ct.FlowKind.LazyValueFunc,
 		output_sockets={'Data'},
 		output_socket_kinds={'Data': ct.FlowKind.Array},
 	)
-	def compute_extracted_data_lazy(self, output_sockets: dict) -> ct.LazyValueFuncFlow:
-		return ct.LazyValueFuncFlow(
-			func=lambda: output_sockets['Data'], supports_jax=True
-		)
+	def compute_extracted_data_lazy(
+		self, output_sockets: dict
+	) -> ct.LazyValueFuncFlow | None:
+		if output_sockets['Data'] is not None:
+			return ct.LazyValueFuncFlow(
+				func=lambda: output_sockets['Data'], supports_jax=True
+			)
+
+		return None
 
 	####################
-	# - Output: Info
+	# - Auxiliary: Monitor Data -> Data
 	####################
 	@events.computes_output_socket(
 		'Data',
@@ -221,6 +242,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		props={'monitor_data_type', 'extract_filter'},
 		input_sockets={'Monitor Data'},
 		input_socket_kinds={'Monitor Data': ct.FlowKind.Value},
+		input_sockets_optional={'Monitor Data': True},
 	)
 	def compute_extracted_data_info(
 		self, props: dict, input_sockets: dict
@@ -234,12 +256,16 @@ class ExtractDataNode(base.MaxwellSimNode):
 		else:
 			return ct.InfoFlow()
 
+		info_output_names = {
+			'output_names': [props['extract_filter']],
+		}
+
 		# Compute InfoFlow from XArray
 		## XYZF: Field / Permittivity / FieldProjectionCartesian
 		if props['monitor_data_type'] in {
 			'Field',
 			'Permittivity',
-			'FieldProjectionCartesian',
+			#'FieldProjectionCartesian',
 		}:
 			return ct.InfoFlow(
 				dim_names=['x', 'y', 'z', 'f'],
@@ -255,6 +281,13 @@ class ExtractDataNode(base.MaxwellSimNode):
 						unit=spu.hertz,
 						is_sorted=True,
 					),
+				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Complex},
+				output_units={
+					props['extract_filter']: spu.volt / spu.micrometer
+					if props['monitor_data_type'] == 'Field'
+					else None
 				},
 			)
 
@@ -275,6 +308,17 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Complex},
+				output_units={
+					props['extract_filter']: (
+						spu.volt / spu.micrometer
+						if props['extract_filter'].startswith('E')
+						else spu.ampere / spu.micrometer
+					)
+					if props['monitor_data_type'] == 'Field'
+					else None
+				},
 			)
 
 		## F: Flux
@@ -288,6 +332,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Real},
+				output_units={props['extract_filter']: spu.watt},
 			)
 
 		## T: FluxTime
@@ -301,6 +348,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Real},
+				output_units={props['extract_filter']: spu.watt},
 			)
 
 		## RThetaPhiF: FieldProjectionAngle
@@ -327,6 +377,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Real},
+				output_units={
+					props['extract_filter']: (
+						spu.volt / spu.micrometer
+						if props['extract_filter'].startswith('E')
+						else spu.ampere / spu.micrometer
+					)
+				},
 			)
 
 		## UxUyRF: FieldProjectionKSpace
@@ -351,6 +410,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Real},
+				output_units={
+					props['extract_filter']: (
+						spu.volt / spu.micrometer
+						if props['extract_filter'].startswith('E')
+						else spu.ampere / spu.micrometer
+					)
+				},
 			)
 
 		## OrderxOrderyF: Diffraction
@@ -371,6 +439,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 						unit=spu.hertz,
 						is_sorted=True,
 					),
+				},
+				**info_output_names,
+				output_mathtypes={props['extract_filter']: spux.MathType.Real},
+				output_units={
+					props['extract_filter']: (
+						spu.volt / spu.micrometer
+						if props['extract_filter'].startswith('E')
+						else spu.ampere / spu.micrometer
+					)
 				},
 			)
 

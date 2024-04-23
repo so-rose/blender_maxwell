@@ -843,10 +843,12 @@ class MaxwellSimNode(bpy.types.Node):
 		# Propagate Event to All Sockets in "Trigger Direction"
 		## The trigger chain goes node/socket/node/socket/...
 		if not stop_propagation:
-			triggered_sockets = self._bl_sockets(
-				direc=ct.FlowEvent.flow_direction[event]
-			)
+			direc = ct.FlowEvent.flow_direction[event]
+			triggered_sockets = self._bl_sockets(direc=direc)
 			for bl_socket in triggered_sockets:
+				if direc == 'output' and not bl_socket.is_linked:
+					continue
+
 				# log.critical(
 				# '![%s] Propagating: (%s, %s)',
 				# self.sim_node_name,

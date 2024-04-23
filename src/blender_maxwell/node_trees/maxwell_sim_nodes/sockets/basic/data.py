@@ -49,14 +49,14 @@ class DataBLSocket(base.MaxwellSimSocket):
 				columns=3,
 				row_major=True,
 				even_columns=True,
-				#even_rows=True,
+				# even_rows=True,
 				align=True,
 			)
 
 			# Grid Header
-			#grid.label(text='Dim')
-			#grid.label(text='Len')
-			#grid.label(text='Unit')
+			# grid.label(text='Dim')
+			# grid.label(text='Len')
+			# grid.label(text='Unit')
 
 			# Dimension Names
 			for dim_name in info.dim_names:

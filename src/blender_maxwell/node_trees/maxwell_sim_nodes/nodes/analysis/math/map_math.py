@@ -6,7 +6,8 @@ import jax
 import jax.numpy as jnp
 import sympy as sp
 
-from blender_maxwell.utils import logger, bl_cache
+from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
 from .... import sockets
@@ -143,7 +144,7 @@ class MapMathNode(base.MaxwellSimNode):
 				'SINC': lambda data: jnp.sinc(data),
 			},
 			'By Vector': {
-				'NORM_2': lambda data: jnp.norm(data, ord=2, axis=-1),
+				'NORM_2': lambda data: jnp.linalg.norm(data, ord=2, axis=-1),
 			},
 			'By Matrix': {
 				# Matrix -> Number
@@ -196,11 +197,34 @@ class MapMathNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Data',
 		kind=ct.FlowKind.Info,
+		props={'active_socket_set', 'operation'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Info},
 	)
-	def compute_data_info(self, input_sockets: dict) -> ct.InfoFlow:
-		return input_sockets['Data']
+	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
+		info = input_sockets['Data']
+
+		# Complex -> Real
+		if props['active_socket_set'] == 'By Element' and props['operation'] in [
+			'REAL',
+			'IMAG',
+			'ABS',
+		]:
+			return ct.InfoFlow(
+				dim_names=info.dim_names,
+				dim_idx=info.dim_idx,
+				output_names=info.output_names,
+				output_mathtypes={
+					output_name: (
+						spux.MathType.Real
+						if output_mathtype == spux.MathType.Complex
+						else output_mathtype
+					)
+					for output_name, output_mathtype in info.output_mathtypes.items()
+				},
+				output_units=info.output_units,
+			)
+		return info
 
 	@events.computes_output_socket(
 		'Data',
