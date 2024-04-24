@@ -548,7 +548,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Returns:
 			An empty `ct.InfoFlow`.
 		"""
-		return ct.InfoFlow()
+		return ct.FlowSignal.NoFlow
 
 	# Param
 	@property
@@ -561,7 +561,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Returns:
 			An empty `ct.ParamsFlow`.
 		"""
-		return ct.ParamsFlow()
+		return ct.FlowSignal.NoFlow
 
 	####################
 	# - FlowKind: Auxiliary
@@ -577,8 +577,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Value", but socket does not define it'
-		raise NotImplementedError(msg)
+		return ct.FlowSignal.NoFlow
 
 	@value.setter
 	def value(self, value: ct.ValueFlow) -> None:
@@ -604,8 +603,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.Array", but socket does not define it'
-		raise NotImplementedError(msg)
+		return ct.FlowSignal.NoFlow
 
 	@array.setter
 	def array(self, value: ct.ArrayFlow) -> None:
@@ -631,8 +629,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.LazyValueFunc", but socket does not define it'
-		raise NotImplementedError(msg)
+		return ct.FlowSignal.NoFlow
 
 	@lazy_value_func.setter
 	def lazy_value_func(self, lazy_value_func: ct.LazyValueFuncFlow) -> None:
@@ -658,8 +655,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to get "ct.FlowKind.LazyArrayRange", but socket does not define it'
-		raise NotImplementedError(msg)
+		return ct.FlowSignal.NoFlow
 
 	@lazy_array_range.setter
 	def lazy_array_range(self, value: ct.LazyArrayRangeFlow) -> None:
@@ -892,7 +888,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		# Info Drawing
 		if self.use_info_draw:
 			info = self.compute_data(kind=ct.FlowKind.Info)
-			self.draw_info(info, col)
+			if not ct.FlowSignal.check(info):
+				self.draw_info(info, col)
 
 	def draw_output(
 		self,
@@ -920,7 +917,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		# Draw FlowKind.Info related Information
 		if self.use_info_draw:
 			info = self.compute_data(kind=ct.FlowKind.Info)
-			self.draw_info(info, col)
+			if not ct.FlowSignal.check(info):
+				self.draw_info(info, col)
 
 	####################
 	# - UI Methods: Active FlowKind

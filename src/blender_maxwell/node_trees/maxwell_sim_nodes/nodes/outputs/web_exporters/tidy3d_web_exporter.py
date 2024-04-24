@@ -209,7 +209,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		else:
 			self.cache_est_cost = -1.0
 			self.loose_output_sockets = {}
-			self.inputs['Cloud Task'].sync_prepare_new_task()
+			self.inputs['Cloud Task'].on_prepare_new_task()
 			self.inputs['Cloud Task'].locked = False
 
 		self.on_prop_changed('tracked_task_id', context)
@@ -249,7 +249,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		# Declare to Cloud Task that it Exists Now
 		## This will change the UI to not allow free-text input.
 		## If the socket is linked, this errors.
-		self.inputs['Cloud Task'].sync_created_new_task(cloud_task)
+		self.inputs['Cloud Task'].on_new_task_created(cloud_task)
 
 		# Track the Newly Uploaded Task ID
 		self.tracked_task_id = cloud_task.task_id

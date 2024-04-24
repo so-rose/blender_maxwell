@@ -34,10 +34,6 @@ class DataBLSocket(base.MaxwellSimSocket):
 			must_match={'format': self.format},
 		)
 
-	@property
-	def value(self):
-		return None
-
 	####################
 	# - UI
 	####################

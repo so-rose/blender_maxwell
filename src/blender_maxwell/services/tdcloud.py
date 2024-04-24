@@ -268,7 +268,7 @@ class TidyCloudTasks:
 
 		# Get Sim Data (from file and/or download)
 		if path_sim.is_file():
-			log.info('Loading Cloud Task "%s" from "%s"', cloud_task.cloud_id, path_sim)
+			log.info('Loading Cloud Task "%s" from "%s"', cloud_task.task_id, path_sim)
 			sim_data = td.SimulationData.from_file(str(path_sim))
 		else:
 			log.info(
@@ -420,7 +420,7 @@ class TidyCloudTasks:
 
 		# Repopulate All Caches
 		## By deleting the folder ID, all tasks within will be reloaded
-		del cls.cache_folder_tasks[folder_id]
+		cls.cache_folder_tasks.pop(folder_id, None)
 
 		return dict(cls.tasks(cloud_folder).items())
 

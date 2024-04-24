@@ -218,36 +218,42 @@ class VizNode(base.MaxwellSimNode):
 	## - Mode Searcher
 	#####################
 	@property
-	def _info(self) -> ct.InfoFlow:
+	def data_info(self) -> ct.InfoFlow:
 		return self._compute_input('Data', kind=ct.FlowKind.Info)
 
 	def search_modes(self) -> list[ct.BLEnumElement]:
-		info = self._info
-		return [
-			(
-				viz_mode,
-				VizMode.to_name(viz_mode),
-				VizMode.to_name(viz_mode),
-				VizMode.to_icon(viz_mode),
-				i,
-			)
-			for i, viz_mode in enumerate(VizMode.valid_modes_for(info))
-		]
+		if not ct.FlowSignal.check(self.data_info):
+			return [
+				(
+					viz_mode,
+					VizMode.to_name(viz_mode),
+					VizMode.to_name(viz_mode),
+					VizMode.to_icon(viz_mode),
+					i,
+				)
+				for i, viz_mode in enumerate(VizMode.valid_modes_for(self.data_info))
+			]
+
+		return []
 
 	#####################
 	## - Target Searcher
 	#####################
 	def search_targets(self) -> list[ct.BLEnumElement]:
-		return [
-			(
-				viz_target,
-				VizTarget.to_name(viz_target),
-				VizTarget.to_name(viz_target),
-				VizTarget.to_icon(viz_target),
-				i,
-			)
-			for i, viz_target in enumerate(VizTarget.valid_targets_for(self.viz_mode))
-		]
+		if self.viz_mode != 'NONE':
+			return [
+				(
+					viz_target,
+					VizTarget.to_name(viz_target),
+					VizTarget.to_name(viz_target),
+					VizTarget.to_icon(viz_target),
+					i,
+				)
+				for i, viz_target in enumerate(
+					VizTarget.valid_targets_for(self.viz_mode)
+				)
+			]
+		return []
 
 	#####################
 	## - UI
@@ -264,17 +270,20 @@ class VizNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		socket_name='Data',
 		input_sockets={'Data'},
+		run_on_init=True,
 		input_socket_kinds={'Data': ct.FlowKind.Info},
 		input_sockets_optional={'Data': True},
-		run_on_init=True,
 	)
-	def on_socket_set_changed(self, input_sockets: dict):
-		self.viz_mode = bl_cache.Signal.ResetEnumItems
-		self.viz_target = bl_cache.Signal.ResetEnumItems
+	def on_any_changed(self, input_sockets: dict):
+		if not ct.FlowSignal.check_single(
+			input_sockets['Data'], ct.FlowSignal.FlowPending
+		):
+			self.viz_mode = bl_cache.Signal.ResetEnumItems
+			self.viz_target = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
 		prop_name='viz_mode',
-		# run_on_init=True,
+		## run_on_init: Implicitly triggered.
 	)
 	def on_viz_mode_changed(self):
 		self.viz_target = bl_cache.Signal.ResetEnumItems
@@ -287,7 +296,6 @@ class VizNode(base.MaxwellSimNode):
 		props={'viz_mode', 'viz_target', 'colormap'},
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': {ct.FlowKind.Array, ct.FlowKind.Info}},
-		input_sockets_optional={'Data': True},
 		stop_propagation=True,
 	)
 	def on_show_plot(
@@ -296,12 +304,19 @@ class VizNode(base.MaxwellSimNode):
 		input_sockets: dict,
 		props: dict,
 	):
+		# Retrieve Inputs
 		array_flow = input_sockets['Data'][ct.FlowKind.Array]
 		info = input_sockets['Data'][ct.FlowKind.Info]
 
-		if input_sockets['Data'] is None:
+		# Check Flow
+		if (
+			any(ct.FlowSignal.check(inp) for inp in [array_flow, info])
+			or props['viz_mode'] == 'NONE'
+			or props['viz_target'] == 'NONE'
+		):
 			return
 
+		# Viz Target
 		if props['viz_target'] == VizTarget.Plot2D:
 			managed_objs['plot'].mpl_plot_to_image(
 				lambda ax: VizMode.to_plotter(props['viz_mode'])(

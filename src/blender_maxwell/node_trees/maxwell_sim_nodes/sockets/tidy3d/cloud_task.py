@@ -1,6 +1,10 @@
+import enum
+
 import bpy
 
-from .....services import tdcloud
+from blender_maxwell.services import tdcloud
+from blender_maxwell.utils import bl_cache
+
 from ... import contracts as ct
 from .. import base
 
@@ -9,30 +13,32 @@ from .. import base
 # - Operators
 ####################
 class ReloadFolderList(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.sockets__reload_folder_list'
+	bl_idname = ct.OperatorType.SocketReloadCloudFolderList
 	bl_label = 'Reload Tidy3D Folder List'
 	bl_description = 'Reload the the cached Tidy3D folder list'
 
 	@classmethod
 	def poll(cls, context):
 		return (
-			tdcloud.IS_AUTHENTICATED
+			tdcloud.IS_ONLINE
+			and tdcloud.IS_AUTHENTICATED
 			and hasattr(context, 'socket')
 			and hasattr(context.socket, 'socket_type')
 			and context.socket.socket_type == ct.SocketType.Tidy3DCloudTask
 		)
 
 	def execute(self, context):
-		socket = context.socket
+		bl_socket = context.socket
 
 		tdcloud.TidyCloudFolders.update_folders()
-		tdcloud.TidyCloudTasks.update_tasks(socket.existing_folder_id)
+		tdcloud.TidyCloudTasks.update_tasks(bl_socket.existing_folder_id)
+		bl_socket.on_cloud_updated()
 
 		return {'FINISHED'}
 
 
 class Authenticate(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.sockets__authenticate'
+	bl_idname = ct.OperatorType.SocketCloudAuthenticate
 	bl_label = 'Authenticate Tidy3D'
 	bl_description = 'Authenticate the Tidy3D Web API from a Cloud Task socket'
 
@@ -51,6 +57,7 @@ class Authenticate(bpy.types.Operator):
 		if not tdcloud.check_authentication():
 			tdcloud.authenticate_with_api_key(bl_socket.api_key)
 			bl_socket.api_key = ''
+			bl_socket.on_cloud_updated()
 
 		return {'FINISHED'}
 
@@ -59,6 +66,16 @@ class Authenticate(bpy.types.Operator):
 # - Socket
 ####################
 class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
+	"""Interact with Tidy3D Cloud Tasks.
+
+	Attributes:
+		api_key: API key for the Tidy3D cloud.
+		should_exist: Whether or not the cloud task should already exist.
+		existing_folder_id: ID of an existing folder on the Tidy3D cloud.
+		existing_task_id: ID of an existing task on the Tidy3D cloud.
+		new_task_name: Name of a new task to submit to the Tidy3D cloud.
+	"""
+
 	socket_type = ct.SocketType.Tidy3DCloudTask
 	bl_label = 'Tidy3D Cloud Task'
 
@@ -67,81 +84,90 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	# Authentication
-	api_key: bpy.props.StringProperty(
-		name='API Key',
-		description='API Key for the Tidy3D Cloud',
-		default='',
-		options={'SKIP_SAVE'},
-		subtype='PASSWORD',
+	api_key: str = bl_cache.BLField('', prop_ui=True, str_secret=True)
+	should_exist: bool = bl_cache.BLField(False)
+
+	existing_folder_id: enum.Enum = bl_cache.BLField(
+		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_folders()
+	)
+	existing_task_id: enum.Enum = bl_cache.BLField(
+		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_tasks()
 	)
 
-	# Task Existance Presumption
-	should_exist: bpy.props.BoolProperty(
-		name='Cloud Task Should Exist',
-		description='Whether or not the cloud task should already exist',
-		default=False,
-	)
+	new_task_name: str = bl_cache.BLField('', prop_ui=True)
 
-	# Identifiers
-	existing_folder_id: bpy.props.EnumProperty(
-		name='Folder of Cloud Tasks',
-		description='An existing folder on the Tidy3D Cloud',
-		items=lambda self, _: self.retrieve_folders(),
-		update=(lambda self, context: self.on_prop_changed('existing_folder_id', context)),
-	)
-	existing_task_id: bpy.props.EnumProperty(
-		name='Existing Cloud Task',
-		description='An existing task on the Tidy3D Cloud, within the given folder',
-		items=lambda self, _: self.retrieve_tasks(),
-		update=(lambda self, context: self.on_prop_changed('existing_task_id', context)),
-	)
+	@property
+	def capabilities(self) -> ct.CapabilitiesFlow:
+		return ct.CapabilitiesFlow(
+			socket_type=self.socket_type,
+			active_kind=self.active_kind,
+			must_match={'should_exist': self.should_exist},
+		)
 
-	# (Potential) New Task
-	new_task_name: bpy.props.StringProperty(
-		name='New Cloud Task Name',
-		description='Name of a new task to submit to the Tidy3D Cloud',
-		default='',
-		update=(lambda self, context: self.on_prop_changed('new_task_name', context)),
-	)
-
-	####################
-	# - Property Methods
-	####################
-	def sync_existing_folder_id(self, context):
-		folder_task_ids = self.retrieve_tasks()
-
-		self.existing_task_id = folder_task_ids[0][0]
-		## There's guaranteed to at least be one element, even if it's "NONE".
-
-		self.on_prop_changed('existing_folder_id', context)
-
-	def retrieve_folders(self) -> list[tuple]:
-		folders = tdcloud.TidyCloudFolders.folders()
-		if not folders:
-			return [('NONE', 'None', 'No folders')]
-
-		return [
-			(
-				cloud_folder.folder_id,
-				cloud_folder.folder_name,
-				f"Folder 'cloud_folder.folder_name' with ID {folder_id}",
-			)
-			for folder_id, cloud_folder in folders.items()
-		]
-
-	def retrieve_tasks(self) -> list[tuple]:
-		if (
-			cloud_folder := tdcloud.TidyCloudFolders.folders().get(
+	@property
+	def value(
+		self,
+	) -> tuple[tdcloud.CloudTaskName, tdcloud.CloudFolder] | tdcloud.CloudTask | None:
+		if tdcloud.IS_AUTHENTICATED:
+			# Retrieve Folder
+			cloud_folder = tdcloud.TidyCloudFolders.folders().get(
 				self.existing_folder_id
 			)
-		) is None:
-			return [('NONE', 'None', "Folder doesn't exist")]
+			if cloud_folder is None:
+				msg = f"Selected folder {cloud_folder} doesn't exist (it was probably deleted elsewhere)"
+				raise RuntimeError(msg)
 
+			# Doesn't Exist: Return Construction Information
+			if not self.should_exist:
+				return (self.new_task_name, cloud_folder)
+
+			# No Task Selected: Return None
+			if self.existing_task_id == 'NONE':
+				return None
+
+			# Retrieve Cloud Task
+			cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
+				self.existing_task_id
+			)
+			if cloud_task is None:
+				msg = f"Selected task {cloud_task} doesn't exist (it was probably deleted elsewhere)"
+				raise RuntimeError(msg)
+
+			return cloud_task
+
+		return None
+
+	####################
+	# - Searchers
+	####################
+	def search_cloud_folders(self) -> list[ct.BLEnumElement]:
+		if tdcloud.IS_AUTHENTICATED:
+			return [
+				(
+					cloud_folder.folder_id,
+					cloud_folder.folder_name,
+					f'Folder {cloud_folder.folder_name} (ID={folder_id})',
+					'',
+					i,
+				)
+				for i, (folder_id, cloud_folder) in enumerate(
+					tdcloud.TidyCloudFolders.folders().items()
+				)
+			]
+
+		return []
+
+	def search_cloud_tasks(self) -> list[ct.BLEnumElement]:
+		if self.existing_folder_id == 'NONE' or not tdcloud.IS_AUTHENTICATED:
+			return []
+
+		# Get Cloud Folder
+		cloud_folder = tdcloud.TidyCloudFolders.folders().get(self.existing_folder_id)
+		if cloud_folder is None:
+			return []
+
+		# Get Cloud Tasks
 		tasks = tdcloud.TidyCloudTasks.tasks(cloud_folder)
-		if not tasks:
-			return [('NONE', 'None', 'No tasks in folder')]
-
 		return [
 			(
 				## Task ID
@@ -158,9 +184,9 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 				## Task Description
 				f'Task Status: {task.status}',
 				## Status Icon
-				_icon
+				icon
 				if (
-					_icon := {
+					icon := {
 						'draft': 'SEQUENCE_COLOR_08',
 						'initialized': 'SHADING_SOLID',
 						'queued': 'SEQUENCE_COLOR_03',
@@ -185,52 +211,28 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		]
 
 	####################
-	# - Task Sync Methods
+	# - Node-Initiated Updates
 	####################
-	def sync_created_new_task(self, cloud_task):
-		"""Called whenever the task specified in `new_task_name` has been actually created.
-
-		This changes the socket somewhat: Folder/task IDs are set, and the socket is switched to presume that the task exists.
-
-		If the socket is linked, then an error is raised.
-		"""
-		# Propagate along Link
-		if self.is_linked:
-			msg = 'Cannot sync newly created task to linked Cloud Task socket.'
-			raise ValueError(msg)
-			## TODO: A little aggressive. Is there a good use case?
-
-		# Synchronize w/New Task Information
+	def on_new_task_created(self, cloud_task: tdcloud.CloudTask) -> None:
 		self.existing_folder_id = cloud_task.folder_id
 		self.existing_task_id = cloud_task.task_id
 		self.should_exist = True
 
-	def sync_prepare_new_task(self):
-		"""Called to switch the socket to no longer presume that the task it specifies exists (yet).
-
-		If the socket is linked, then an error is raised.
-		"""
-		# Propagate along Link
-		if self.is_linked:
-			msg = 'Cannot sync newly created task to linked Cloud Task socket.'
-			raise ValueError(msg)
-			## TODO: A little aggressive. Is there a good use case?
-
-		# Synchronize w/New Task Information
+	def on_prepare_new_task(self):
 		self.should_exist = False
 
+	def on_cloud_updated(self):
+		self.existing_folder_id = bl_cache.Signal.ResetEnumItems
+		self.existing_task_id = bl_cache.Signal.ResetEnumItems
+
 	####################
-	# - Socket UI
+	# - UI
 	####################
 	def draw_label_row(self, row: bpy.types.UILayout, text: str):
 		row.label(text=text)
 
 		auth_icon = 'LOCKVIEW_ON' if tdcloud.IS_AUTHENTICATED else 'LOCKVIEW_OFF'
-		row.operator(
-			Authenticate.bl_idname,
-			text='',
-			icon=auth_icon,
-		)
+		row.label(text='', icon=auth_icon)
 
 	def draw_prelock(
 		self,
@@ -245,11 +247,11 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 			row.label(text='Tidy3D API Key')
 
 			row = col.row()
-			row.prop(self, 'api_key', text='')
+			row.prop(self, self.blfields['api_key'], text='')
 
 			row = col.row()
 			row.operator(
-				Authenticate.bl_idname,
+				ct.OperatorType.SocketCloudAuthenticate,
 				text='Connect',
 			)
 
@@ -260,9 +262,9 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		# Cloud Folder Selector
 		row = col.row()
 		row.label(icon='FILE_FOLDER')
-		row.prop(self, 'existing_folder_id', text='')
+		row.prop(self, self.blfields['existing_folder_id'], text='')
 		row.operator(
-			ReloadFolderList.bl_idname,
+			ct.OperatorType.SocketReloadCloudFolderList,
 			text='',
 			icon='FILE_REFRESH',
 		)
@@ -272,47 +274,14 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		if not self.should_exist:
 			row = col.row()
 			row.label(icon='NETWORK_DRIVE')
-			row.prop(self, 'new_task_name', text='')
+			row.prop(self, self.blfields['new_task_name'], text='')
 
 			col.separator(factor=1.0)
 
 			box = col.box()
 			row = box.row()
 
-		row.prop(self, 'existing_task_id', text='')
-
-	@property
-	def value(
-		self,
-	) -> tuple[tdcloud.CloudTaskName, tdcloud.CloudFolder] | tdcloud.CloudTask | None:
-		# Retrieve Folder
-		## Authentication is presumed OK
-		if (
-			cloud_folder := tdcloud.TidyCloudFolders.folders().get(
-				self.existing_folder_id
-			)
-		) is None:
-			msg = "Selected folder doesn't exist (it was probably deleted elsewhere)"
-			raise RuntimeError(msg)
-
-		# No Tasks in Folder
-		## The UI should set to "NONE" when there are no tasks in a folder
-		if self.existing_task_id == 'NONE':
-			return None
-
-		# Retrieve Task
-		if self.should_exist:
-			if (
-				cloud_task := tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
-					self.existing_task_id
-				)
-			) is None:
-				msg = "Selected task doesn't exist (it was probably deleted elsewhere)"
-				raise RuntimeError(msg)
-
-			return cloud_task
-
-		return (self.new_task_name, cloud_folder)
+		row.prop(self, self.blfields['existing_task_id'], text='')
 
 
 ####################

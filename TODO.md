@@ -541,19 +541,19 @@ We need support for arbitrary objects, but still backed by the persistance seman
 - [ ] Implement Enum property, (also see <https://developer.blender.org/docs/release_notes/4.1/python_api/#enum-id-properties>)
 	- Use this to bridge the enum UI to actual StrEnum objects.
 	- This also maybe enables some very interesting use cases when it comes to ex. static verifiability of data provided to event callbacks.
-- [ ] Ensure certain options, namely `name` (as `ui_name`), `default`, `subtype`, (numeric) `min`, `max`, `step`, `precision`, (string) `maxlen`, `search`, and `search_options`, can be passed down via the `BLField()` constructor.
+- [x] Ensure certain options, namely `name` (as `ui_name`), `default`, `subtype`, (numeric) `min`, `max`, `step`, `precision`, (string) `maxlen`, `search`, and `search_options`, can be passed down via the `BLField()` constructor.
 	- [ ] Make a class method that parses the docstring.
 	- [ ] `description`: Use the docstring parser to extract the first description sentence of the attribute name from the subclass docstring, so we are both encouraged to document our nodes/sockets, and so we're not documenting twice.
 
 ### Niceness
 - [x] Rename the internal property to 'blfield__'.
-- [ ] Add a method that extracts the internal property name, for places where we need the Blender property name.
+- [x] Add a method that extracts the internal property name, for places where we need the Blender property name.
 	- **Key use case**: `draw.prop(self, self.field_name._bl_prop_name)`, which is also nice b/c no implicit string-based reference.
 	- The work done above with types makes this as fast and useful as internal props. Just make sure we validate that the type can be usefully accessed like this.
-- [ ] Add a field method (called w/instance) that updates min/max/etc. on the 'blfield__' prop, in a native property type compatible manner: https://developer.blender.org/docs/release_notes/3.0/python_api/#idproperty-ui-data-api
+- [x] Add a field method (called w/instance) that updates min/max/etc. on the 'blfield__' prop, in a native property type compatible manner: https://developer.blender.org/docs/release_notes/3.0/python_api/#idproperty-ui-data-api
     - Should also throw appropriate errors for invalid access from Python, while Blender handles access from the inside.
     - This allows us
-- [ ] Similarly, a field method that gets the 'blfield__' prop data as a dictionary.
+- [x] Similarly, a field method that gets the 'blfield__' prop data as a dictionary.
 
 ### Parallel Features
 - [x] Move serialization work to a `utils`.
@@ -569,3 +569,29 @@ We need support for arbitrary objects, but still backed by the persistance seman
     - Benefit: Any serializable object can be "simply used", at almost native speed (due to the aggressive read-cache).
     - Benefit: Better error properties for updating, access, setting, etc. .
 	- Benefit: Validate usage in a vastly greater amount of contexts.
+
+
+
+# Overnight Ideas
+- [ ] Fix file-load hiccups by persisting `_enum_cb_cache` and `_str_cb_cache`.
+
+- [x] Implement `FlowSignal`s as special return values for `@computes_output_socket`, instead of juggling `None`.
+	- `FlowSignal.FlowPending`: Data was asked for, and it's not yet available, but it's expected to become available.
+		- Semantically: "Just hold on for a hot second".
+		- Return: If in any socket data provided to cb, return the same signal insted of running the callback.
+		- Caches: Don't invalidate caches, since the user will expect their data to still persist.
+		- Net Effect: Absolutely nothing happens. Perhaps we can recolor the nodes, though.
+
+	- [ ] `FlowSignal.FlowLost`: Output socket requires data that simply isn't available.
+		- Generally, nodes don't return it
+		- Return: If in any socket data provided to cb, return the same signal insted of running the callback.
+		- Caches: Do invalidate caches, since the user will expect their data to still persist.
+		- Net Effect: Sometimes, stuff happens in the output method [BB
+		- Net Effect: `DataChanged` is an event that signifies Node data will reset along the flow.
+
+- [ ] Packing Imported Data in `Tidy3D Web Importer`, `Tidy3D File Importer`.
+	- Just `.to_hdf5_gz()` it into a `BytesIO`,  Base85
+
+- [ ] Remove Matplotlib Bottlenecks (~70ms -> ~5ms)
+	- Reuse `fig` per-`ManagedBLImage` (~25ms)
+	- Use `Agg` backend, plot with `fig.canvas.draw()`, and load image buffer directly as np.frombuffer(ax.figure.canvas.tostring_rgb(), dtype=np.uint8) (~40ms).

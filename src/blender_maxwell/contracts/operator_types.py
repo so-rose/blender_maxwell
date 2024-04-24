@@ -15,3 +15,10 @@ class OperatorType(enum.StrEnum):
 	ManagePyDeps = enum.auto()
 
 	ConnectViewerNode = enum.auto()
+
+	# Socket: Tidy3DCloudTask
+	SocketCloudAuthenticate = enum.auto()
+	SocketReloadCloudFolderList = enum.auto()
+
+	# Node: Tidy3DWebImporter
+	NodeLoadCloudSim = enum.auto()

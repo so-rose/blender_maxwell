@@ -375,6 +375,7 @@ class CachedBLProperty:
 			return
 
 		if value == Signal.InvalidateCache:
+			log.critical('![%s] Invalidating %s', str(bl_instance), str(self))
 			self._invalidate_cache(bl_instance)
 			return
 
@@ -447,7 +448,7 @@ class CachedBLProperty:
 ####################
 # - Property Decorators
 ####################
-def cached_bl_property(persist: bool = ...):
+def cached_bl_property(persist: bool = False):
 	"""Decorator creating a descriptor that caches a computed attribute of a Blender node/socket.
 
 	Many such `bl_instance`s rely on fast access to computed, cached properties, for example to ensure that `draw()` remains effectively non-blocking.
@@ -545,6 +546,7 @@ class BLField:
 		self._str_cb = str_cb
 		self._enum_cb = enum_cb
 
+		## HUGE TODO: Persist these
 		self._str_cb_cache = {}
 		self._enum_cb_cache = {}
 
@@ -575,6 +577,7 @@ class BLField:
 		Thus, whenever the user wants the items in the enum to update, they must manually set the descriptor attribute to the value `Signal.ResetEnumItems`.
 		"""
 		if self._enum_cb_cache.get(_self.instance_id) is None:
+			log.critical('REGEN ENUM')
 			# Retrieve Dynamic Enum Items
 			enum_items = self._enum_cb(_self, context)
 

@@ -597,7 +597,7 @@ class MaxwellSimNode(bpy.types.Node):
 			)
 
 		if optional:
-			return None
+			return ct.FlowSignal.NoFlow
 
 		msg = f'Input socket "{input_socket_name}" on "{self.bl_idname}" is not an active input socket'
 		raise ValueError(msg)
@@ -645,14 +645,8 @@ class MaxwellSimNode(bpy.types.Node):
 			return output_socket_methods[0](self)
 
 		# Auxiliary Fallbacks
-		if kind == ct.FlowKind.Info:
-			return ct.InfoFlow()
-
-		if kind == ct.FlowKind.Params:
-			return ct.ParamsFlow()
-
-		if optional:
-			return None
+		if optional or kind in [ct.FlowKind.Info, ct.FlowKind.Params]:
+			return ct.FlowSignal.NoFlow
 
 		msg = f'No output method for ({output_socket_name}, {kind})'
 		raise ValueError(msg)
@@ -777,6 +771,12 @@ class MaxwellSimNode(bpy.types.Node):
 			# Invalidate Input Socket Cache
 			if input_socket_name is not None:
 				if socket_kinds is None:
+					log.critical(
+						'[%s] Invalidating: (%s, %s)',
+						self.sim_node_name,
+						input_socket_name,
+						str(socket_kinds),
+					)
 					self._compute_input.invalidate(
 						input_socket_name=input_socket_name,
 						kind=...,
@@ -784,6 +784,12 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 				else:
 					for socket_kind in socket_kinds:
+						log.critical(
+							'[%s] Invalidating: (%s, %s)',
+							self.sim_node_name,
+							input_socket_name,
+							str(socket_kind),
+						)
 						self._compute_input.invalidate(
 							input_socket_name=input_socket_name,
 							kind=socket_kind,
@@ -838,6 +844,15 @@ class MaxwellSimNode(bpy.types.Node):
 		)
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
+			log.critical(
+				'$[%s] [%s %s %s %s] Running: (%s)',
+				self.sim_node_name,
+				event,
+				socket_name,
+				socket_kinds,
+				prop_name,
+				event_method.callback_info,
+			)
 			event_method(self)
 
 		# Propagate Event to All Sockets in "Trigger Direction"

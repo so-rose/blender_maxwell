@@ -270,6 +270,8 @@ def event_decorator(
 			)
 
 			# Call Method
+			## If there is a FlowPending, then the method would fail.
+			## Therefore, propagate FlowPending if found.
 			return method(
 				node,
 				**method_kw_args,

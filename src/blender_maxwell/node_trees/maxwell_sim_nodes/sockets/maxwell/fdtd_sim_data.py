@@ -6,10 +6,6 @@ class MaxwellFDTDSimDataBLSocket(base.MaxwellSimSocket):
 	socket_type = ct.SocketType.MaxwellFDTDSimData
 	bl_label = 'Maxwell FDTD Simulation'
 
-	@property
-	def value(self):
-		return None
-
 
 ####################
 # - Socket Configuration

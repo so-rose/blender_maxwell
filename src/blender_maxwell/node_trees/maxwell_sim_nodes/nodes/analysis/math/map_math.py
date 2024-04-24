@@ -54,9 +54,8 @@ class MapMathNode(base.MaxwellSimNode):
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
-		items = []
 		if self.active_socket_set == 'By Element':
-			items += [
+			items = [
 				# General
 				('REAL', 'ℝ(v)', 'real(v) (by el)'),
 				('IMAG', 'Im(v)', 'imag(v) (by el)'),
@@ -73,11 +72,11 @@ class MapMathNode(base.MaxwellSimNode):
 				('ATAN', 'atan v', 'atan(v) (by el)'),
 			]
 		elif self.active_socket_set in 'By Vector':
-			items += [
+			items = [
 				('NORM_2', '||v||₂', 'norm(v, 2) (by Vec)'),
 			]
 		elif self.active_socket_set == 'By Matrix':
-			items += [
+			items = [
 				# Matrix -> Number
 				('DET', 'det V', 'det(V) (by Mat)'),
 				('COND', 'κ(V)', 'cond(V) (by Mat)'),
@@ -96,7 +95,10 @@ class MapMathNode(base.MaxwellSimNode):
 				('SVD', 'svd V', 'svd(V) -> U·Σ·V† (by Mat)'),
 			]
 		elif self.active_socket_set == 'Expr':
-			items += [('EXPR_EL', 'By Element', 'Expression-defined (by el)')]
+			items = [('EXPR_EL', 'By Element', 'Expression-defined (by el)')]
+		else:
+			msg = f'Active socket set {self.active_socket_set} is unknown'
+			raise RuntimeError(msg)
 
 		return [(*item, '', i) for i, item in enumerate(items)]
 
@@ -127,6 +129,14 @@ class MapMathNode(base.MaxwellSimNode):
 		input_sockets_optional={'Mapper': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):
+		if (
+			ct.FlowSignal.check(input_sockets['Data']) or props['operation'] == 'NONE'
+		) or (
+			props['active_socket_set'] == 'Expr'
+			and ct.FlowSignal.check(input_sockets['Mapper'])
+		):
+			return ct.FlowSignal.FlowPending
+
 		mapping_func: typ.Callable[[jax.Array], jax.Array] = {
 			'By Element': {
 				'REAL': lambda data: jnp.real(data),
@@ -186,10 +196,16 @@ class MapMathNode(base.MaxwellSimNode):
 	def compute_array(self, output_sockets: dict) -> ct.ArrayFlow:
 		lazy_value_func = output_sockets['Data'][ct.FlowKind.LazyValueFunc]
 		params = output_sockets['Data'][ct.FlowKind.Params]
-		return ct.ArrayFlow(
-			values=lazy_value_func.func_jax(*params.func_args, **params.func_kwargs),
-			unit=None,  ## TODO: Unit Propagation
-		)
+
+		if all(not ct.FlowSignal.check(inp) for inp in [lazy_value_func, params]):
+			return ct.ArrayFlow(
+				values=lazy_value_func.func_jax(
+					*params.func_args, **params.func_kwargs
+				),
+				unit=None,
+			)
+
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - Compute Auxiliary: Info / Params
@@ -205,11 +221,16 @@ class MapMathNode(base.MaxwellSimNode):
 		info = input_sockets['Data']
 
 		# Complex -> Real
-		if props['active_socket_set'] == 'By Element' and props['operation'] in [
-			'REAL',
-			'IMAG',
-			'ABS',
-		]:
+		if (
+			props['active_socket_set'] == 'By Element'
+			and props['operation']
+			in [
+				'REAL',
+				'IMAG',
+				'ABS',
+			]
+			and not ct.FlowSignal.check(info)
+		):
 			return ct.InfoFlow(
 				dim_names=info.dim_names,
 				dim_idx=info.dim_idx,
@@ -232,7 +253,7 @@ class MapMathNode(base.MaxwellSimNode):
 		input_sockets={'Data'},
 		input_socket_kinds={'Data': ct.FlowKind.Params},
 	)
-	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow:
+	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
 		return input_sockets['Data']
 
 
