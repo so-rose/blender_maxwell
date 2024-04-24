@@ -430,6 +430,11 @@ class MaxwellSimNode(bpy.types.Node):
 			# Remove Sockets
 			for bl_socket in bl_sockets_to_remove:
 				node_tree.on_node_socket_removed(bl_socket)
+				self._compute_input.invalidate(
+					input_socket_name=bl_socket.name,
+					kind=...,
+					unit_system=...,
+				)
 				all_bl_sockets.remove(bl_socket)
 
 	def _add_new_active_sockets(self):
@@ -771,12 +776,6 @@ class MaxwellSimNode(bpy.types.Node):
 			# Invalidate Input Socket Cache
 			if input_socket_name is not None:
 				if socket_kinds is None:
-					log.critical(
-						'[%s] Invalidating: (%s, %s)',
-						self.sim_node_name,
-						input_socket_name,
-						str(socket_kinds),
-					)
 					self._compute_input.invalidate(
 						input_socket_name=input_socket_name,
 						kind=...,
@@ -784,12 +783,6 @@ class MaxwellSimNode(bpy.types.Node):
 					)
 				else:
 					for socket_kind in socket_kinds:
-						log.critical(
-							'[%s] Invalidating: (%s, %s)',
-							self.sim_node_name,
-							input_socket_name,
-							str(socket_kind),
-						)
 						self._compute_input.invalidate(
 							input_socket_name=input_socket_name,
 							kind=socket_kind,
@@ -844,15 +837,11 @@ class MaxwellSimNode(bpy.types.Node):
 		)
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
-			log.critical(
-				'$[%s] [%s %s %s %s] Running: (%s)',
-				self.sim_node_name,
-				event,
-				socket_name,
-				socket_kinds,
-				prop_name,
-				event_method.callback_info,
-			)
+			# log.critical(
+			# '$[%s] [%s %s %s %s] Running: (%s)',
+			# self.sim_node_name,
+			# event_method.callback_info,
+			# )
 			event_method(self)
 
 		# Propagate Event to All Sockets in "Trigger Direction"

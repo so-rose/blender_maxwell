@@ -69,10 +69,8 @@ class ExtractDataNode(base.MaxwellSimNode):
 			'Sim Data', kind=ct.FlowKind.Value, optional=True
 		)
 		if not ct.FlowSignal.check(sim_data):
-			log.critical('Sim Data was Not FlowSignal')
 			return sim_data
 
-		log.critical('Sim Data was FlowSignal: %s', str(sim_data))
 		return None
 
 	@bl_cache.cached_bl_property()
@@ -190,9 +188,6 @@ class ExtractDataNode(base.MaxwellSimNode):
 		Returns:
 			Valid `self.extract_filter` in a format compatible with dynamic `EnumProperty`.
 		"""
-		log.critical('Searching Extract Filters')
-		log.critical(self.sim_data_monitor_nametype)
-		log.critical(self.monitor_data_components)
 		if self.sim_data_monitor_nametype is not None:
 			return [
 				(monitor_name, monitor_name, monitor_type.removesuffix('Data'), '', i)
