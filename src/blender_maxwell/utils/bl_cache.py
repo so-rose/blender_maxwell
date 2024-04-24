@@ -375,7 +375,6 @@ class CachedBLProperty:
 			return
 
 		if value == Signal.InvalidateCache:
-			log.critical('![%s] Invalidating %s', str(bl_instance), str(self))
 			self._invalidate_cache(bl_instance)
 			return
 
@@ -577,7 +576,6 @@ class BLField:
 		Thus, whenever the user wants the items in the enum to update, they must manually set the descriptor attribute to the value `Signal.ResetEnumItems`.
 		"""
 		if self._enum_cb_cache.get(_self.instance_id) is None:
-			log.critical('REGEN ENUM')
 			# Retrieve Dynamic Enum Items
 			enum_items = self._enum_cb(_self, context)
 

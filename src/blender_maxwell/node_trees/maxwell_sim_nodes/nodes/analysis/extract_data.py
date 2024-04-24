@@ -1,9 +1,11 @@
+"""Declares `ExtractDataNode`."""
+
 import enum
 import typing as typ
 
 import bpy
 import jax
-import jax.numpy as jnp
+import numpy as np
 import sympy.physics.units as spu
 import tidy3d as td
 
@@ -246,9 +248,17 @@ class ExtractDataNode(base.MaxwellSimNode):
 			row = col.row()
 			box = row.box()
 			grid = box.grid_flow(row_major=True, columns=2, even_columns=True)
-			for monitor_name, monitor_type in self.sim_data_monitor_nametype.items():
-				grid.label(text=monitor_name)
-				grid.label(text=monitor_type)
+			if has_sim_data:
+				for (
+					monitor_name,
+					monitor_type,
+				) in self.sim_data_monitor_nametype.items():
+					grid.label(text=monitor_name)
+					grid.label(text=monitor_type.replace('Data', ''))
+			elif has_monitor_data:
+				for component_name in self.monitor_data_components:
+					grid.label(text=component_name)
+					grid.label(text=self.monitor_data_type)
 
 	####################
 	# - Events
@@ -319,6 +329,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		"""Compute `Data:Array` by querying an array-like attribute of `Monitor Data`, then constructing an `ct.ArrayFlow`.
 
 		Uses the internal `xarray` data returned by Tidy3D.
+		By using `np.array` on the `.data` attribute of the `xarray`, instead of the usual JAX array constructor, we should save a (possibly very big) copy.
 
 		Notes:
 			The attribute to query is read directly from `self.extract_filter`.
@@ -335,8 +346,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 			xarray_data = getattr(
 				input_sockets['Monitor Data'], props['extract_filter']
 			)
-			return ct.ArrayFlow(values=jnp.array(xarray_data.data), unit=None)
-			## TODO: Try np.array instead, as it removes a copy, while still (I believe) being JIT-compatible.
+			return ct.ArrayFlow(values=np.array(xarray_data.data), unit=None)
 
 		return ct.FlowSignal.FlowPending
 
@@ -373,6 +383,11 @@ class ExtractDataNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Params,
 	)
 	def compute_data_params(self) -> ct.ParamsFlow:
+		"""Declare an empty `Data:Params`, to indicate the start of a function-composition pipeline.
+
+		Returns:
+			A completely empty `ParamsFlow`, ready to be composed.
+		"""
 		return ct.ParamsFlow()
 
 	@events.computes_output_socket(
