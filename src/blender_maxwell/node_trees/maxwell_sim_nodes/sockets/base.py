@@ -838,10 +838,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			node: The node within which the socket is embedded.
 			text: The socket's name in the UI.
 		"""
-		col = layout.column(align=False)
+		col = layout.column()
 
 		# Row: Label
-		row = col.row(align=False)
+		row = col.row()
+		row.alignment = 'LEFT'
 
 		## Lock Check
 		if self.locked:
@@ -849,7 +850,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		## Link Check
 		if self.is_linked:
-			row.label(text=text)
+			self.draw_input_label_row(row, text)
 		else:
 			# User Label Row (incl. Units)
 			if self.use_units:
@@ -912,7 +913,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		col = layout.column()
 		row = col.row()
 		row.alignment = 'RIGHT'
-		row.label(text=text)
+		if self.is_linked:
+			self.draw_output_label_row(row, text)
+		else:
+			row.label(text=text)
 
 		# Draw FlowKind.Info related Information
 		if self.use_info_draw:
@@ -930,8 +934,46 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	) -> None:
 		"""Draw the label row, which is at the same height as the socket shape.
 
+		Will only display if the socket is an **unlinked input socket**.
+
 		Notes:
 			Can be overriden by individual socket classes, if they need to alter the way that the label row is drawn.
+
+		Parameters:
+			row: Target for defining UI elements.
+			text: The socket's name in the UI.
+		"""
+		row.label(text=text)
+
+	def draw_input_label_row(
+		self,
+		row: bpy.types.UILayout,
+		text: str,
+	) -> None:
+		"""Draw the label row, which is at the same height as the socket shape.
+
+		Will only display if the socket is a **linked input socket**.
+
+		Notes:
+			Can be overriden by individual socket classes, if they need to alter the way that the label row is drawn.
+
+		Parameters:
+			row: Target for defining UI elements.
+			text: The socket's name in the UI.
+		"""
+		row.label(text=text)
+
+	def draw_output_label_row(
+		self,
+		row: bpy.types.UILayout,
+		text: str,
+	) -> None:
+		"""Draw the output label row, which is at the same height as the socket shape.
+
+		Will only display if the socket is an **output socket**.
+
+		Notes:
+			Can be overriden by individual socket classes, if they need to alter the way that the output label row is drawn.
 
 		Parameters:
 			row: Target for defining UI elements.

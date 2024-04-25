@@ -71,6 +71,16 @@ class MathType(enum.StrEnum):
 			MathType.Complex: complex,
 		}[value]
 
+	@staticmethod
+	def to_str(value: typ.Self) -> type:
+		return {
+			MathType.Bool: 'T|F',
+			MathType.Integer: 'ℤ',
+			MathType.Rational: 'ℚ',
+			MathType.Real: 'ℝ',
+			MathType.Complex: 'ℂ',
+		}[value]
+
 
 ####################
 # - Units

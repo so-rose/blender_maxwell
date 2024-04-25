@@ -1,3 +1,5 @@
+"""Declares `MapMathNode`."""
+
 import enum
 import typing as typ
 
@@ -19,7 +21,80 @@ X_COMPLEX = sp.Symbol('x', complex=True)
 
 
 class MapMathNode(base.MaxwellSimNode):
-	"""Applies a function by-structure to the data.
+	r"""Applies a function by-structure to the data.
+
+	The shape, type, and interpretation of the input/output data is dynamically shown.
+
+	# Socket Sets
+	The line between a "map" and a "filter" is generally a matter of taste.
+	In general, "map" provides "do something to each of x" operations.
+
+	While it is often generally assumed that `numpy` broadcasting rules are well-known, dimensional data is inherently complicated.
+	Therefore, we choose an explicit, opinionated approach to "how things are mapped", prioritizing predictability over flexibility.
+
+	## By Element
+	Applies a function to each scalar number of the array.
+
+	:::{.callout-tip title="Example"}
+	Say we have a standard `(50, 3)` array with a `float32` (`f32`) datatype.
+	We could interpret such an indexed structure as an **element map**:
+
+	$$
+		A:\,\,\underbrace{(\mathbb{Z}_{50}, \mathbb{Z}_3)}_{\texttt{(50,3)}} \to \underbrace{(\mathbb{R})}_{\texttt{f32}}
+	$$
+
+	`By Element` simply applies a function to each output value, $\mathbb{R}$, producing a new $A$ with the same dimensions.
+	Note that the datatype might be altered, ex. `\mathbb{C} \to \mathbb{R}`, as part of the function.
+	:::
+
+
+	## By Vector
+	Applies a function to each vector, the elements of which span the **last axis**.
+
+	This **might** produce a well-known dimensionality change, depending on what each vector maps to.
+
+	:::{.callout-tip title="Example"}
+	Let's build on the `By Element` example, by interpreting it as a list of column vectors, and taking the length of each.
+
+	`By Vector` operates on the same data, but interpreted in a slightly deconstructed way:
+
+	$$
+		A:\,\,\underbrace{(\mathbb{Z}_{50})}_{\texttt{(50,)}} \to (\underbrace{(\mathbb{Z}_3)}_{\texttt{(3,)}} \to \underbrace{(\mathbb{R})}_{\texttt{f32}})
+	$$
+
+	`By Vector` applies a function to each $\underbrace{(\mathbb{Z}_3)}_{\texttt{(3,)}} \to \underbrace{(\mathbb{R})}_{\texttt{f32}}$.
+	Applying a standard 2-norm
+
+	$$
+		||\cdot||_2:\,\,\,\,(\underbrace{(\mathbb{Z}_3)}_{\texttt{(3,)}} \to \underbrace{(\mathbb{R})}_{\texttt{f32}}) \to \underbrace{(\mathbb{R})}_{\texttt{f32}}
+	$$
+
+	to our $A$ results in a new, reduced-dimension array:
+
+	$$
+		A_{||\cdot||_2}:\,\,\underbrace{(\mathbb{Z}_{50})}_{\texttt{(50,)}} \to \underbrace{(\mathbb{R})}_{\texttt{f32}}
+	$$
+	:::
+
+
+	## By Matrix
+	Applies a function to each matrix, the elements of which span the **last two axes**.
+
+	This **might** produce a well-known dimensionality change, depending on what each matrix maps to.
+
+	:::{.callout-tip title="Just Like Vectors"}
+	At this point, we reach 3D, and mental models become more difficult.
+
+	When dealing with high-dimensional arrays, it is suggested to draw out the math, ex. with the explicit notation introduced earlier.
+	:::
+
+	## Expr
+	Applies a user-sourced symbolic expression to a single symbol, with the symbol either representing (selectably) a single element, vector, or matrix.
+	The name and type of the available symbol is clearly shown, and most valid `sympy` expressions that you would expect to work, should work.
+
+	Use of expressions generally imposes no performance penalty: Just like the baked-in operations, it is compiled to a high-performance `jax` function.
+	Thus, it participates in the `ct.FlowKind.LazyValueFunc` composition chain.
+
 
 	Attributes:
 		operation: Operation to apply to the input.
@@ -219,32 +294,32 @@ class MapMathNode(base.MaxwellSimNode):
 	)
 	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
 		info = input_sockets['Data']
+		if ct.FlowSignal.check(info):
+			return ct.FlowSignal.FlowPending
 
 		# Complex -> Real
-		if (
-			props['active_socket_set'] == 'By Element'
-			and props['operation']
-			in [
+		if props['active_socket_set'] == 'By Element':
+			if props['operation'] in [
 				'REAL',
 				'IMAG',
 				'ABS',
-			]
-			and not ct.FlowSignal.check(info)
-		):
-			return ct.InfoFlow(
-				dim_names=info.dim_names,
-				dim_idx=info.dim_idx,
-				output_names=info.output_names,
-				output_mathtypes={
-					output_name: (
-						spux.MathType.Real
-						if output_mathtype == spux.MathType.Complex
-						else output_mathtype
-					)
-					for output_name, output_mathtype in info.output_mathtypes.items()
-				},
-				output_units=info.output_units,
-			)
+			]:
+				return ct.InfoFlow(
+					dim_names=info.dim_names,
+					dim_idx=info.dim_idx,
+					output_names=info.output_names,
+					output_mathtypes={
+						output_name: (
+							spux.MathType.Real
+							if output_mathtype == spux.MathType.Complex
+							else output_mathtype
+						)
+						for output_name, output_mathtype in info.output_mathtypes.items()
+					},
+					output_units=info.output_units,
+				)
+		if props['active_socket_set'] == 'By Vector':
+			pass
 		return info
 
 	@events.computes_output_socket(
