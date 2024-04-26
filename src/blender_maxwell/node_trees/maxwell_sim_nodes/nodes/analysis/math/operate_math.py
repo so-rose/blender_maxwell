@@ -190,7 +190,7 @@ class OperateMathNode(base.MaxwellSimNode):
 				('ADD', 'L + R', 'Add'),
 				('SUB', 'L - R', 'Subtract'),
 				('MUL', 'L · R', 'Multiply'),
-				('DIV', 'L ÷ R', 'Divide'),
+				('DIV', 'L / R', 'Divide'),
 				('POW', 'L^R', 'Power'),
 				('ATAN2', 'atan2(L,R)', 'atan2(L,R)'),
 			]
@@ -220,6 +220,24 @@ class OperateMathNode(base.MaxwellSimNode):
 		return [
 			(*item, '', i) if item is not None else None for i, item in enumerate(items)
 		]
+
+	####################
+	# - UI
+	####################
+	def draw_label(self):
+		labels = {
+			'ADD': lambda: 'Filter: L + R',
+			'SUB': lambda: 'Filter: L - R',
+			'MUL': lambda: 'Filter: L · R',
+			'DIV': lambda: 'Filter: L / R',
+			'POW': lambda: 'Filter: L^R',
+			'ATAN2': lambda: 'Filter: atan2(L,R)',
+		}
+
+		if (label := labels.get(self.operation)) is not None:
+			return label()
+
+		return self.bl_label
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['category'], text='')
@@ -383,8 +401,6 @@ class OperateMathNode(base.MaxwellSimNode):
 		has_data_l_params = not ct.FlowSignal.check(data_l_params)
 		has_data_r_info = not ct.FlowSignal.check(data_r_info)
 		has_data_r_params = not ct.FlowSignal.check(data_r_params)
-
-		#log.critical((props, input_sockets))
 
 		# Compose by Socket Set
 		## Data | Data

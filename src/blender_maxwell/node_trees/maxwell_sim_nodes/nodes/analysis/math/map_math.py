@@ -184,6 +184,43 @@ class MapMathNode(base.MaxwellSimNode):
 			(*item, '', i) if item is not None else None for i, item in enumerate(items)
 		]
 
+	####################
+	# - UI
+	####################
+	def draw_label(self):
+		labels = {
+			'REAL': 'ℝ(v)',
+			'IMAG': 'Im(v)',
+			'ABS': '|v|',
+			'SQ': 'v²',
+			'SQRT': '√v',
+			'INV_SQRT': '1/√v',
+			'COS': 'cos v',
+			'SIN': 'sin v',
+			'TAN': 'tan v',
+			'ACOS': 'acos v',
+			'ASIN': 'asin v',
+			'ATAN': 'atan v',
+			'NORM_2': '||v||₂',
+			'DET': 'det V',
+			'COND': 'κ(V)',
+			'NORM_FRO': '||V||_F',
+			'RANK': 'rank V',
+			'DIAG': 'diag V',
+			'EIG_VALS': 'eigvals V',
+			'SVD_VALS': 'svdvals V',
+			'INV': 'V⁻¹',
+			'TRA': 'Vt',
+			'QR': 'qr V',
+			'CHOL': 'chol V',
+			'SVD': 'svd V',
+		}
+
+		if (label := labels.get(self.operation)) is not None:
+			return 'Map: ' + label
+
+		return self.bl_label
+
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['operation'], text='')
 
