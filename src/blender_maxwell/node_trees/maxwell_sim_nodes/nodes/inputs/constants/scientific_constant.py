@@ -14,7 +14,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	bl_label = 'Scientific Constant'
 
 	output_sockets: typ.ClassVar = {
-		'Value': sockets.AnySocketDef(),
+		'Value': sockets.ExprSocketDef(),
 	}
 
 	####################

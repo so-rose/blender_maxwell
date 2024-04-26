@@ -215,6 +215,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
+	def draw_label(self):
+		has_sim_data = self.sim_data_monitor_nametype is not None
+		has_monitor_data = self.monitor_data_components is not None
+
+		if has_sim_data or has_monitor_data:
+			return f'Extract: {self.extract_filter}'
+
+		return self.bl_label
+
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
 		"""Draw node properties in the node.
 
@@ -222,43 +231,6 @@ class ExtractDataNode(base.MaxwellSimNode):
 			col: UI target for drawing.
 		"""
 		col.prop(self, self.blfields['extract_filter'], text='')
-
-	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		"""Draw dynamic information in the node, for user consideration.
-
-		Parameters:
-			col: UI target for drawing.
-		"""
-		has_sim_data = self.sim_data_monitor_nametype is not None
-		has_monitor_data = self.monitor_data_components is not None
-
-		if has_sim_data or has_monitor_data:
-			# Header
-			row = col.row()
-			row.alignment = 'CENTER'
-			if has_sim_data:
-				row.label(text=f'{len(self.sim_data_monitor_nametype)} Monitors')
-			elif has_monitor_data:
-				row.label(text=f'{self.monitor_data_type} Monitor Data')
-
-			# Monitor Data Contents
-			## TODO: More compact double-split
-			## TODO: Output shape data.
-			## TODO: Local ENUM_MANY tabs for visible column selection?
-			row = col.row()
-			box = row.box()
-			grid = box.grid_flow(row_major=True, columns=2, even_columns=True)
-			if has_sim_data:
-				for (
-					monitor_name,
-					monitor_type,
-				) in self.sim_data_monitor_nametype.items():
-					grid.label(text=monitor_name)
-					grid.label(text=monitor_type.replace('Data', ''))
-			elif has_monitor_data:
-				for component_name in self.monitor_data_components:
-					grid.label(text=component_name)
-					grid.label(text=self.monitor_data_type)
 
 	####################
 	# - Events
@@ -416,9 +388,8 @@ class ExtractDataNode(base.MaxwellSimNode):
 		else:
 			return ct.FlowSignal.FlowPending
 
-		info_output_names = {
-			'output_names': [props['extract_filter']],
-		}
+		info_output_name = props['extract_filter']
+		info_output_shape = None
 
 		# Compute InfoFlow from XArray
 		## XYZF: Field / Permittivity / FieldProjectionCartesian
@@ -442,13 +413,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Complex},
-				output_units={
-					props['extract_filter']: spu.volt / spu.micrometer
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Complex,
+				output_unit=(
+					spu.volt / spu.micrometer
 					if props['monitor_data_type'] == 'Field'
 					else None
-				},
+				),
 			)
 
 		## XYZT: FieldTime
@@ -468,17 +440,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Complex},
-				output_units={
-					props['extract_filter']: (
-						spu.volt / spu.micrometer
-						if props['extract_filter'].startswith('E')
-						else spu.ampere / spu.micrometer
-					)
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Complex,
+				output_unit=(
+					spu.volt / spu.micrometer
 					if props['monitor_data_type'] == 'Field'
 					else None
-				},
+				),
 			)
 
 		## F: Flux
@@ -492,9 +461,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Real},
-				output_units={props['extract_filter']: spu.watt},
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Real,
+				output_unit=spu.watt,
 			)
 
 		## T: FluxTime
@@ -508,9 +478,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Real},
-				output_units={props['extract_filter']: spu.watt},
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Real,
+				output_unit=spu.watt,
 			)
 
 		## RThetaPhiF: FieldProjectionAngle
@@ -537,15 +508,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Real},
-				output_units={
-					props['extract_filter']: (
-						spu.volt / spu.micrometer
-						if props['extract_filter'].startswith('E')
-						else spu.ampere / spu.micrometer
-					)
-				},
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Real,
+				output_unit=(
+					spu.volt / spu.micrometer
+					if props['extract_filter'].startswith('E')
+					else spu.ampere / spu.micrometer
+				),
 			)
 
 		## UxUyRF: FieldProjectionKSpace
@@ -570,15 +540,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Real},
-				output_units={
-					props['extract_filter']: (
-						spu.volt / spu.micrometer
-						if props['extract_filter'].startswith('E')
-						else spu.ampere / spu.micrometer
-					)
-				},
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Real,
+				output_unit=(
+					spu.volt / spu.micrometer
+					if props['extract_filter'].startswith('E')
+					else spu.ampere / spu.micrometer
+				),
 			)
 
 		## OrderxOrderyF: Diffraction
@@ -600,15 +569,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				**info_output_names,
-				output_mathtypes={props['extract_filter']: spux.MathType.Real},
-				output_units={
-					props['extract_filter']: (
-						spu.volt / spu.micrometer
-						if props['extract_filter'].startswith('E')
-						else spu.ampere / spu.micrometer
-					)
-				},
+				output_name=props['extract_filter'],
+				output_shape=None,
+				output_mathtype=spux.MathType.Real,
+				output_unit=(
+					spu.volt / spu.micrometer
+					if props['extract_filter'].startswith('E')
+					else spu.ampere / spu.micrometer
+				),
 			)
 
 		msg = f'Unsupported Monitor Data Type {props["monitor_data_type"]} in "FlowKind.Info" of "{self.bl_label}"'

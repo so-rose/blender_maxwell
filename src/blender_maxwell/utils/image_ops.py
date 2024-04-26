@@ -117,8 +117,8 @@ def rgba_image_from_2d_map(
 def plot_hist_1d(
 	data: jtyp.Float32[jtyp.Array, ' size'], info, ax: mpl_ax.Axis
 ) -> None:
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	ax.hist(data, bins=30, alpha=0.75)
 	ax.set_title('Histogram')
@@ -130,8 +130,8 @@ def plot_box_plot_1d(
 	data: jtyp.Float32[jtyp.Array, ' heights'], info, ax: mpl_ax.Axis
 ) -> None:
 	x_name = info.dim_names[0]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	ax.boxplot(data)
 	ax.set_title('Box Plot')
@@ -147,8 +147,8 @@ def plot_curve_2d(
 
 	x_name = info.dim_names[0]
 	x_unit = info.dim_units[x_name]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	times.append(time.perf_counter() - times[0])
 	ax.plot(info.dim_idx_arrays[0], data)
@@ -167,8 +167,8 @@ def plot_points_2d(
 ) -> None:
 	x_name = info.dim_names[0]
 	x_unit = info.dim_units[x_name]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	ax.scatter(info.dim_idx_arrays[0], data, alpha=0.6)
 	ax.set_title('2D Points')
@@ -179,8 +179,8 @@ def plot_points_2d(
 def plot_bar(data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis) -> None:
 	x_name = info.dim_names[0]
 	x_unit = info.dim_units[x_name]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	ax.bar(info.dim_idx_arrays[0], data, alpha=0.7)
 	ax.set_title('2D Bar')
@@ -194,8 +194,8 @@ def plot_curves_2d(
 ) -> None:
 	x_name = info.dim_names[0]
 	x_unit = info.dim_units[x_name]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	for category in range(data.shape[1]):
 		ax.plot(data[:, 0], data[:, 1])
@@ -211,8 +211,8 @@ def plot_filled_curves_2d(
 ) -> None:
 	x_name = info.dim_names[0]
 	x_unit = info.dim_units[x_name]
-	y_name = info.output_names[0]
-	y_unit = info.output_units[y_name]
+	y_name = info.output_name
+	y_unit = info.output_unit
 
 	ax.fill_between(info.dim_arrays[0], data[:, 0], info.dim_arrays[0], data[:, 1])
 	ax.set_title('2D Curves')

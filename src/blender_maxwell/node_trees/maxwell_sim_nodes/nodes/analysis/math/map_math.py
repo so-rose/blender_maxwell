@@ -138,6 +138,7 @@ class MapMathNode(base.MaxwellSimNode):
 				('SQ', 'v²', 'v^2 (by el)'),
 				('SQRT', '√v', 'sqrt(v) (by el)'),
 				('INV_SQRT', '1/√v', '1/sqrt(v) (by el)'),
+				None,
 				# Trigonometry
 				('COS', 'cos v', 'cos(v) (by el)'),
 				('SIN', 'sin v', 'sin(v) (by el)'),
@@ -148,6 +149,7 @@ class MapMathNode(base.MaxwellSimNode):
 			]
 		elif self.active_socket_set in 'By Vector':
 			items = [
+				# Vector -> Number
 				('NORM_2', '||v||₂', 'norm(v, 2) (by Vec)'),
 			]
 		elif self.active_socket_set == 'By Matrix':
@@ -157,13 +159,16 @@ class MapMathNode(base.MaxwellSimNode):
 				('COND', 'κ(V)', 'cond(V) (by Mat)'),
 				('NORM_FRO', '||V||_F', 'norm(V, frobenius) (by Mat)'),
 				('RANK', 'rank V', 'rank(V) (by Mat)'),
+				None,
 				# Matrix -> Array
 				('DIAG', 'diag V', 'diag(V) (by Mat)'),
 				('EIG_VALS', 'eigvals V', 'eigvals(V) (by Mat)'),
 				('SVD_VALS', 'svdvals V', 'diag(svd(V)) (by Mat)'),
+				None,
 				# Matrix -> Matrix
 				('INV', 'V⁻¹', 'V^(-1) (by Mat)'),
 				('TRA', 'Vt', 'V^T (by Mat)'),
+				None,
 				# Matrix -> Matrices
 				('QR', 'qr V', 'qr(V) -> Q·R (by Mat)'),
 				('CHOL', 'chol V', 'cholesky(V) -> V·V† (by Mat)'),
@@ -175,7 +180,9 @@ class MapMathNode(base.MaxwellSimNode):
 			msg = f'Active socket set {self.active_socket_set} is unknown'
 			raise RuntimeError(msg)
 
-		return [(*item, '', i) for i, item in enumerate(items)]
+		return [
+			(*item, '', i) if item is not None else None for i, item in enumerate(items)
+		]
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['operation'], text='')
@@ -185,8 +192,9 @@ class MapMathNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		prop_name='active_socket_set',
+		run_on_init=True,
 	)
-	def on_operation_changed(self):
+	def on_socket_set_changed(self):
 		self.operation = bl_cache.Signal.ResetEnumItems
 
 	####################
@@ -204,11 +212,14 @@ class MapMathNode(base.MaxwellSimNode):
 		input_sockets_optional={'Mapper': True},
 	)
 	def compute_data(self, props: dict, input_sockets: dict):
+		has_data = not ct.FlowSignal.check(input_sockets['Data'])
 		if (
-			ct.FlowSignal.check(input_sockets['Data']) or props['operation'] == 'NONE'
-		) or (
-			props['active_socket_set'] == 'Expr'
-			and ct.FlowSignal.check(input_sockets['Mapper'])
+			not has_data
+			or props['operation'] == 'NONE'
+			or (
+				props['active_socket_set'] == 'Expr'
+				and ct.FlowSignal.check(input_sockets['Mapper'])
+			)
 		):
 			return ct.FlowSignal.FlowPending
 
@@ -238,14 +249,14 @@ class MapMathNode(base.MaxwellSimNode):
 				'NORM_FRO': lambda data: jnp.linalg.matrix_norm(data, ord='fro'),
 				'RANK': lambda data: jnp.linalg.matrix_rank(data),
 				# Matrix -> Vec
-				'DIAG': lambda data: jnp.diag(data),
-				'EIG_VALS': lambda data: jnp.eigvals(data),
-				'SVD_VALS': lambda data: jnp.svdvals(data),
+				'DIAG': lambda data: jnp.diagonal(data, axis1=-2, axis2=-1),
+				'EIG_VALS': lambda data: jnp.linalg.eigvals(data),
+				'SVD_VALS': lambda data: jnp.linalg.svdvals(data),
 				# Matrix -> Matrix
-				'INV': lambda data: jnp.inv(data),
+				'INV': lambda data: jnp.linalg.inv(data),
 				'TRA': lambda data: jnp.matrix_transpose(data),
 				# Matrix -> Matrices
-				'QR': lambda data: jnp.inv(data),
+				'QR': lambda data: jnp.linalg.qr(data),
 				'CHOL': lambda data: jnp.linalg.cholesky(data),
 				'SVD': lambda data: jnp.linalg.svd(data),
 			},
@@ -298,28 +309,53 @@ class MapMathNode(base.MaxwellSimNode):
 			return ct.FlowSignal.FlowPending
 
 		# Complex -> Real
-		if props['active_socket_set'] == 'By Element':
-			if props['operation'] in [
-				'REAL',
-				'IMAG',
-				'ABS',
-			]:
-				return ct.InfoFlow(
-					dim_names=info.dim_names,
-					dim_idx=info.dim_idx,
-					output_names=info.output_names,
-					output_mathtypes={
-						output_name: (
-							spux.MathType.Real
-							if output_mathtype == spux.MathType.Complex
-							else output_mathtype
-						)
-						for output_name, output_mathtype in info.output_mathtypes.items()
-					},
-					output_units=info.output_units,
+		if props['active_socket_set'] == 'By Element' and props['operation'] in [
+			'REAL',
+			'IMAG',
+			'ABS',
+		]:
+			return info.set_output_mathtype(spux.MathType.Real)
+
+		if props['active_socket_set'] == 'By Vector' and props['operation'] in [
+			'NORM_2'
+		]:
+			return {
+				'NORM_2': lambda: info.collapse_output(
+					collapsed_name=f'||{info.output_name}||₂',
+					collapsed_mathtype=spux.MathType.Real,
+					collapsed_unit=info.output_unit,
 				)
-		if props['active_socket_set'] == 'By Vector':
-			pass
+			}[props['operation']]()
+
+		if props['active_socket_set'] == 'By Matrix' and props['operation'] in [
+			'DET',
+			'COND',
+			'NORM_FRO',
+			'RANK',
+		]:
+			return {
+				'DET': lambda: info.collapse_output(
+					collapsed_name=f'det {info.output_name}',
+					collapsed_mathtype=info.output_mathtype,
+					collapsed_unit=info.output_unit,
+				),
+				'COND': lambda: info.collapse_output(
+					collapsed_name=f'κ({info.output_name})',
+					collapsed_mathtype=spux.MathType.Real,
+					collapsed_unit=None,
+				),
+				'NORM_FRO': lambda: info.collapse_output(
+					collapsed_name=f'||({info.output_name}||_F',
+					collapsed_mathtype=spux.MathType.Real,
+					collapsed_unit=info.output_unit,
+				),
+				'RANK': lambda: info.collapse_output(
+					collapsed_name=f'rank {info.output_name}',
+					collapsed_mathtype=spux.MathType.Integer,
+					collapsed_unit=None,
+				),
+			}[props['operation']]()
+
 		return info
 
 	@events.computes_output_socket(

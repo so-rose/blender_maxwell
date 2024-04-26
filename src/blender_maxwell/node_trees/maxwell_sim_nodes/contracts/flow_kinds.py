@@ -68,6 +68,9 @@ class FlowKind(enum.StrEnum):
 		if kind == cls.LazyArrayRange:
 			return value.rescale_to_unit(unit_system[socket_type])
 
+		if kind == cls.Params:
+			return value.rescale_to_unit(unit_system[socket_type])
+
 		msg = 'Tried to scale unknown kind'
 		raise ValueError(msg)
 
@@ -321,6 +324,28 @@ class LazyValueFuncFlow:
 	func_kwargs: dict[str, type] = dataclasses.field(default_factory=dict)
 	supports_jax: bool = False
 	supports_numba: bool = False
+
+	# Merging
+	def __or__(
+		self,
+		other: typ.Self,
+	):
+		return LazyValueFuncFlow(
+			func=lambda *args, **kwargs: (
+				self.func(
+					*list(args[: len(self.func_args)]),
+					**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
+				),
+				other.func(
+					*list(args[len(self.func_args) :]),
+					**{k: v for k, v in kwargs.items() if k in other.func_kwargs},
+				),
+			),
+			func_args=self.func_args + other.func_args,
+			func_kwargs=self.func_kwargs | other.func_kwargs,
+			supports_jax=self.supports_jax and other.supports_jax,
+			supports_numba=self.supports_numba and other.supports_numba,
+		)
 
 	# Composition
 	def compose_within(
@@ -691,10 +716,21 @@ class ParamsFlow:
 	func_args: list[typ.Any] = dataclasses.field(default_factory=list)
 	func_kwargs: dict[str, typ.Any] = dataclasses.field(default_factory=dict)
 
+	def __or__(
+		self,
+		other: typ.Self,
+	):
+		return ParamsFlow(
+			func_args=self.func_args + other.func_args,
+			func_kwargs=self.func_kwargs | other.func_kwargs,
+		)
+
 	def compose_within(
 		self,
 		enclosing_func_args: list[tuple[type]] = (),
 		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
+		enclosing_func_arg_units: dict[str, type] = MappingProxyType({}),
+		enclosing_func_kwarg_units: dict[str, type] = MappingProxyType({}),
 	) -> typ.Self:
 		return ParamsFlow(
 			func_args=self.func_args + list(enclosing_func_args),
@@ -718,26 +754,133 @@ class InfoFlow:
 		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
 
 	@functools.cached_property
-	def dim_mathtypes(self) -> dict[str, int]:
+	def dim_mathtypes(self) -> dict[str, spux.MathType]:
 		return {
 			dim_name: dim_idx.mathtype for dim_name, dim_idx in self.dim_idx.items()
 		}
 
 	@functools.cached_property
-	def dim_units(self) -> dict[str, int]:
+	def dim_units(self) -> dict[str, spux.Unit]:
 		return {dim_name: dim_idx.unit for dim_name, dim_idx in self.dim_idx.items()}
 
 	@functools.cached_property
-	def dim_idx_arrays(self) -> list[ArrayFlow]:
+	def dim_idx_arrays(self) -> list[jax.Array]:
 		return [
 			dim_idx.realize().values
 			if isinstance(dim_idx, LazyArrayRangeFlow)
 			else dim_idx.values
 			for dim_idx in self.dim_idx.values()
 		]
-		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
 
 	# Output Information
-	output_names: list[str] = dataclasses.field(default_factory=list)
-	output_mathtypes: dict[str, spux.MathType] = dataclasses.field(default_factory=dict)
-	output_units: dict[str, spux.Unit | None] = dataclasses.field(default_factory=dict)
+	output_name: str = dataclasses.field(default_factory=list)
+	output_shape: tuple[int, ...] | None = dataclasses.field(default=None)
+	output_mathtype: spux.MathType = dataclasses.field()
+	output_unit: spux.Unit | None = dataclasses.field()
+
+	# Pinned Dimension Information
+	pinned_dim_names: list[str] = dataclasses.field(default_factory=list)
+	pinned_dim_values: dict[str, float | complex] = dataclasses.field(
+		default_factory=dict
+	)
+	pinned_dim_mathtypes: dict[str, spux.MathType] = dataclasses.field(
+		default_factory=dict
+	)
+	pinned_dim_units: dict[str, spux.Unit] = dataclasses.field(default_factory=dict)
+
+	####################
+	# - Methods
+	####################
+	def delete_dimension(self, dim_name: str) -> typ.Self:
+		"""Delete a dimension."""
+		return InfoFlow(
+			# Dimensions
+			dim_names=[
+				_dim_name for _dim_name in self.dim_names if _dim_name != dim_name
+			],
+			dim_idx={
+				_dim_name: dim_idx
+				for _dim_name, dim_idx in self.dim_idx.items()
+				if _dim_name != dim_name
+			},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)
+
+	def swap_dimensions(self, dim_0_name: str, dim_1_name: str) -> typ.Self:
+		"""Delete a dimension."""
+
+		# Compute Swapped Dimension Name List
+		def name_swapper(dim_name):
+			return (
+				dim_name
+				if dim_name not in [dim_0_name, dim_1_name]
+				else {dim_0_name: dim_1_name, dim_1_name: dim_0_name}[dim_name]
+			)
+
+		dim_names = [name_swapper(dim_name) for dim_name in self.dim_names]
+
+		# Compute Info
+		return InfoFlow(
+			# Dimensions
+			dim_names=dim_names,
+			dim_idx={dim_name: self.dim_idx[dim_name] for dim_name in dim_names},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)
+
+	def set_output_mathtype(self, output_mathtype: spux.MathType) -> typ.Self:
+		"""Set the MathType of a particular output name."""
+		return InfoFlow(
+			dim_names=self.dim_names,
+			dim_idx=self.dim_idx,
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=output_mathtype,
+			output_unit=self.output_unit,
+		)
+
+	def collapse_output(
+		self,
+		collapsed_name: str,
+		collapsed_mathtype: spux.MathType,
+		collapsed_unit: spux.Unit,
+	) -> typ.Self:
+		return InfoFlow(
+			# Dimensions
+			dim_names=self.dim_names,
+			dim_idx=self.dim_idx,
+			output_name=collapsed_name,
+			output_shape=None,
+			output_mathtype=collapsed_mathtype,
+			output_unit=collapsed_unit,
+		)
+
+	@functools.cached_property
+	def shift_last_input(self):
+		"""Shift the last input dimension to the output."""
+		return InfoFlow(
+			# Dimensions
+			dim_names=self.dim_names[:-1],
+			dim_idx={
+				dim_name: dim_idx
+				for dim_name, dim_idx in self.dim_idx.items()
+				if dim_name != self.dim_names[-1]
+			},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=(
+				(self.dim_lens[self.dim_names[-1]],)
+				if self.output_shape is None
+				else (self.dim_lens[self.dim_names[-1]], *self.output_shape)
+			),
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)

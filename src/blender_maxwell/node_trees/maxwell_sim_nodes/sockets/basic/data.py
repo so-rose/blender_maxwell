@@ -12,6 +12,10 @@ from .. import base
 log = logger.get(__name__)
 
 
+def unicode_superscript(n):
+	return ''.join(['⁰¹²³⁴⁵⁶⁷⁸⁹'[ord(c) - ord('0')] for c in str(n)])
+
+
 class DataInfoColumn(enum.StrEnum):
 	Length = enum.auto()
 	MathType = enum.auto()
@@ -49,11 +53,11 @@ class DataBLSocket(base.MaxwellSimSocket):
 	## TODO: typ.Literal['xarray', 'jax']
 
 	show_info_columns: bool = bl_cache.BLField(
-		False,
+		True,
 		prop_ui=True,
 	)
 	info_columns: DataInfoColumn = bl_cache.BLField(
-		{DataInfoColumn.MathType, DataInfoColumn.Length}, prop_ui=True, enum_many=True
+		{DataInfoColumn.MathType, DataInfoColumn.Unit}, prop_ui=True, enum_many=True
 	)
 
 	####################
@@ -71,8 +75,10 @@ class DataBLSocket(base.MaxwellSimSocket):
 	# - UI
 	####################
 	def draw_input_label_row(self, row: bpy.types.UILayout, text) -> None:
-		if self.format == 'jax':
-			row.label(text=text)
+		row.label(text=text)
+
+		info = self.compute_data(kind=ct.FlowKind.Info)
+		if not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names:
 			row.prop(self, self.blfields['info_columns'])
 			row.prop(
 				self,
@@ -83,7 +89,8 @@ class DataBLSocket(base.MaxwellSimSocket):
 			)
 
 	def draw_output_label_row(self, row: bpy.types.UILayout, text) -> None:
-		if self.format == 'jax':
+		info = self.compute_data(kind=ct.FlowKind.Info)
+		if not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names:
 			row.prop(
 				self,
 				self.blfields['show_info_columns'],
@@ -92,7 +99,8 @@ class DataBLSocket(base.MaxwellSimSocket):
 				icon=ct.Icon.ToggleSocketInfo,
 			)
 			row.prop(self, self.blfields['info_columns'])
-			row.label(text=text)
+
+		row.label(text=text)
 
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
 		if self.format == 'jax' and info.dim_names and self.show_info_columns:
@@ -118,16 +126,27 @@ class DataBLSocket(base.MaxwellSimSocket):
 					grid.label(text=spux.sp_to_str(dim_idx.unit))
 
 			# Outputs
-			for output_name in info.output_names:
-				grid.label(text=output_name)
-				if DataInfoColumn.Length in self.info_columns:
-					grid.label(text='', icon=ct.Icon.DataSocketOutput)
-				if DataInfoColumn.MathType in self.info_columns:
-					grid.label(
-						text=spux.MathType.to_str(info.output_mathtypes[output_name])
+			grid.label(text=info.output_name)
+			if DataInfoColumn.Length in self.info_columns:
+				grid.label(text='', icon=ct.Icon.DataSocketOutput)
+			if DataInfoColumn.MathType in self.info_columns:
+				grid.label(
+					text=(
+						spux.MathType.to_str(info.output_mathtype)
+						+ (
+							'ˣ'.join(
+								[
+									unicode_superscript(out_axis)
+									for out_axis in info.output_shape
+								]
+							)
+							if info.output_shape
+							else ''
+						)
 					)
-				if DataInfoColumn.Unit in self.info_columns:
-					grid.label(text=spux.sp_to_str(info.output_units[output_name]))
+				)
+			if DataInfoColumn.Unit in self.info_columns:
+				grid.label(text=f'{spux.sp_to_str(info.output_unit)}')
 
 
 ####################
@@ -137,9 +156,11 @@ class DataSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Data
 
 	format: typ.Literal['xarray', 'jax', 'monitor_data']
+	default_show_info_columns: bool = True
 
 	def init(self, bl_socket: DataBLSocket) -> None:
 		bl_socket.format = self.format
+		bl_socket.default_show_info_columns = self.default_show_info_columns
 
 
 ####################

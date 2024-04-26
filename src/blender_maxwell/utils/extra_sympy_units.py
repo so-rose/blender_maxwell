@@ -31,6 +31,18 @@ class MathType(enum.StrEnum):
 	Real = enum.auto()
 	Complex = enum.auto()
 
+	def combine(*mathtypes: list[typ.Self]) -> typ.Self:
+		if MathType.Complex in mathtypes:
+			return MathType.Complex
+		elif MathType.Real in mathtypes:
+			return MathType.Real
+		elif MathType.Rational in mathtypes:
+			return MathType.Rational
+		elif MathType.Integer in mathtypes:
+			return MathType.Integer
+		elif MathType.Bool in mathtypes:
+			return MathType.Bool
+
 	@staticmethod
 	def from_expr(sp_obj: SympyType) -> type:
 		if isinstance(sp_obj, sp.logic.boolalg.Boolean):
@@ -52,13 +64,13 @@ class MathType(enum.StrEnum):
 			int: MathType.Integer,
 			float: MathType.Real,
 			complex: MathType.Complex,
-			#jnp.int32: MathType.Integer,
-			#jnp.int64: MathType.Integer,
-			#jnp.float32: MathType.Real,
-			#jnp.float64: MathType.Real,
-			#jnp.complex64: MathType.Complex,
-			#jnp.complex128: MathType.Complex,
-			#jnp.bool_: MathType.Bool,
+			# jnp.int32: MathType.Integer,
+			# jnp.int64: MathType.Integer,
+			# jnp.float32: MathType.Real,
+			# jnp.float64: MathType.Real,
+			# jnp.complex64: MathType.Complex,
+			# jnp.complex128: MathType.Complex,
+			# jnp.bool_: MathType.Bool,
 		}[dtype]
 
 	@staticmethod
@@ -594,6 +606,21 @@ ComplexNumber: typ.TypeAlias = ConstrSympyExpr(
 	allowed_structures={'scalar'},
 )
 Number: typ.TypeAlias = IntNumber | RealNumber | ComplexNumber
+
+# Number
+PhysicalRealNumber: typ.TypeAlias = ConstrSympyExpr(
+	allow_variables=False,
+	allow_units=True,
+	allowed_sets={'integer', 'rational', 'real'},
+	allowed_structures={'scalar'},
+)
+PhysicalComplexNumber: typ.TypeAlias = ConstrSympyExpr(
+	allow_variables=False,
+	allow_units=True,
+	allowed_sets={'integer', 'rational', 'real', 'complex'},
+	allowed_structures={'scalar'},
+)
+PhysicalNumber: typ.TypeAlias = PhysicalRealNumber | PhysicalComplexNumber
 
 # Vector
 Real3DVector: typ.TypeAlias = ConstrSympyExpr(

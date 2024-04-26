@@ -15,6 +15,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	FilterMath = enum.auto()
 	ReduceMath = enum.auto()
 	OperateMath = enum.auto()
+	TransformMath = enum.auto()
 
 	# Inputs
 	WaveConstant = enum.auto()

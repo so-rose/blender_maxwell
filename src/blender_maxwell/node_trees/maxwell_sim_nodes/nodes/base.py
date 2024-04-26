@@ -1036,6 +1036,12 @@ class MaxwellSimNode(bpy.types.Node):
 		# Generate New Instance ID
 		self.reset_instance_id()
 
+		# Generate New Instance ID for Sockets
+		## Sockets can't do this themselves.
+		for bl_sockets in [self.inputs, self.outputs]:
+			for bl_socket in bl_sockets:
+				bl_socket.reset_instance_id()
+
 		# Generate New Sim Node Name
 		## Blender will automatically add .001 so that `self.name` is unique.
 		self.sim_node_name = self.name

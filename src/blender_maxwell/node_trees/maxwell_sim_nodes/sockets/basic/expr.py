@@ -86,9 +86,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	def lazy_value_func(self) -> ct.LazyValueFuncFlow:
 		return ct.LazyValueFuncFlow(
 			func=sp.lambdify(self.symbols, self.value, 'jax'),
-			func_args=[
-				(sym.name, spux.sympy_to_python_type(sym)) for sym in self.symbols
-			],
+			func_args=[spux.sympy_to_python_type(sym) for sym in self.symbols],
 			supports_jax=True,
 		)
 

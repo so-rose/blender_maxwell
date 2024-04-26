@@ -14,6 +14,8 @@
 - [x] Extract
 - [x] Viz
 - [x] Math / Map Math
+	- [ ] Remove "By x" socket set let socket sets only be "Function"/"Expr"; then add a dynamic enum underneath to select "By x" based on data support.
+	- [ ] Filter the operations based on data support, ex. use positive-definiteness to guide cholesky.
 - [x] Math / Filter Math
 - [ ] Math / Reduce Math
 - [ ] Math / Operate Math
@@ -34,8 +36,6 @@
 - [x] Constants / Blender Constant
 
 - [ ] Web / Tidy3D Web Importer
-	- [ ] Change to output only a `FilePath`, which can be plugged into a Tidy3D File Importer.
-	- [ ] Implement caching, such that the file will only download if the file doesn't already exist.
 	- [ ] Have a visual indicator for the current download status, with a manual re-download button.
 
 - [x] File Import / Material Import

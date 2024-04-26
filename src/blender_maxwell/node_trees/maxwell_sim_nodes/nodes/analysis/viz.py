@@ -61,32 +61,34 @@ class VizMode(enum.StrEnum):
 
 	@staticmethod
 	def valid_modes_for(info: ct.InfoFlow) -> list[typ.Self] | None:
+		EMPTY = ()
+		Z = spux.MathType.Integer
+		R = spux.MathType.Real
+		VM = VizMode
+
 		valid_viz_modes = {
-			((), (spux.MathType.Real,)): [VizMode.Hist1D, VizMode.BoxPlot1D],
-			((spux.MathType.Integer), (spux.MathType.Real)): [
-				VizMode.Hist1D,
-				VizMode.BoxPlot1D,
+			(EMPTY, (None, R)): [VM.Hist1D, VM.BoxPlot1D],
+			((Z), (None, R)): [
+				VM.Hist1D,
+				VM.BoxPlot1D,
 			],
-			((spux.MathType.Real,), (spux.MathType.Real,)): [
-				VizMode.Curve2D,
-				VizMode.Points2D,
-				VizMode.Bar,
+			((R,), (None, R)): [
+				VM.Curve2D,
+				VM.Points2D,
+				VM.Bar,
 			],
-			((spux.MathType.Real, spux.MathType.Integer), (spux.MathType.Real,)): [
-				VizMode.Curves2D,
-				VizMode.FilledCurves2D,
+			((R, Z), (None, R)): [
+				VM.Curves2D,
+				VM.FilledCurves2D,
 			],
-			((spux.MathType.Real, spux.MathType.Real), (spux.MathType.Real,)): [
-				VizMode.Heatmap2D,
+			((R, R), (None, R)): [
+				VM.Heatmap2D,
 			],
-			(
-				(spux.MathType.Real, spux.MathType.Real, spux.MathType.Real),
-				(spux.MathType.Real,),
-			): [VizMode.SqueezedHeatmap2D, VizMode.Heatmap3D],
+			((R, R, R), (None, R)): [VM.SqueezedHeatmap2D, VM.Heatmap3D],
 		}.get(
 			(
 				tuple(info.dim_mathtypes.values()),
-				tuple(info.output_mathtypes.values()),
+				(info.output_shape, info.output_mathtype),
 			)
 		)
 
@@ -161,10 +163,10 @@ class VizTarget(enum.StrEnum):
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
 		return {
-			VizTarget.Plot2D: 'Image (Plot)',
-			VizTarget.Pixels: 'Image (Pixels)',
-			VizTarget.PixelsPlane: 'Image (Plane)',
-			VizTarget.Voxels: '3D Field',
+			VizTarget.Plot2D: 'Plot',
+			VizTarget.Pixels: 'Pixels',
+			VizTarget.PixelsPlane: 'Image Plane',
+			VizTarget.Voxels: 'Voxels',
 		}[value]
 
 	@staticmethod

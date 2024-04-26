@@ -260,7 +260,9 @@ SOCKET_UNITS = {
 }
 
 
-def unit_to_socket_type(unit: spux.Unit) -> ST:
+def unit_to_socket_type(
+	unit: spux.Unit | None, fallback_mathtype: spux.MathType | None = None
+) -> ST:
 	"""Returns a SocketType that accepts the given unit.
 
 	Only the unit-compatibility is taken into account; in the case of overlap, several the ordering of `SOCKET_UNITS` determines which is returned.
@@ -269,6 +271,14 @@ def unit_to_socket_type(unit: spux.Unit) -> ST:
 	Returns:
 		**The first `SocketType` in `SOCKET_UNITS`, which contains the given unit as a valid possibility.
 	"""
+	if unit is None and fallback_mathtype is not None:
+		return {
+			spux.MathType.Integer: ST.IntegerNumber,
+			spux.MathType.Rational: ST.RationalNumber,
+			spux.MathType.Real: ST.RealNumber,
+			spux.MathType.Complex: ST.ComplexNumber,
+		}[fallback_mathtype]
+
 	for socket_type, _units in SOCKET_UNITS.items():
 		if unit in _units['values'].values():
 			return socket_type

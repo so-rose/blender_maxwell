@@ -913,10 +913,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		col = layout.column()
 		row = col.row()
 		row.alignment = 'RIGHT'
-		if self.is_linked:
-			self.draw_output_label_row(row, text)
-		else:
-			row.label(text=text)
+		self.draw_output_label_row(row, text)
 
 		# Draw FlowKind.Info related Information
 		if self.use_info_draw:
