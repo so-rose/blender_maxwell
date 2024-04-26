@@ -55,9 +55,13 @@ class DataBLSocket(base.MaxwellSimSocket):
 	show_info_columns: bool = bl_cache.BLField(
 		True,
 		prop_ui=True,
+		# use_prop_update=False,
 	)
 	info_columns: DataInfoColumn = bl_cache.BLField(
-		{DataInfoColumn.MathType, DataInfoColumn.Unit}, prop_ui=True, enum_many=True
+		{DataInfoColumn.MathType, DataInfoColumn.Unit},
+		prop_ui=True,
+		enum_many=True,
+		# use_prop_update=False,
 	)
 
 	####################
@@ -75,12 +79,25 @@ class DataBLSocket(base.MaxwellSimSocket):
 	# - UI
 	####################
 	def draw_input_label_row(self, row: bpy.types.UILayout, text) -> None:
-		row.label(text=text)
-
 		info = self.compute_data(kind=ct.FlowKind.Info)
-		if not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names:
-			row.prop(self, self.blfields['info_columns'])
-			row.prop(
+		has_dims = (
+			not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names
+		)
+
+		if has_dims:
+			split = row.split(factor=0.85, align=True)
+			_row = split.row(align=False)
+		else:
+			_row = row
+
+		_row.label(text=text)
+		if has_dims:
+			if self.show_info_columns:
+				_row.prop(self, self.blfields['info_columns'])
+
+			_row = split.row(align=True)
+			_row.alignment = 'RIGHT'
+			_row.prop(
 				self,
 				self.blfields['show_info_columns'],
 				toggle=True,
@@ -90,17 +107,34 @@ class DataBLSocket(base.MaxwellSimSocket):
 
 	def draw_output_label_row(self, row: bpy.types.UILayout, text) -> None:
 		info = self.compute_data(kind=ct.FlowKind.Info)
-		if not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names:
-			row.prop(
+		has_dims = (
+			not ct.FlowSignal.check(info) and self.format == 'jax' and info.dim_names
+		)
+
+		if has_dims:
+			split = row.split(factor=0.15, align=True)
+
+			_row = split.row(align=True)
+			_row.prop(
 				self,
 				self.blfields['show_info_columns'],
 				toggle=True,
 				text='',
 				icon=ct.Icon.ToggleSocketInfo,
 			)
-			row.prop(self, self.blfields['info_columns'])
 
-		row.label(text=text)
+			_row = split.row(align=False)
+			_row.alignment = 'RIGHT'
+			if self.show_info_columns:
+				_row.prop(self, self.blfields['info_columns'])
+			else:
+				_col = _row.column()
+				_col.alignment = 'EXPAND'
+				_col.label(text='')
+		else:
+			_row = row
+
+		_row.label(text=text)
 
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
 		if self.format == 'jax' and info.dim_names and self.show_info_columns:

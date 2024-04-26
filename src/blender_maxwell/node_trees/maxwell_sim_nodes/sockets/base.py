@@ -911,6 +911,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			text: The socket's name in the UI.
 		"""
 		col = layout.column()
+
+		# Row: Label
 		row = col.row()
 		row.alignment = 'RIGHT'
 		self.draw_output_label_row(row, text)
