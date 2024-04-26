@@ -226,16 +226,16 @@ class OperateMathNode(base.MaxwellSimNode):
 	####################
 	def draw_label(self):
 		labels = {
-			'ADD': lambda: 'Filter: L + R',
-			'SUB': lambda: 'Filter: L - R',
-			'MUL': lambda: 'Filter: L · R',
-			'DIV': lambda: 'Filter: L / R',
-			'POW': lambda: 'Filter: L^R',
-			'ATAN2': lambda: 'Filter: atan2(L,R)',
+			'ADD': lambda: 'L + R',
+			'SUB': lambda: 'L - R',
+			'MUL': lambda: 'L · R',
+			'DIV': lambda: 'L / R',
+			'POW': lambda: 'L^R',
+			'ATAN2': lambda: 'atan2(L,R)',
 		}
 
 		if (label := labels.get(self.operation)) is not None:
-			return label()
+			return 'Operate: ' + label()
 
 		return self.bl_label
 

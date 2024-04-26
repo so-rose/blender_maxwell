@@ -245,9 +245,9 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	@events.on_value_changed(
 		prop_name='sim_node_name',
-		props={'sim_node_name', 'managed_objs', 'managed_obj_types'},
+		stop_propagation=True,
 	)
-	def _on_sim_node_name_changed(self, props: dict):
+	def _on_sim_node_name_changed(self):
 		log.info(
 			'Changed Sim Node Name of a "%s" to "%s" (self=%s)',
 			self.bl_idname,
@@ -256,8 +256,7 @@ class MaxwellSimNode(bpy.types.Node):
 		)
 
 		# Set Name of Managed Objects
-		for mobj in props['managed_objs'].values():
-			mobj.name = props['sim_node_name']
+		self.managed_objs = bl_cache.Signal.InvalidateCache
 
 	@events.on_value_changed(prop_name='active_socket_set')
 	def _on_socket_set_changed(self):
@@ -291,16 +290,27 @@ class MaxwellSimNode(bpy.types.Node):
 				## TODO: Account for FlowKind
 				bl_socket.value = socket_value
 
+	@events.on_show_plot(stop_propagation=False)
+	def _on_show_plot(self):
+		node_tree = self.id_data
+		if len(self.event_methods_by_event[ct.FlowEvent.ShowPlot]) > 1:
+			## TODO: Is this check good enough?
+			## TODO: Set icon/indicator/something to make it clear which node is being previewed.
+			node_tree.report_show_plot(self)
+
 	@events.on_show_preview()
 	def _on_show_preview(self):
 		node_tree = self.id_data
 		node_tree.report_show_preview(self)
+
 		# Set Preview to Active
 		## Implicitly triggers any @on_value_changed for preview_active.
 		if not self.preview_active:
 			self.preview_active = True
 
-	@events.on_value_changed(prop_name='preview_active', props={'preview_active'})
+	@events.on_value_changed(
+		prop_name='preview_active', props={'preview_active'}, stop_propagation=True
+	)
 	def _on_preview_changed(self, props):
 		if not props['preview_active']:
 			for mobj in self.managed_objs.values():

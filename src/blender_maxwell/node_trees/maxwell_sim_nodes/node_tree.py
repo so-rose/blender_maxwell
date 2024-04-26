@@ -6,6 +6,7 @@ import bpy
 from blender_maxwell.utils import logger
 
 from . import contracts as ct
+from .managed_objs.managed_bl_image import ManagedBLImage
 
 log = logger.get(__name__)
 
@@ -210,6 +211,22 @@ class MaxwellSimTree(bpy.types.NodeTree):
 				bl_socket.locked = False
 
 	@contextlib.contextmanager
+	def replot(self) -> None:
+		self.is_currently_replotting = True
+		self.something_plotted = False
+
+		try:
+			yield
+		finally:
+			self.is_currently_replotting = False
+			if not self.something_plotted:
+				ManagedBLImage.hide_preview()
+
+	def report_show_plot(self, node: bpy.types.Node) -> None:
+		if hasattr(self, 'is_currently_replotting') and self.is_currently_replotting:
+			self.something_plotted = True
+
+	@contextlib.contextmanager
 	def repreview_all(self) -> None:
 		all_nodes_with_preview_active = {
 			node.instance_id: node for node in self.nodes if node.preview_active
@@ -220,15 +237,12 @@ class MaxwellSimTree(bpy.types.NodeTree):
 		try:
 			yield
 		finally:
+			self.is_currently_repreviewing = False
 			for dangling_previewed_node in [
 				node
 				for node_instance_id, node in all_nodes_with_preview_active.items()
 				if node_instance_id not in self.newly_previewed_nodes
 			]:
-				# log.debug(
-				# 'Removing Dangling Preview of Node "{%s}"',
-				# str(dangling_previewed_node),
-				# )
 				dangling_previewed_node.preview_active = False
 
 	def report_show_preview(self, node: bpy.types.Node) -> None:

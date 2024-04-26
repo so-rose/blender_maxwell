@@ -137,8 +137,12 @@ class ViewerNode(base.MaxwellSimNode):
 		props={'auto_plot'},
 	)
 	def on_changed_plot_preview(self, props):
-		if props['auto_plot']:
-			self.trigger_event(ct.FlowEvent.ShowPlot)
+		node_tree = self.id_data
+
+		# Unset Plot if Nothing Plotted
+		with node_tree.replot():
+			if props['auto_plot']:
+				self.trigger_event(ct.FlowEvent.ShowPlot)
 
 	@events.on_value_changed(
 		socket_name='Any',

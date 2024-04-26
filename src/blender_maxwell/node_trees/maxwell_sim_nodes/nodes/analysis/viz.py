@@ -186,6 +186,7 @@ class VizNode(base.MaxwellSimNode):
 
 	node_type = ct.NodeType.Viz
 	bl_label = 'Viz'
+	use_sim_node_name = True
 
 	####################
 	# - Sockets
@@ -285,7 +286,7 @@ class VizNode(base.MaxwellSimNode):
 
 	@events.on_value_changed(
 		prop_name='viz_mode',
-		## run_on_init: Implicitly triggered.
+		run_on_init=True,
 	)
 	def on_viz_mode_changed(self):
 		self.viz_target = bl_cache.Signal.ResetEnumItems

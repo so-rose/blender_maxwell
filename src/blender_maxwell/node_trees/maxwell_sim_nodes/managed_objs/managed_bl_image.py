@@ -1,3 +1,5 @@
+"""Declares `ManagedBLImage`."""
+
 import io
 import time
 import typing as typ
@@ -21,11 +23,16 @@ SPACE_TYPE = 'IMAGE_EDITOR'
 # - Managed BL Image
 ####################
 class ManagedBLImage(base.ManagedObj):
+	"""Represents a Blender Image datablock, encapsulating various useful interactions with it.
+
+	Attributes:
+		name: The name of the image.
+	"""
+
 	managed_obj_type = ct.ManagedObjType.ManagedBLImage
 	_bl_image_name: str
 
 	def __init__(self, name: str):
-		## TODO: Check that blender doesn't have any other images by the same name.
 		self._bl_image_name = name
 
 	@property
@@ -34,25 +41,32 @@ class ManagedBLImage(base.ManagedObj):
 
 	@name.setter
 	def name(self, value: str):
-		# Image Doesn't Exist
-		if not (bl_image := bpy.data.images.get(self._bl_image_name)):
-			# ...AND Desired Image Name is Not Taken
-			if not bpy.data.objects.get(value):
-				self._bl_image_name = value
-				return
+		log.info(
+			'Setting ManagedBLImage from "%s" to "%s"',
+			self.name,
+			value,
+		)
+		current_bl_image = bpy.data.images.get(self._bl_image_name)
+		wanted_bl_image = bpy.data.images.get(value)
 
-			# ...AND Desired Image Name is Taken
-			msg = f'Desired name {value} for BL image is taken'
+		# Yoink Image Name
+		if current_bl_image is None and wanted_bl_image is None:
+			self._bl_image_name = value
+
+		# Alter Image Name
+		elif current_bl_image is not None and wanted_bl_image is None:
+			self._bl_image_name = value
+			current_bl_image.name = value
+
+		# Overlapping Image Name
+		elif wanted_bl_image is not None:
+			msg = f'ManagedBLImage "{self._bl_image_name}" could not change its name to "{value}", since it already exists.'
 			raise ValueError(msg)
 
-		# Object DOES Exist
-		bl_image.name = value
-		self._bl_image_name = bl_image.name
-		## - When name exists, Blender adds .### to prevent overlap.
-		## - `set_name` is allowed to change the name; nodes account for this.
-
 	def free(self):
-		if bl_image := bpy.data.images.get(self.name):
+		bl_image = bpy.data.images.get(self.name)
+		if bl_image is not None:
+			log.debug('Freeing ManagedBLImage "%s"', self.name)
 			bpy.data.images.remove(bl_image)
 
 	####################
@@ -72,7 +86,8 @@ class ManagedBLImage(base.ManagedObj):
 		channels = 4 if color_model == 'RGBA' else 3
 
 		# Remove Image (if mismatch)
-		if (bl_image := bpy.data.images.get(self.name)) and (
+		bl_image = bpy.data.images.get(self.name)
+		if bl_image is not None and (
 			bl_image.size[0] != width_px
 			or bl_image.size[1] != height_px
 			or bl_image.channels != channels
@@ -81,7 +96,8 @@ class ManagedBLImage(base.ManagedObj):
 			self.free()
 
 		# Create Image w/Geometry (if none exists)
-		if not (bl_image := bpy.data.images.get(self.name)):
+		bl_image = bpy.data.images.get(self.name)
+		if bl_image is None:
 			bl_image = bpy.data.images.new(
 				self.name,
 				width=width_px,
@@ -89,44 +105,62 @@ class ManagedBLImage(base.ManagedObj):
 				float_buffer=dtype == 'float32',
 			)
 
+			# Enable Fake User
+			bl_image.use_fake_user = True
+
 		return bl_image
 
 	####################
 	# - Editor UX Manipulation
 	####################
-	@property
-	def preview_area(self) -> bpy.types.Area:
-		"""Returns the visible preview area in the Blender UI.
-		If none are valid, return None.
+	@classmethod
+	def preview_area(cls) -> bpy.types.Area | None:
+		"""Deduces a Blender UI area that can be used for image preview.
+
+		Returns:
+			A Blender UI area, if an appropriate one is visible; else `None`,
 		"""
 		valid_areas = [
 			area for area in bpy.context.screen.areas if area.type == AREA_TYPE
 		]
 		if valid_areas:
 			return valid_areas[0]
+		return None
 
-	@property
-	def preview_space(self) -> bpy.types.SpaceProperties:
-		"""Returns the visible preview space in the visible preview area of
-		the Blender UI
+	@classmethod
+	def preview_space(cls) -> bpy.types.SpaceProperties | None:
+		"""Deduces a Blender UI space, within `self.preview_area`, that can be used for image preview.
+
+		Returns:
+			A Blender UI space within `self.preview_area`, if it isn't None; else, `None`.
 		"""
-		if preview_area := self.preview_area:
-			return next(
+		preview_area = cls.preview_area()
+		if preview_area is not None:
+			valid_spaces = [
 				space for space in preview_area.spaces if space.type == SPACE_TYPE
-			)
+			]
+			if valid_spaces:
+				return valid_spaces[0]
+			return None
+		return None
 
 	####################
 	# - Methods
 	####################
 	def bl_select(self) -> None:
-		"""Synchronizes the managed object to the preview, by manipulating
-		relevant editors.
-		"""
-		if bl_image := bpy.data.images.get(self.name):
-			self.preview_space.image = bl_image
+		"""Selects the image by loading it into an on-screen UI area/space.
 
-	def hide_preview(self) -> None:
-		self.preview_space.image = None
+		Notes:
+			The image must already be available, else nothing will happen.
+		"""
+		bl_image = bpy.data.images.get(self.name)
+		if bl_image is not None:
+			self.preview_space().image = bl_image
+
+	@classmethod
+	def hide_preview(cls) -> None:
+		"""Deselects the image by loading `None` into the on-screen UI area/space."""
+		cls.preview_space().image = None
 
 	####################
 	# - Image Geometry
@@ -138,7 +172,7 @@ class ManagedBLImage(base.ManagedObj):
 		dpi: int | None = None,
 	):
 		# Compute Image Geometry
-		if preview_area := self.preview_area:
+		if preview_area := self.preview_area():
 			# Retrieve DPI from Blender Preferences
 			_dpi = bpy.context.preferences.system.dpi
 
@@ -188,12 +222,10 @@ class ManagedBLImage(base.ManagedObj):
 		image_data = func_image_data(4)
 		width_px = image_data.shape[1]
 		height_px = image_data.shape[0]
-		# log.debug('Computed Image Data (%f)', time.perf_counter() - time_start)
 
 		bl_image = self.bl_image(width_px, height_px, 'RGBA', 'float32')
 		bl_image.pixels.foreach_set(np.float32(image_data).ravel())
 		bl_image.update()
-		# log.debug('Set BL Image (%f)', time.perf_counter() - time_start)
 
 		if bl_select:
 			self.bl_select()
@@ -259,4 +291,15 @@ class ManagedBLImage(base.ManagedObj):
 		if bl_select:
 			self.bl_select()
 		times.append(time.perf_counter() - times[0])
-		#log.critical('Timing of MPL Plot: %s', str(times))
+		# log.critical('Timing of MPL Plot: %s', str(times))
+
+
+@bpy.app.handlers.persistent
+def pack_managed_images(_):
+	for image in bpy.data.images:
+		if image.is_dirty:
+			image.pack()
+			## TODO: Only pack images declared by a ManagedBLImage
+
+
+bpy.app.handlers.save_pre.append(pack_managed_images)
