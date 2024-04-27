@@ -98,22 +98,22 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	# Monitors
 	EHFieldMonitor = enum.auto()
 	PowerFluxMonitor = enum.auto()
-	# EpsilonTensorMonitor = enum.auto()
-	# DiffractionMonitor = enum.auto()
+	PermittivityMonitor = enum.auto()
+	DiffractionMonitor = enum.auto()
 	## Monitors / Projected
-	# CartesianNearFieldProjectionMonitor = enum.auto()
-	# ObservationAngleNearFieldProjectionMonitor = enum.auto()
-	# KSpaceNearFieldProjectionMonitor = enum.auto()
+	CartesianNearFieldProjectionMonitor = enum.auto()
+	AngleNearFieldProjectionMonitor = enum.auto()
+	KSpaceNearFieldProjectionMonitor = enum.auto()
 
 	# Sims
 	FDTDSim = enum.auto()
 	SimDomain = enum.auto()
 	SimGrid = enum.auto()
 	## Sims / Sim Grid Axis
-	# AutomaticSimGridAxis = enum.auto()
-	# ManualSimGridAxis = enum.auto()
-	# UniformSimGridAxis = enum.auto()
-	# ArraySimGridAxis = enum.auto()
+	AutomaticSimGridAxis = enum.auto()
+	ManualSimGridAxis = enum.auto()
+	UniformSimGridAxis = enum.auto()
+	ArraySimGridAxis = enum.auto()
 
 	# Utilities
 	Combine = enum.auto()

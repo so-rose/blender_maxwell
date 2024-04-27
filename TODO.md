@@ -1,5 +1,58 @@
 # Working TODO
 - [ ] Wave Constant
+- Bounds
+	- [ ] Boundary Conds
+	- [ ] PML
+	- [ ] PEC
+	- [ ] PMC
+	- [ ] Bloch
+	- [ ] Absorbing
+- Sources
+	- [ ] Temporal Shapes / Continuous Wave Temporal Shape
+	- [ ] Temporal Shapes / Symbolic Temporal Shape
+	- [ ] Plane Wave Source
+	- [ ] TFSF Source
+	- [ ] Gaussian Beam Source
+	- [ ] Astig. Gauss Beam
+- Material Data Fitting
+	- [ ] Data File Import
+	- [ ] DataFit Medium
+- Monitors
+	- [ ] EH Field
+	- [ ] Power Flux
+	- [ ] Permittivity
+	- [ ] Diffraction
+- Structures
+	- [ ] Cylinder
+	- [ ] Cylinder Array
+	- [ ] L-Cavity Cylinder
+	- [ ] H-Cavity Cylinder
+	- [ ] FCC Lattice
+	- [ ] BCC Lattice
+	- [ ] Monkey
+- Sim Grid
+	- [ ] Sim Grid
+	- [ ] Auto
+	- [ ] Manual
+	- [ ] Uniform
+	- [ ] Data
+- Mediums
+	- [ ] PEC Medium
+	- [ ] Isotropic Medium
+	- [ ] Sellmeier Medium
+	- [ ] Drude Medium
+	- [ ] Debye Medium
+	- [ ] Anisotropic Medium
+- Tidy3D
+	- [ ] Exporter
+	- [ ] Importer
+- Integration
+	- [ ] Simulation and Analysis of Maxim's Cavity
+- Constants
+	- [ ] Number Constant
+	- [ ] Vector Constant
+	- [ ] Physical Constant
+
 - [ ] Fix many problems by persisting `_enum_cb_cache` and `_str_cb_cache`.
 
 
@@ -178,7 +231,7 @@
 - [ ] Sim Grid Axes / Auto Sim Grid Axis
 - [ ] Sim Grid Axes / Manual Sim Grid Axis
 - [ ] Sim Grid Axes / Uniform Sim Grid Axis
-- [ ] Sim Grid Axes / Array Sim Grid Axis
+- [ ] Sim Grid Axes / Data Sim Grid Axis
 
 ## Utilities
 - [ ] Separate
@@ -411,6 +464,9 @@ Header color style can't be done, unfortunately. Body color feels unclean, so no
 ## Events
 - [ ] When a Blender object is selected, select the node that owns its ManagedObj.
 - [ ] Node button / shortcut / something to select the ManagedObj owned by a node.
+- Sync transformation of Blender object by user to its node properties.
+	- See <https://archive.blender.org/developer/P563>
+	- Also see <https://blender.stackexchange.com/questions/150809/how-to-get-an-event-when-an-object-is-selected>
 
 ## Socket Base Class
 - [ ] Collect `SocketDef` objects like we do with `BL_REGISTER`, without any special mojo sauce.
@@ -523,3 +579,5 @@ Unreported:
 - [ ] Dropping a link on empty space should query a menu of possible nodes, or if only one node is reasonable, make that node.
 
 - [ ] Shader visualizations approximated from medium `nk` into a shader node graph, aka. a generic BSDF.
+
+- [ ] Web importer that gets material data from refractiveindex.info.
