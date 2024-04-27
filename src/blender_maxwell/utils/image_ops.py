@@ -1,6 +1,7 @@
 """Useful image processing operations for use in the addon."""
 
 import enum
+import functools
 import time
 import typing as typ
 
@@ -9,9 +10,14 @@ import jax.numpy as jnp
 import jaxtyping as jtyp
 import matplotlib
 import matplotlib.axis as mpl_ax
+import matplotlib.backends.backend_agg
+import matplotlib.figure
+import matplotlib.style as mplstyle
 
 from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger
+
+mplstyle.use('fast')  ## TODO: Does this do anything?
 
 log = logger.get(__name__)
 
@@ -108,6 +114,20 @@ def rgba_image_from_2d_map(
 		return rgba_image_from_2d_map__grayscale(map_2d)
 
 	return rgba_image_from_2d_map__grayscale(map_2d)
+
+
+####################
+# - MPL Helpers
+####################
+@functools.lru_cache(maxsize=16)
+def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
+	fig = matplotlib.figure.Figure(figsize=[width_inches, height_inches], dpi=dpi)
+	canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
+	ax = fig.add_subplot()
+
+	# The Customer is Always Right (in Matters of Taste)
+	#fig.tight_layout(pad=0)
+	return (fig, canvas, ax)
 
 
 ####################
@@ -230,7 +250,7 @@ def plot_heatmap_2d(
 	y_unit = info.dim_units[y_name]
 
 	heatmap = ax.imshow(data, aspect='auto', interpolation='none')
-	ax.figure.colorbar(heatmap, ax=ax)
+	#ax.figure.colorbar(heatmap, ax=ax)
 	ax.set_title('Heatmap')
 	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
 	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))

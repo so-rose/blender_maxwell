@@ -1,7 +1,6 @@
 """Declares `ManagedBLImage`."""
 
-import io
-import time
+#import time
 import typing as typ
 
 import bpy
@@ -238,60 +237,60 @@ class ManagedBLImage(base.ManagedObj):
 		dpi: int | None = None,
 		bl_select: bool = False,
 	):
-		times = [time.perf_counter()]
-		import matplotlib.pyplot as plt
+		# times = [time.perf_counter()]
 
-		times.append(time.perf_counter() - times[0])
 		# Compute Plot Dimensions
 		aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (
 			self.gen_image_geometry(width_inches, height_inches, dpi)
 		)
-		times.append(time.perf_counter() - times[0])
+		# times.append(['Image Geometry', time.perf_counter() - times[0]])
 
 		# Create MPL Figure, Axes, and Compute Figure Geometry
-		fig, ax = plt.subplots(
-			figsize=[_width_inches, _height_inches],
-			dpi=_dpi,
+		fig, canvas, ax = image_ops.mpl_fig_canvas_ax(
+			_width_inches, _height_inches, _dpi
 		)
-		times.append(time.perf_counter() - times[0])
-		ax.set_aspect(aspect_ratio)
-		times.append(time.perf_counter() - times[0])
-		cmp_width_px, cmp_height_px = fig.canvas.get_width_height()
-		times.append(time.perf_counter() - times[0])
-		ax.set_aspect('auto')  ## Workaround aspect-ratio bugs
-		times.append(time.perf_counter() - times[0])
+		# times.append(['MPL Fig Canvas Axis', time.perf_counter() - times[0]])
+
+		ax.clear()
+		# times.append(['Clear Axis', time.perf_counter() - times[0]])
 
 		# Plot w/User Parameter
 		func_plotter(ax)
-		times.append(time.perf_counter() - times[0])
+		# times.append(['Plot!', time.perf_counter() - times[0]])
 
 		# Save Figure to BytesIO
-		with io.BytesIO() as buff:
-			fig.savefig(buff, format='raw', dpi=dpi)
-			times.append(time.perf_counter() - times[0])
-			buff.seek(0)
-			image_data = np.frombuffer(
-				buff.getvalue(),
-				dtype=np.uint8,
-			).reshape([cmp_height_px, cmp_width_px, -1])
-			times.append(time.perf_counter() - times[0])
+		canvas.draw()
+		# times.append(['Draw Pixels', time.perf_counter() - times[0]])
 
-			image_data = np.flipud(image_data).astype(np.float32) / 255
-			times.append(time.perf_counter() - times[0])
-		plt.close(fig)
+		canvas_width_px, canvas_height_px = fig.canvas.get_width_height()
+		# times.append(['Get Canvas Dims', time.perf_counter() - times[0]])
+		image_data = (
+			np.float32(
+				np.flipud(
+					np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(
+						fig.canvas.get_width_height()[::-1] + (4,)
+					)
+				)
+			)
+			/ 255
+		)
+		# times.append(['Load Data from Canvas', time.perf_counter() - times[0]])
 
 		# Optimized Write to Blender Image
-		bl_image = self.bl_image(cmp_width_px, cmp_height_px, 'RGBA', 'uint8')
-		times.append(time.perf_counter() - times[0])
+		bl_image = self.bl_image(canvas_width_px, canvas_height_px, 'RGBA', 'uint8')
+		# times.append(['Get BLImage', time.perf_counter() - times[0]])
 		bl_image.pixels.foreach_set(image_data.ravel())
-		times.append(time.perf_counter() - times[0])
+		# times.append(['Set Pixels', time.perf_counter() - times[0]])
 		bl_image.update()
-		times.append(time.perf_counter() - times[0])
+		# times.append(['Update BLImage', time.perf_counter() - times[0]])
 
 		if bl_select:
 			self.bl_select()
-		times.append(time.perf_counter() - times[0])
-		# log.critical('Timing of MPL Plot: %s', str(times))
+		# times.append(['Select BLImage', time.perf_counter() - times[0]])
+
+		# log.critical('Timing of MPL Plot')
+		# for timing in times:
+		# log.critical(timing)
 
 
 @bpy.app.handlers.persistent
