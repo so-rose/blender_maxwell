@@ -4,7 +4,8 @@ import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from ......assets.import_geonodes import GeoNodes, import_geonodes
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
@@ -79,7 +80,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
-				'node_group': import_geonodes(GeoNodes.PrimitiveBox, 'link'),
+				'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],

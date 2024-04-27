@@ -3,7 +3,8 @@ import typing as typ
 import sympy as sp
 import sympy.physics.units as spu
 
-from .....assets.import_geonodes import GeoNodes, import_geonodes
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
@@ -79,7 +80,7 @@ class SimDomainNode(base.MaxwellSimNode):
 			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
-				'node_group': import_geonodes(GeoNodes.PrimitiveBox, 'link'),
+				'node_group': import_geonodes(GeoNodes.SimulationSimDomain),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],

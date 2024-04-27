@@ -16,6 +16,8 @@ class OperatorType(enum.StrEnum):
 
 	ConnectViewerNode = enum.auto()
 
+	GeoNodesToStructureNode = enum.auto()
+
 	# Socket: Tidy3DCloudTask
 	SocketCloudAuthenticate = enum.auto()
 	SocketReloadCloudFolderList = enum.auto()

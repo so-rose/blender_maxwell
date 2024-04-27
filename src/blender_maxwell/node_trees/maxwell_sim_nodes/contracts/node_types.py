@@ -82,7 +82,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	## Structures / Primitives
 	BoxStructure = enum.auto()
 	SphereStructure = enum.auto()
-	# CylinderStructure = enum.auto()
+	CylinderStructure = enum.auto()
 
 	# Bounds
 	BoundConds = enum.auto()

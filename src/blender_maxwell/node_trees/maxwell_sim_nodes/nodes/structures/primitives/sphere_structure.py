@@ -3,7 +3,8 @@ import typing as typ
 import sympy.physics.units as spu
 import tidy3d as td
 
-from ......assets.import_geonodes import GeoNodes, import_geonodes
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
@@ -18,11 +19,11 @@ class SphereStructureNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
+		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Center': sockets.PhysicalPoint3DSocketDef(),
 		'Radius': sockets.PhysicalLengthSocketDef(
 			default_value=150 * spu.nm,
 		),
-		'Medium': sockets.MaxwellMediumSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
 		'Structure': sockets.MaxwellStructureSocketDef(),
@@ -82,7 +83,7 @@ class SphereStructureNode(base.MaxwellSimNode):
 			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
-				'node_group': import_geonodes(GeoNodes.PrimitiveSphere, 'link'),
+				'node_group': import_geonodes(GeoNodes.StructurePrimitiveSphere),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Radius': input_sockets['Radius'],

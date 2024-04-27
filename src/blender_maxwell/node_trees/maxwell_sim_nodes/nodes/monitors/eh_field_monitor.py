@@ -3,10 +3,10 @@ import typing as typ
 import sympy as sp
 import tidy3d as td
 
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
-from .....assets.import_geonodes import GeoNodes, import_geonodes
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
@@ -123,7 +123,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
-				'node_group': import_geonodes(GeoNodes.PrimitiveBox, 'link'),
+				'node_group': import_geonodes(GeoNodes.MonitorEHField),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],

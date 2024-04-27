@@ -108,7 +108,7 @@ quartodoc:
       desc: Blender assets bundled w/Blender Maxwell
       contents:
         - assets
-        - assets.import_geonodes
+        - assets.geonodes
 
     - subtitle: "`bl_maxwell.nodeps`"
       desc: No-Dependency 

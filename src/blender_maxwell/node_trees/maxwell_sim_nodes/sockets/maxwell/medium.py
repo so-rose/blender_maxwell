@@ -10,24 +10,16 @@ from .. import base
 
 VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
 
+FIXED_WL = 500 * spu.nm
+
 
 class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	socket_type = ct.SocketType.MaxwellMedium
 	bl_label = 'Maxwell Medium'
-	use_units = True
 
 	####################
 	# - Properties
 	####################
-	wl: bpy.props.FloatProperty(
-		name='WL',
-		description='WL to evaluate conductivity at',
-		default=500.0,
-		precision=4,
-		step=50,
-		update=(lambda self, context: self.on_prop_changed('wl', context)),
-	)
-
 	rel_permittivity: bpy.props.FloatVectorProperty(
 		name='Relative Permittivity',
 		description='Represents a simple, complex permittivity',
@@ -40,28 +32,13 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	)
 
 	####################
-	# - Socket UI
-	####################
-	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col.prop(self, 'wl', text='λ')
-		col.separator(factor=1.0)
-
-		split = col.split(factor=0.35, align=False)
-
-		col = split.column(align=True)
-		col.label(text='ϵ_r (ℂ)')
-
-		col = split.column(align=True)
-		col.prop(self, 'rel_permittivity', text='')
-
-	####################
-	# - Computation of Default Value
+	# - FlowKinds
 	####################
 	@property
 	def value(self) -> td.Medium:
 		freq = (
 			spu.convert_to(
-				VAC_SPEED_OF_LIGHT / (self.wl * self.unit),
+				VAC_SPEED_OF_LIGHT / FIXED_WL,
 				spu.hertz,
 			)
 			/ spu.hertz
@@ -76,25 +53,21 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	def value(
 		self, value: tuple[spux.ConstrSympyExpr(allow_variables=False), complex]
 	) -> None:
-		_wl, rel_permittivity = value
+		rel_permittivity = value
 
-		wl = float(
-			spu.convert_to(
-				_wl,
-				self.unit,
-			)
-			/ self.unit
-		)
-		self.wl = wl
 		self.rel_permittivity = (rel_permittivity.real, rel_permittivity.imag)
 
-	def sync_unit_change(self):
-		"""Override unit change to only alter frequency unit."""
-		self.value = (
-			self.wl * self.prev_unit,
-			complex(*self.rel_permittivity),
-		)
-		self.prev_active_unit = self.active_unit
+	####################
+	# - UI
+	####################
+	def draw_value(self, col: bpy.types.UILayout) -> None:
+		split = col.split(factor=0.35, align=False)
+
+		col = split.column(align=True)
+		col.label(text='ϵ_r (ℂ)')
+
+		col = split.column(align=True)
+		col.prop(self, 'rel_permittivity', text='')
 
 
 ####################
