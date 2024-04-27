@@ -8,8 +8,8 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	# KitchenSink = enum.auto()
 
 	# Analysis
-	Viz = enum.auto()
 	ExtractData = enum.auto()
+	Viz = enum.auto()
 	## Analysis / Math
 	MapMath = enum.auto()
 	FilterMath = enum.auto()
@@ -19,20 +19,20 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 
 	# Inputs
 	WaveConstant = enum.auto()
-	UnitSystem = enum.auto()
-
-	## Inputs / Scene
-	# Time = enum.auto()
+	Scene = enum.auto()
+	## Inputs / Constants
+	ExprConstant = enum.auto()
+	PhysicalConstant = enum.auto()
+	NumberConstant = enum.auto()
+	VectorConstant = enum.auto()
+	ScientificConstant = enum.auto()
+	UnitSystemConstant = enum.auto()
+	BlenderConstant = enum.auto()
 	## Inputs / Web Importers
 	Tidy3DWebImporter = enum.auto()
 	## Inputs / File Importers
+	DataFileImporter = enum.auto()
 	Tidy3DFileImporter = enum.auto()
-	## Inputs / Constants
-	ExprConstant = enum.auto()
-	ScientificConstant = enum.auto()
-	NumberConstant = enum.auto()
-	PhysicalConstant = enum.auto()
-	BlenderConstant = enum.auto()
 
 	# Outputs
 	Viewer = enum.auto()
@@ -42,47 +42,49 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	JSONFileExporter = enum.auto()
 
 	# Sources
+	## Sources / Temporal Shapes
+	GaussianPulseTemporalShape = enum.auto()
+	ContinuousWaveTemporalShape = enum.auto()
+	SymbolicTemporalShape = enum.auto()
+	DataTemporalShape = enum.auto()
 	## Sources /
 	PointDipoleSource = enum.auto()
 	PlaneWaveSource = enum.auto()
 	UniformCurrentSource = enum.auto()
-	# ModeSource = enum.auto()
-	# GaussianBeamSource = enum.auto()
-	# AstigmaticGaussianBeamSource = enum.auto()
-	# TFSFSource = enum.auto()
-	# EHEquivalenceSource = enum.auto()
-	# EHSource = enum.auto()
-	## Sources / Temporal Shapes
-	GaussianPulseTemporalShape = enum.auto()
-	# ContinuousWaveTemporalShape = enum.auto()
-	# ArrayTemporalShape = enum.auto()
+	TFSFSource = enum.auto()
+	GaussianBeamSource = enum.auto()
+	AstigmaticGaussianBeamSource = enum.auto()
+	EHDataSource = enum.auto()
+	EHEquivDataSource = enum.auto()
 
 	# Mediums
 	LibraryMedium = enum.auto()
-	# PECMedium = enum.auto()
-	# IsotropicMedium = enum.auto()
-	# AnisotropicMedium = enum.auto()
-	# TripleSellmeierMedium = enum.auto()
-	# SellmeierMedium = enum.auto()
-	# PoleResidueMedium = enum.auto()
-	# DrudeMedium = enum.auto()
-	# DrudeLorentzMedium = enum.auto()
-	# DebyeMedium = enum.auto()
-
+	DataFitMedium = enum.auto()
+	PECMedium = enum.auto()
+	IsotropicMedium = enum.auto()
+	AnisotropicMedium = enum.auto()
+	TripleSellmeierMedium = enum.auto()
+	SellmeierMedium = enum.auto()
+	PoleResidueMedium = enum.auto()
+	DrudeMedium = enum.auto()
+	DrudeLorentzMedium = enum.auto()
+	DebyeMedium = enum.auto()
 	## Mediums / Non-Linearities
-	# AddNonLinearity = enum.auto()
-	# ChiThreeSusceptibilityNonLinearity = enum.auto()
-	# TwoPhotonAbsorptionNonLinearity = enum.auto()
-	# KerrNonLinearity = enum.auto()
+	AddNonLinearity = enum.auto()
+	ChiThreeSusceptibilityNonLinearity = enum.auto()
+	TwoPhotonAbsorptionNonLinearity = enum.auto()
+	KerrNonLinearity = enum.auto()
 
 	# Structures
-	# ObjectStructure = enum.auto()
+	BLObjectStructure = enum.auto()
 	GeoNodesStructure = enum.auto()
-	# ScriptedStructure = enum.auto()
 	## Structures / Primitives
+	LineStructure = enum.auto()
+	PlaneStructure = enum.auto()
 	BoxStructure = enum.auto()
 	SphereStructure = enum.auto()
 	CylinderStructure = enum.auto()
+	PolySlabStructure = enum.auto()
 
 	# Bounds
 	BoundConds = enum.auto()
@@ -91,7 +93,6 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	PECBoundCond = enum.auto()
 	PMCBoundCond = enum.auto()
 	BlochBoundCond = enum.auto()
-	PeriodicBoundCond = enum.auto()
 	AbsorbingBoundCond = enum.auto()
 
 	# Monitors

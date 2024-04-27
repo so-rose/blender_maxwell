@@ -69,14 +69,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	@property
 	def value(self) -> sp.Expr:
-		expr = sp.sympify(
+		return sp.sympify(
 			self.raw_value,
 			locals={sym.name: sym for sym in self.symbols},
 			strict=False,
 			convert_xor=True,
 		).subs(spux.ALL_UNIT_SYMBOLS)
-
-		return expr
 
 	@value.setter
 	def value(self, value: str) -> None:

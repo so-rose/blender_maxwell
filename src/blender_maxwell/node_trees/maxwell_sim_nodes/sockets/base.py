@@ -286,8 +286,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		self.display_shape = (
 			'SQUARE'
-			if self.active_kind
-			in {ct.FlowKind.LazyValueFunc, ct.FlowKind.LazyValueRange}
+			if self.active_kind in {ct.FlowKind.Array, ct.FlowKind.LazyValueRange}
 			else 'CIRCLE'
 		) + ('_DOT' if self.use_units else '')
 
@@ -882,7 +881,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			{
 				ct.FlowKind.Value: self.draw_value,
 				ct.FlowKind.Array: self.draw_array,
-				ct.FlowKind.LazyValueFunc: self.draw_lazy_value_func,
 				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
 			}[self.active_kind](col)
 
@@ -995,16 +993,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Notes:
 			Should be overriden by individual socket classes, if they have an editable `FlowKind.Array`.
-
-		Parameters:
-			col: Target for defining UI elements.
-		"""
-
-	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
-		"""Draws the socket lazy value on its own line.
-
-		Notes:
-			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValueFunc`.
 
 		Parameters:
 			col: Target for defining UI elements.

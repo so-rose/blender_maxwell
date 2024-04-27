@@ -3,7 +3,7 @@ from ... import sockets
 from .. import base, events
 
 
-class PhysicalUnitSystemNode(base.MaxwellSimNode):
+class UnitSystemConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.UnitSystem
 	bl_label = 'Unit System'
 
@@ -31,6 +31,6 @@ class PhysicalUnitSystemNode(base.MaxwellSimNode):
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	PhysicalUnitSystemNode,
+	UnitSystemConstantNode,
 ]
 BL_NODES = {ct.NodeType.UnitSystem: (ct.NodeCategory.MAXWELLSIM_INPUTS)}
