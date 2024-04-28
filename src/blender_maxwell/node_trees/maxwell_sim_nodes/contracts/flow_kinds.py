@@ -96,10 +96,6 @@ class CapabilitiesFlow:
 				for name in self.must_match
 			)
 		)
-		return (
-			self.socket_type == other.socket_type
-			and self.active_kind == other.active_kind
-		) or other.is_universal
 
 
 ####################

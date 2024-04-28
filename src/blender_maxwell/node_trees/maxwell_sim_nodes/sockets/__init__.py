@@ -1,11 +1,11 @@
 from blender_maxwell.utils import logger
 
 from .. import contracts as ct
-from . import basic, blender, maxwell, number, physical, tidy3d, vector
+from . import basic, blender, maxwell, physical, tidy3d
 from .scan_socket_defs import scan_for_socket_defs
 
 log = logger.get(__name__)
-sockets_modules = [basic, number, vector, physical, blender, maxwell, tidy3d]
+sockets_modules = [basic, physical, blender, maxwell, tidy3d]
 
 ####################
 # - Scan for SocketDefs
@@ -33,8 +33,6 @@ for socket_type in ct.SocketType:
 ####################
 BL_REGISTER = [
 	*basic.BL_REGISTER,
-	*number.BL_REGISTER,
-	*vector.BL_REGISTER,
 	*physical.BL_REGISTER,
 	*blender.BL_REGISTER,
 	*maxwell.BL_REGISTER,
@@ -43,8 +41,6 @@ BL_REGISTER = [
 
 __all__ = [
 	'basic',
-	'number',
-	'vector',
 	'physical',
 	'blender',
 	'maxwell',

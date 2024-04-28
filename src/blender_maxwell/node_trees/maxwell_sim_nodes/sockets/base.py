@@ -1,5 +1,4 @@
 import abc
-import functools
 import typing as typ
 import uuid
 from types import MappingProxyType
@@ -193,6 +192,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		log.debug('Initializing Socket: %s', cls.socket_type)
 		super().__init_subclass__(**kwargs)
 		# cls._assert_attrs_valid()
+		## TODO: Implement this :)
 
 		# Socket Properties
 		## Identifiers
@@ -235,45 +235,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Units
 	####################
-	# TODO: Refactor
-	@functools.cached_property
-	def possible_units(self) -> dict[str, sp.Expr]:
-		if not self.use_units:
-			msg = "Tried to get possible units for socket {self}, but socket doesn't `use_units`"
-			raise ValueError(msg)
-
-		return ct.SOCKET_UNITS[self.socket_type]['values']
-
-	@property
-	def unit(self) -> sp.Expr:
-		return self.possible_units[self.active_unit]
-
 	@property
 	def prev_unit(self) -> sp.Expr:
 		return self.possible_units[self.prev_active_unit]
-
-	@unit.setter
-	def unit(self, value: str | sp.Expr) -> None:
-		# Retrieve Unit by String
-		if isinstance(value, str) and value in self.possible_units:
-			self.active_unit = self.possible_units[value]
-			return
-
-		# Retrieve =1 Matching Unit Name
-		matching_unit_names = [
-			unit_name
-			for unit_name, unit_sympy in self.possible_units.items()
-			if value == unit_sympy
-		]
-		if len(matching_unit_names) == 0:
-			msg = f"Tried to set unit for socket {self} with value {value}, but it is not one of possible units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`)"
-			raise ValueError(msg)
-
-		if len(matching_unit_names) > 1:
-			msg = f"Tried to set unit for socket {self} with value {value}, but multiple possible matching units {''.join(self.possible_units.values())} for this socket (as defined in `contracts.SOCKET_UNITS`); there may only be one"
-			raise RuntimeError(msg)
-
-		self.active_unit = matching_unit_names[0]
 
 	####################
 	# - Property Event: On Update
@@ -285,37 +249,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
 		self.display_shape = (
-			'SQUARE'
-			if self.active_kind in {ct.FlowKind.Array, ct.FlowKind.LazyValueRange}
-			else 'CIRCLE'
+			'SQUARE' if self.active_kind == ct.FlowKind.LazyValueRange else 'CIRCLE'
 		) + ('_DOT' if self.use_units else '')
-
-	def _on_unit_changed(self) -> None:
-		"""Synchronizes the `FlowKind` data to the newly set unit.
-
-		When a new unit is set, the internal ex. floating point properties become out of sync.
-		This function applies a rescaling operation based on the factor between the previous unit (`self.prev_unit`) and the new unit `(self.unit)`.
-
-		- **Value**: Retrieve the value (with incorrect new unit), exchange the new unit for the old unit, and assign it back.
-		- **Array**: Replace the internal unit with the old (correct) unit, and rescale all values in the array to the new unit.
-
-		Notes:
-			Called by `self.on_prop_changed()` when `self.active_unit` is changed.
-
-			This allows for a unit-scaling operation **without needing to know anything about the data representation** (at the cost of performance).
-		"""
-		if self.active_kind == ct.FlowKind.Value:
-			self.value = self.value / self.unit * self.prev_unit
-
-		elif self.active_kind in [ct.FlowKind.Array, ct.FlowKind.LazyArrayRange]:
-			self.lazy_value_range = self.lazy_value_range.correct_unit(
-				self.prev_unit
-			).rescale_to_unit(self.unit)
-		else:
-			msg = f'Socket {self.bl_label} ({self.socket_type}): Active kind {self.active_kind} declares no method of scaling units from {self.prev_active_unit} to {self.active_unit})'
-			raise RuntimeError(msg)
-
-		self.prev_active_unit = self.active_unit
+		## TODO: Valid Active Kinds should be a subset/subenum(?) of FlowKind
 
 	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated.
@@ -880,7 +816,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			col = row.column(align=True)
 			{
 				ct.FlowKind.Value: self.draw_value,
-				ct.FlowKind.Array: self.draw_array,
 				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
 			}[self.active_kind](col)
 
@@ -922,7 +857,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 				self.draw_info(info, col)
 
 	####################
-	# - UI Methods: Active FlowKind
+	# - UI Methods: Label Rows
 	####################
 	def draw_label_row(
 		self,
@@ -978,21 +913,14 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		row.label(text=text)
 
+	####################
+	# - UI Methods: Active FlowKind
+	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		"""Draws the socket value on its own line.
 
 		Notes:
 			Should be overriden by individual socket classes, if they have an editable `FlowKind.Value`.
-
-		Parameters:
-			col: Target for defining UI elements.
-		"""
-
-	def draw_array(self, col: bpy.types.UILayout) -> None:
-		"""Draws the socket array on its own line.
-
-		Notes:
-			Should be overriden by individual socket classes, if they have an editable `FlowKind.Array`.
 
 		Parameters:
 			col: Target for defining UI elements.

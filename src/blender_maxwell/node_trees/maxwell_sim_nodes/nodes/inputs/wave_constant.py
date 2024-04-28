@@ -1,12 +1,13 @@
+"""Implements `WaveConstantNode`."""
+
 import typing as typ
 
 import bpy
 import sympy as sp
 import sympy.physics.units as spu
 
+from blender_maxwell.utils import bl_cache, logger, sci_constants
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger
-from blender_maxwell.utils import sci_constants as constants
 
 from ... import contracts as ct
 from ... import sockets
@@ -16,84 +17,158 @@ log = logger.get(__name__)
 
 
 class WaveConstantNode(base.MaxwellSimNode):
+	"""Translates vaccum wavelength/frequency into both, either as a scalar, or as a memory-efficient uniform range of values.
+
+	Socket Sets:
+		Wavelength: Input a wavelength (range) to produce both wavelength/frequency (ranges).
+		Frequency: Input a frequency (range) to produce both wavelength/frequency (ranges).
+
+	Attributes:
+		use_range: Whether to specify a range of wavelengths/frequencies, or just one.
+	"""
+
 	node_type = ct.NodeType.WaveConstant
 	bl_label = 'Wave Constant'
 
 	input_socket_sets: typ.ClassVar = {
-		'Wavelength': {},
-		'Frequency': {},
+		'Wavelength': {
+			'WL': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.Value,
+				unit_dimension=spux.unit_dims.length,
+				# Defaults
+				default_unit=spu.nm,
+				default_value=500,
+				default_min=200,
+				default_max=700,
+				default_steps=2,
+			)
+		},
+		'Frequency': {
+			'Freq': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.Value,
+				unit_dimension=spux.unit_dims.frequency,
+				# Defaults
+				default_unit=spux.THz,
+				default_value=1,
+				default_min=0.3,
+				default_max=3,
+				default_steps=2,
+			),
+		},
+	}
+	output_sockets: typ.ClassVar = {
+		'WL': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.Value,
+			unit_dimension=spux.unit_dims.length,
+		),
+		'Freq': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.Value,
+			unit_dimension=spux.unit_dims.frequency,
+		),
 	}
 
-	use_range: bpy.props.BoolProperty(
-		name='Range',
-		description='Whether to use a wavelength/frequency range',
-		default=False,
-		update=lambda self, context: self.on_prop_changed('use_range', context),
-	)
-
-	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
-		col.prop(self, 'use_range', toggle=True)
+	####################
+	# - Properties
+	####################
+	use_range: bool = bl_cache.BLField(False)
 
 	####################
-	# - Event Methods: Wavelength Output
+	# - UI
+	####################
+	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		"""Draws the button that allows toggling between single and range output.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+		col.prop(self, self.blfields['use_range'], toggle=True)
+
+	####################
+	# - Events
+	####################
+	@events.on_value_changed(
+		prop_name={'active_socket_set', 'use_range'},
+		props='use_range',
+		run_on_init=True,
+	)
+	def on_use_range_changed(self, props: dict) -> None:
+		"""Synchronize the `active_kind` of input/output sockets, to either produce a `ct.FlowKind.Value` or a `ct.FlowKind.LazyArrayRange`."""
+		if self.inputs.get('WL') is not None:
+			active_input = self.inputs['WL']
+		else:
+			active_input = self.inputs['Freq']
+
+		# Modify Active Kind(s)
+		## Input active_kind -> Value/LazyArrayRange
+		active_input_uses_range = active_input.active_kind == ct.FlowKind.LazyArrayRange
+		if active_input_uses_range != props['use_range']:
+			active_input.active_kind = (
+				ct.FlowKind.LazyArrayRange if props['use_range'] else ct.FlowKind.Value
+			)
+
+		## Output active_kind -> Value/LazyArrayRange
+		for active_output in self.outputs.values():
+			active_output_uses_range = (
+				active_output.active_kind == ct.FlowKind.LazyArrayRange
+			)
+			if active_output_uses_range != props['use_range']:
+				active_output.active_kind = (
+					ct.FlowKind.LazyArrayRange
+					if props['use_range']
+					else ct.FlowKind.Value
+				)
+
+	####################
+	# - FlowKinds
 	####################
 	@events.computes_output_socket(
 		'WL',
 		kind=ct.FlowKind.Value,
-		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_wl_value(self, input_sockets: dict) -> sp.Expr:
+		"""Compute a single wavelength value from either wavelength/frequency."""
 		if input_sockets['WL'] is not None:
 			return input_sockets['WL']
 
-		if input_sockets['WL'] is None and input_sockets['Freq'] is None:
-			msg = 'Both WL and Freq are None.'
-			raise RuntimeError(msg)
-
-		return constants.vac_speed_of_light / input_sockets['Freq']
+		return sci_constants.vac_speed_of_light / input_sockets['Freq']
 
 	@events.computes_output_socket(
 		'Freq',
 		kind=ct.FlowKind.Value,
-		# Data
 		input_sockets={'WL', 'Freq'},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_freq_value(self, input_sockets: dict) -> sp.Expr:
+		"""Compute a single frequency value from either wavelength/frequency."""
 		if input_sockets['Freq'] is not None:
 			return input_sockets['Freq']
 
-		if input_sockets['WL'] is None and input_sockets['Freq'] is None:
-			msg = 'Both WL and Freq are None.'
-			raise RuntimeError(msg)
-
-		return constants.vac_speed_of_light / input_sockets['WL']
+		return sci_constants.vac_speed_of_light / input_sockets['WL']
 
 	@events.computes_output_socket(
 		'WL',
 		kind=ct.FlowKind.LazyArrayRange,
-		# Data
 		input_sockets={'WL', 'Freq'},
+		input_socket_kinds={
+			'WL': ct.FlowKind.LazyArrayRange,
+			'Freq': ct.FlowKind.LazyArrayRange,
+		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_wl_range(self, input_sockets: dict) -> sp.Expr:
+		"""Compute wavelength range from either wavelength/frequency ranges."""
 		if input_sockets['WL'] is not None:
 			return input_sockets['WL']
 
-		if input_sockets['WL'] is None and input_sockets['Freq'] is None:
-			msg = 'Both WL and Freq are None.'
-			raise RuntimeError(msg)
-
 		return input_sockets['Freq'].rescale_bounds(
-			lambda bound: constants.vac_speed_of_light / bound, reverse=True
+			lambda bound: sci_constants.vac_speed_of_light / bound, reverse=True
 		)
 
 	@events.computes_output_socket(
 		'Freq',
 		kind=ct.FlowKind.LazyArrayRange,
-		# Data
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
 			'WL': ct.FlowKind.LazyArrayRange,
@@ -102,47 +177,13 @@ class WaveConstantNode(base.MaxwellSimNode):
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_freq_range(self, input_sockets: dict) -> sp.Expr:
+		"""Compute frequency range from either wavelength/frequency ranges."""
 		if input_sockets['Freq'] is not None:
 			return input_sockets['Freq']
 
-		if input_sockets['WL'] is None and input_sockets['Freq'] is None:
-			msg = 'Both WL and Freq are None.'
-			raise RuntimeError(msg)
-
 		return input_sockets['WL'].rescale_bounds(
-			lambda bound: constants.vac_speed_of_light / bound, reverse=True
+			lambda bound: sci_constants.vac_speed_of_light / bound, reverse=True
 		)
-
-	####################
-	# - Event Methods
-	####################
-	@events.on_value_changed(
-		prop_name={'active_socket_set', 'use_range'},
-		props={'active_socket_set', 'use_range'},
-		run_on_init=True,
-	)
-	def on_input_spec_change(self, props: dict):
-		if props['active_socket_set'] == 'Wavelength':
-			self.loose_input_sockets = {
-				'WL': sockets.PhysicalLengthSocketDef(
-					is_array=props['use_range'],
-					default_value=500 * spu.nm,
-					default_unit=spu.nm,
-				)
-			}
-		else:
-			self.loose_input_sockets = {
-				'Freq': sockets.PhysicalFreqSocketDef(
-					is_array=props['use_range'],
-					default_value=600 * spux.THz,
-					default_unit=spux.THz,
-				)
-			}
-
-		self.loose_output_sockets = {
-			'WL': sockets.PhysicalLengthSocketDef(is_array=props['use_range']),
-			'Freq': sockets.PhysicalFreqSocketDef(is_array=props['use_range']),
-		}
 
 
 ####################

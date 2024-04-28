@@ -14,7 +14,6 @@ import enum
 import itertools
 import typing as typ
 
-import jax.numpy as jnp
 import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
@@ -25,6 +24,8 @@ SympyType = sp.Basic | sp.Expr | sp.MatrixBase | sp.MutableDenseMatrix | spu.Qua
 
 
 class MathType(enum.StrEnum):
+	"""Set identities encompassing common mathematical objects."""
+
 	Bool = enum.auto()
 	Integer = enum.auto()
 	Rational = enum.auto()
@@ -49,7 +50,9 @@ class MathType(enum.StrEnum):
 			return MathType.Bool
 		if sp_obj.is_integer:
 			return MathType.Integer
-		if sp_obj.is_rational or sp_obj.is_real:
+		if sp_obj.is_rational:
+			return MathType.Rational
+		if sp_obj.is_real:
 			return MathType.Real
 		if sp_obj.is_complex:
 			return MathType.Complex
@@ -580,6 +583,7 @@ Symbol: typ.TypeAlias = IntSymbol | RealSymbol | ComplexSymbol
 # Unit
 ## Technically a "unit expression", which includes compound types.
 ## Support for this is the killer feature compared to spu.Quantity.
+UnitDimension: typ.TypeAlias = spu.Dimension
 Unit: typ.TypeAlias = ConstrSympyExpr(
 	allow_variables=False,
 	allow_units=True,
