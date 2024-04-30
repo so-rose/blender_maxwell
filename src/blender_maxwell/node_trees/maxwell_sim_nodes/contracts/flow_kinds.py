@@ -316,8 +316,12 @@ class LazyValueFuncFlow:
 	"""
 
 	func: LazyFunction
-	func_args: list[type] = dataclasses.field(default_factory=list)
-	func_kwargs: dict[str, type] = dataclasses.field(default_factory=dict)
+	func_args: list[spux.MathType | spux.PhysicalType] = dataclasses.field(
+		default_factory=list
+	)
+	func_kwargs: dict[str, spux.MathType | spux.PhysicalType] = dataclasses.field(
+		default_factory=dict
+	)
 	supports_jax: bool = False
 	supports_numba: bool = False
 
@@ -432,9 +436,7 @@ class LazyArrayRangeFlow:
 
 		unit: The unit of the generated array values
 
-		int_symbols: Set of integer-valued variables from which `start` and/or `stop` are determined.
-		real_symbols: Set of real-valued variables from which `start` and/or `stop` are determined.
-		complex_symbols: Set of complex-valued variables from which `start` and/or `stop` are determined.
+		symbols: Set of variables from which `start` and/or `stop` are determined.
 	"""
 
 	start: spux.ScalarUnitlessComplexExpr
@@ -444,12 +446,10 @@ class LazyArrayRangeFlow:
 
 	unit: spux.Unit | None = None
 
-	int_symbols: set[spux.IntSymbol] = frozenset()
-	real_symbols: set[spux.RealSymbol] = frozenset()
-	complex_symbols: set[spux.ComplexSymbol] = frozenset()
+	symbols: frozenset[spux.IntSymbol] = frozenset()
 
 	@functools.cached_property
-	def symbols(self) -> list[sp.Symbol]:
+	def sorted_symbols(self) -> list[sp.Symbol]:
 		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
 
 		The order is guaranteed to be **deterministic**.
@@ -457,10 +457,7 @@ class LazyArrayRangeFlow:
 		Returns:
 			All symbols valid for use in the expression.
 		"""
-		return sorted(
-			self.int_symbols | self.real_symbols | self.complex_symbols,
-			key=lambda sym: sym.name,
-		)
+		return sorted(self.symbols, key=lambda sym: sym.name)
 
 	@functools.cached_property
 	def mathtype(self) -> spux.MathType:
@@ -508,9 +505,7 @@ class LazyArrayRangeFlow:
 				steps=self.steps,
 				scaling=self.scaling,
 				unit=corrected_unit,
-				int_symbols=self.int_symbols,
-				real_symbols=self.real_symbols,
-				complex_symbols=self.complex_symbols,
+				symbols=self.symbols,
 			)
 
 		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
@@ -530,15 +525,12 @@ class LazyArrayRangeFlow:
 		"""
 		if self.unit is not None:
 			return LazyArrayRangeFlow(
-				start=spu.convert_to(self.start, unit),
-				stop=spu.convert_to(self.stop, unit),
+				start=spu.scale_to_unit(self.start * self.unit, unit),
+				stop=spu.scale_to_unit(self.stop * self.unit, unit),
 				steps=self.steps,
 				scaling=self.scaling,
 				unit=unit,
 				symbols=self.symbols,
-				int_symbols=self.int_symbols,
-				real_symbols=self.real_symbols,
-				complex_symbols=self.complex_symbols,
 			)
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
@@ -549,7 +541,7 @@ class LazyArrayRangeFlow:
 	####################
 	def rescale_bounds(
 		self,
-		scaler: typ.Callable[
+		rescale_func: typ.Callable[
 			[spux.ScalarUnitlessComplexExpr], spux.ScalarUnitlessComplexExpr
 		],
 		reverse: bool = False,
@@ -570,18 +562,12 @@ class LazyArrayRangeFlow:
 			A rescaled `LazyArrayRangeFlow`.
 		"""
 		return LazyArrayRangeFlow(
-			start=spu.convert_to(
-				scaler(self.start if not reverse else self.stop), self.unit
-			),
-			stop=spu.convert_to(
-				scaler(self.stop if not reverse else self.start), self.unit
-			),
+			start=rescale_func(self.start if not reverse else self.stop),
+			stop=rescale_func(self.stop if not reverse else self.start),
 			steps=self.steps,
 			scaling=self.scaling,
 			unit=self.unit,
-			int_symbols=self.int_symbols,
-			real_symbols=self.real_symbols,
-			complex_symbols=self.complex_symbols,
+			symbols=self.symbols,
 		)
 
 	####################
@@ -650,9 +636,7 @@ class LazyArrayRangeFlow:
 		"""
 		return LazyValueFuncFlow(
 			func=self.as_func,
-			func_args=[
-				(sym.name, spux.sympy_to_python_type(sym)) for sym in self.symbols
-			],
+			func_args=[(spux.MathType.from_expr(sym)) for sym in self.symbols],
 			supports_jax=True,
 		)
 
@@ -709,13 +693,38 @@ class LazyArrayRangeFlow:
 ####################
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class ParamsFlow:
-	func_args: list[typ.Any] = dataclasses.field(default_factory=list)
-	func_kwargs: dict[str, typ.Any] = dataclasses.field(default_factory=dict)
+	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
+	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
 
+	####################
+	# - Scaled Func Args
+	####################
+	def scaled_func_args(self, unit_system: spux.UnitSystem):
+		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
+		return [
+			spux.convert_to_unit_system(func_arg, unit_system, use_jax_array=True)
+			for func_arg in self.func_args
+		]
+
+	def scaled_func_kwargs(self, unit_system: spux.UnitSystem):
+		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
+		return {
+			arg_name: spux.convert_to_unit_system(arg, unit_system, use_jax_array=True)
+			for arg_name, arg in self.func_args
+		}
+
+	####################
+	# - Operations
+	####################
 	def __or__(
 		self,
 		other: typ.Self,
 	):
+		"""Combine two function parameter lists, such that the LHS will be concatenated with the RHS.
+
+		Just like its neighbor in `LazyValueFunc`, this effectively combines two functions with unique parameters.
+		The next composed function will receive a tuple of two arrays, instead of just one, allowing binary operations to occur.
+		"""
 		return ParamsFlow(
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
@@ -723,10 +732,8 @@ class ParamsFlow:
 
 	def compose_within(
 		self,
-		enclosing_func_args: list[tuple[type]] = (),
-		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
-		enclosing_func_arg_units: dict[str, type] = MappingProxyType({}),
-		enclosing_func_kwarg_units: dict[str, type] = MappingProxyType({}),
+		enclosing_func_args: list[spux.SympyExpr] = (),
+		enclosing_func_kwargs: dict[str, spux.SympyExpr] = MappingProxyType({}),
 	) -> typ.Self:
 		return ParamsFlow(
 			func_args=self.func_args + list(enclosing_func_args),
@@ -744,6 +751,8 @@ class InfoFlow:
 	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = dataclasses.field(
 		default_factory=dict
 	)  ## TODO: Rename to dim_idxs
+
+	## TODO: Add PhysicalType
 
 	@functools.cached_property
 	def dim_lens(self) -> dict[str, int]:
@@ -769,12 +778,14 @@ class InfoFlow:
 		]
 
 	# Output Information
+	## TODO: Add PhysicalType
 	output_name: str = dataclasses.field(default_factory=list)
 	output_shape: tuple[int, ...] | None = dataclasses.field(default=None)
 	output_mathtype: spux.MathType = dataclasses.field()
 	output_unit: spux.Unit | None = dataclasses.field()
 
 	# Pinned Dimension Information
+	## TODO: Add PhysicalType
 	pinned_dim_names: list[str] = dataclasses.field(default_factory=list)
 	pinned_dim_values: dict[str, float | complex] = dataclasses.field(
 		default_factory=dict

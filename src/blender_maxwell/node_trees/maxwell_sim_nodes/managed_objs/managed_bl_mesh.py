@@ -101,6 +101,10 @@ class ManagedBLMesh(base.ManagedObj):
 	####################
 	# - Methods
 	####################
+	@property
+	def exists(self) -> bool:
+		return bpy.data.objects.get(self.name) is not None
+
 	def show_preview(self) -> None:
 		"""Moves the managed Blender object to the preview collection.
 

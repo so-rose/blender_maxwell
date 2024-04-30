@@ -33,8 +33,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Wavelength': {
 			'WL': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.Value,
-				unit_dimension=spux.unit_dims.length,
+				physical_type=spux.PhysicalType.Length,
 				# Defaults
 				default_unit=spu.nm,
 				default_value=500,
@@ -46,7 +45,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 		'Frequency': {
 			'Freq': sockets.ExprSocketDef(
 				active_kind=ct.FlowKind.Value,
-				unit_dimension=spux.unit_dims.frequency,
+				physical_type=spux.PhysicalType.Freq,
 				# Defaults
 				default_unit=spux.THz,
 				default_value=1,
@@ -59,11 +58,11 @@ class WaveConstantNode(base.MaxwellSimNode):
 	output_sockets: typ.ClassVar = {
 		'WL': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Value,
-			unit_dimension=spux.unit_dims.length,
+			unit_dimension=spux.Dims.length,
 		),
 		'Freq': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Value,
-			unit_dimension=spux.unit_dims.frequency,
+			unit_dimension=spux.Dims.frequency,
 		),
 	}
 

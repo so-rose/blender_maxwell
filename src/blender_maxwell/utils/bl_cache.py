@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 import bpy
+import numpy as np
 
 from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger, serialize
@@ -515,6 +516,7 @@ class BLField:
 			use_prop_update: Configures the BLField to run `bl_instance.on_prop_changed(attr_name)` whenever value is set.
 				This is done by setting the `update` method.
 			enum_cb: Method used to generate new enum elements whenever `Signal.ResetEnum` is presented.
+			matrix_rowmajor: Blender's UI stores matrices flattened,
 
 		"""
 		log.debug(
@@ -528,8 +530,8 @@ class BLField:
 		## Static
 		self._prop_ui = prop_ui
 		self._prop_flags = prop_flags
-		self._min = abs_min
-		self._max = abs_max
+		self._abs_min = abs_min
+		self._abs_max = abs_max
 		self._soft_min = soft_min
 		self._soft_max = soft_max
 		self._float_step = float_step
@@ -544,6 +546,12 @@ class BLField:
 		self._set_ser_default = False
 		self._str_cb = str_cb
 		self._enum_cb = enum_cb
+
+		## Vector/Matrix Identity
+		## -> Matrix Shape assists in the workaround for Matrix Display Bug
+		self._is_vector = False
+		self._is_matrix = False
+		self._matrix_shape = None
 
 		## HUGE TODO: Persist these
 		self._str_cb_cache = {}
@@ -637,6 +645,7 @@ class BLField:
 
 		## Reusable Snippets
 		def _add_min_max_kwargs():
+			nonlocal kwargs_prop  ## I've heard legends of needing this!
 			kwargs_prop |= {'min': self._abs_min} if self._abs_min is not None else {}
 			kwargs_prop |= {'max': self._abs_max} if self._abs_max is not None else {}
 			kwargs_prop |= (
@@ -647,6 +656,7 @@ class BLField:
 			)
 
 		def _add_float_kwargs():
+			nonlocal kwargs_prop
 			kwargs_prop |= (
 				{'step': self._float_step} if self._float_step is not None else {}
 			)
@@ -684,6 +694,7 @@ class BLField:
 			default_value = self._default_value
 			BLProp = bpy.props.BoolVectorProperty
 			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+			self._is_vector = True
 
 		## Vector Int
 		elif typ.get_origin(AttrType) is tuple and all(
@@ -693,6 +704,7 @@ class BLField:
 			BLProp = bpy.props.IntVectorProperty
 			_add_min_max_kwargs()
 			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+			self._is_vector = True
 
 		## Vector Float
 		elif typ.get_origin(AttrType) is tuple and all(
@@ -703,6 +715,59 @@ class BLField:
 			_add_min_max_kwargs()
 			_add_float_kwargs()
 			kwargs_prop |= {'size': len(typ.get_args(AttrType))}
+			self._is_vector = True
+
+		## Matrix Bool
+		elif typ.get_origin(AttrType) is tuple and all(
+			all(V is bool for V in typ.get_args(T)) for T in typ.get_args(AttrType)
+		):
+			# Workaround for Matrix Display Bug
+			## - Also requires __get__ support to read consistently.
+			rows = len(typ.get_args(AttrType))
+			cols = len(typ.get_args(typ.get_args(AttrType)[0]))
+			default_value = (
+				np.array(self._default_value, dtype=bool)
+				.flatten()
+				.reshape([cols, rows])
+			).tolist()
+			BLProp = bpy.props.BoolVectorProperty
+			kwargs_prop |= {'size': (cols, rows), 'subtype': 'MATRIX'}
+			## 'size' has column-major ordering (Matrix Display Bug).
+			self._is_matrix = True
+			self._matrix_shape = (rows, cols)
+
+		## Matrix Int
+		elif typ.get_origin(AttrType) is tuple and all(
+			all(V is int for V in typ.get_args(T)) for T in typ.get_args(AttrType)
+		):
+			_add_min_max_kwargs()
+			rows = len(typ.get_args(AttrType))
+			cols = len(typ.get_args(typ.get_args(AttrType)[0]))
+			default_value = (
+				np.array(self._default_value, dtype=int).flatten().reshape([cols, rows])
+			).tolist()
+			BLProp = bpy.props.IntVectorProperty
+			kwargs_prop |= {'size': (cols, rows), 'subtype': 'MATRIX'}
+			self._is_matrix = True
+			self._matrix_shape = (rows, cols)
+
+		## Matrix Float
+		elif typ.get_origin(AttrType) is tuple and all(
+			all(V is float for V in typ.get_args(T)) for T in typ.get_args(AttrType)
+		):
+			_add_min_max_kwargs()
+			_add_float_kwargs()
+			rows = len(typ.get_args(AttrType))
+			cols = len(typ.get_args(typ.get_args(AttrType)[0]))
+			default_value = (
+				np.array(self._default_value, dtype=float)
+				.flatten()
+				.reshape([cols, rows])
+			).tolist()
+			BLProp = bpy.props.FloatVectorProperty
+			kwargs_prop |= {'size': (cols, rows), 'subtype': 'MATRIX'}
+			self._is_matrix = True
+			self._matrix_shape = (rows, cols)
 
 		## Generic String
 		elif AttrType is str:
@@ -732,7 +797,7 @@ class BLField:
 			}
 
 		## StrEnum
-		elif issubclass(AttrType, enum.StrEnum):
+		elif inspect.isclass(AttrType) and issubclass(AttrType, enum.StrEnum):
 			default_value = self._default_value
 			BLProp = bpy.props.EnumProperty
 			kwargs_prop |= {
@@ -792,6 +857,7 @@ class BLField:
 		)  ## TODO: Mine description from owner class __doc__
 
 		# Define Property Getter
+		## Serialized properties need to deserialize in the getter.
 		if prop_is_serialized:
 
 			def getter(_self: BLInstance) -> AttrType:
@@ -802,6 +868,7 @@ class BLField:
 				return getattr(_self, bl_attr_name)
 
 		# Define Property Setter
+		## Serialized properties need to serialize in the setter.
 		if prop_is_serialized:
 
 			def setter(_self: BLInstance, value: AttrType) -> None:
@@ -821,7 +888,40 @@ class BLField:
 	def __get__(
 		self, bl_instance: BLInstance | None, owner: type[BLInstance]
 	) -> typ.Any:
-		return self._cached_bl_property.__get__(bl_instance, owner)
+		value = self._cached_bl_property.__get__(bl_instance, owner)
+
+		# enum.Enum: Cast Auto-Injected Dynamic Enum 'NONE' -> None
+		## As far a Blender is concerned, dynamic enum props can't be empty.
+		## -> Well, they can... But bad things happen. So they can't.
+		## So in the interest of the user's sanity, we always ensure one entry.
+		## -> This one entry always has the one, same, id: 'NONE'.
+		## Of course, we often want to check for this "there was nothing" case.
+		## -> Aka, we want to do a `None` check, semantically speaking.
+		## -> ...But because it's a special thingy, we must check 'NONE'?
+		## Nonsense. Let the user just check `None`, as Guido intended.
+		if self._enum_cb is not None and value == 'NONE':
+			## TODO: Perhaps check if the unsafe callback was actually [].
+			## -> In case the user themselves want to return 'NONE'.
+			## -> Why would they do this? Because they are users!
+			return None
+
+		# Sized Vectors/Matrices
+		## Why not just yeet back a np.array?
+		## -> Type-annotating a shaped numpy array is... "rough".
+		## -> Type-annotation tuple[] of known shape is super easy.
+		## -> Even list[] won't do; its size varies, after all!
+		## -> Reject modernity. Return to tuple[].
+		if self._is_vector:
+			## -> tuple()ify the np.array to respect tuple[] type annotation.
+			return tuple(np.array(value))
+
+		if self._is_matrix:
+			# Matrix Display Bug: Correctly Read Row-Major Values w/Reshape
+			return tuple(
+				map(tuple, np.array(value).flatten().reshape(self._matrix_shape))
+			)
+
+		return value
 
 	def __set__(self, bl_instance: BLInstance | None, value: typ.Any) -> None:
 		if value == Signal.ResetEnumItems:

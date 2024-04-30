@@ -527,9 +527,17 @@ Reported:
 - (SOLVED) <https://projects.blender.org/blender/blender/issues/119664>
 
 Unreported:
+- Units are unruly, and are entirely useless when it comes to going small like this.
 - The `__mp_main__` bug.
 - Animated properties within custom node trees don't update with the frame. See: <https://projects.blender.org/blender/blender/issues/66392>
-- Can't update `items` using `id_propertie_ui` of `EnumProperty`
+- Can't update `items` using `id_properties_ui` of `EnumProperty`. Maybe less a bug than an annoyance.
+- **Matrix Display Bug**: The data given to matrix properties is entirely ignored in the UI; the data is flattened, then left-to-right, up-to-down, the data is inserted. It's neither row-major nor column-major - it's completely flat.
+	- Though, if one wanted row-major (**as is consistent with `mathutils.Matrix`**), one would be disappointed - the UI prints the matrix property column-major
+	- Trying to set the matrix property with a `mathutils.Matrix` is even stranger - firstly, the size of the `mathutils.Matrix` must be transposed with respect to the property size (again the col/row major mismatch). But secondly, even when accounting for the col/row major mismatch, the values of a ex. 2x3 (row-major) matrix (written to with a 3x2 matrix with same flattened sequence) is written in a very strange order:
+	- Write `mathutils.Matrix` `[[0,1], [2,3], [4,10]]`: Results in (UI displayed row-major) `[[0,3], [4,1], [3,5]]`
+	- **Workaround (write)**: Simply flatten the 2D array, re-shape by `[cols,rows]`. The UI will display as the original array. `myarray.flatten().reshape([cols,rows])`.
+	- **Workaround (read)**: `np.array([[el1 for el1 in el0] for el0 in BLENDER_OBJ.matrix_prop]).flatten().reshape([rows,cols])`. Simply flatten the property read 2D array and re-shape by `[rows,cols]`. Mind that data type out is equal to data type in.
+	- Also, for bool matrices, `toggle=True` has no effect. `alignment='CENTER'` also doesn't align the checkboxes in their cells.
 
 ## Tidy3D bugs
 Unreported:

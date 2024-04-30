@@ -7,16 +7,14 @@ import sympy as sp
 from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
 
-from ... import contracts as ct
-from .. import base
+from .. import contracts as ct
+from . import base
 
 ## TODO: This is a big node, and there's a lot to get right.
-## - Dynamically adjust the value when the user changes the unit in the UI.
 ## - Dynamically adjust socket color in response to, especially, the unit dimension.
 ## - Iron out the meaning of display shapes.
 ## - Generally pay attention to validity checking; it's make or break.
-## - For array generation, it may pay to have both a symbolic expression (producing output according to `size` as usual) denoting how to actually make values, and how many. Enables ex. easy symbolic
-## - For array generation, it may pay to have both a symbolic expression (producing output according to `size` as usual)
+## - For array generation, it may pay to have both a symbolic expression (producing output according to `shape` as usual) denoting how to actually make values, and how many. Enables ex. easy symbolic plots.
 
 log = logger.get(__name__)
 
@@ -69,22 +67,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	size: typ.Literal[None, 2, 3] = bl_cache.BLField(None, prop_ui=True)
+	shape: tuple[int, ...] | None = bl_cache.BLField(None)
 	mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real, prop_ui=True)
+	physical_type: spux.PhysicalType | None = bl_cache.BLField(None)
 	symbols: frozenset[spux.Symbol] = bl_cache.BLField(frozenset())
 
-	## Units
-	unit_dim: spux.UnitDimension | None = bl_cache.BLField(None)
 	active_unit: enum.Enum = bl_cache.BLField(
 		None, enum_cb=lambda self, _: self.search_units(), prop_ui=True
-	)
-
-	## Info Display
-	show_info_columns: bool = bl_cache.BLField(False, prop_ui=True)
-	info_columns: InfoDisplayCol = bl_cache.BLField(
-		{InfoDisplayCol.MathType, InfoDisplayCol.Unit},
-		prop_ui=True,
-		enum_many=True,
 	)
 
 	# UI: Value
@@ -94,7 +83,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	raw_value_int: int = bl_cache.BLField(0, prop_ui=True)
 	raw_value_rat: Int2 = bl_cache.BLField((0, 1), prop_ui=True)
 	raw_value_float: float = bl_cache.BLField(0.0, float_prec=4, prop_ui=True)
-	raw_value_complex: Float2 = bl_cache.BLField((0, 1), float_prec=4, prop_ui=True)
+	raw_value_complex: Float2 = bl_cache.BLField((0.0, 0.0), float_prec=4, prop_ui=True)
 	## 2D
 	raw_value_int2: Int2 = bl_cache.BLField((0, 0), prop_ui=True)
 	raw_value_rat2: Int22 = bl_cache.BLField(((0, 1), (0, 1)), prop_ui=True)
@@ -105,7 +94,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	## 3D
 	raw_value_int3: Int3 = bl_cache.BLField((0, 0, 0), prop_ui=True)
 	raw_value_rat3: Int32 = bl_cache.BLField(((0, 1), (0, 1), (0, 1)), prop_ui=True)
-	raw_value_float3: Float3 = bl_cache.BLField((0.0, 0.0), float_prec=4, prop_ui=True)
+	raw_value_float3: Float3 = bl_cache.BLField(
+		(0.0, 0.0, 0.0), float_prec=4, prop_ui=True
+	)
 	raw_value_complex3: Float32 = bl_cache.BLField(
 		((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)), float_prec=4, prop_ui=True
 	)
@@ -121,6 +112,14 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	raw_range_float: Float2 = bl_cache.BLField((0.0, 1.0), prop_ui=True)
 	raw_range_complex: Float22 = bl_cache.BLField(
 		((0.0, 0.0), (1.0, 1.0)), float_prec=4, prop_ui=True
+	)
+
+	# UI: Info
+	show_info_columns: bool = bl_cache.BLField(False, prop_ui=True)
+	info_columns: InfoDisplayCol = bl_cache.BLField(
+		{InfoDisplayCol.MathType, InfoDisplayCol.Unit},
+		prop_ui=True,
+		enum_many=True,
 	)
 
 	####################
@@ -142,35 +141,63 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	# - Computed: Units
 	####################
 	def search_units(self, _: bpy.types.Context) -> list[ct.BLEnumElement]:
-		if self.unit_dim is not None:
+		if self.physical_type is not None:
 			return [
 				(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
-				for i, unit in enumerate(spux.unit_dim_units(self.unit_dim))
+				for i, unit in enumerate(self.physical_type.valid_units)
 			]
 		return []
 
-	@property
+	@bl_cache.cached_bl_property()
 	def unit(self) -> spux.Unit | None:
-		if self.active_unit != 'NONE':
+		"""Gets the current active unit.
+
+		Returns:
+			The current active `sympy` unit.
+
+			If the socket expression is unitless, this returns `None`.
+		"""
+		if self.active_unit is not None:
 			return spux.unit_str_to_unit(self.active_unit)
 
 		return None
 
 	@unit.setter
 	def unit(self, unit: spux.Unit) -> None:
-		valid_units = spux.unit_dim_units(self.unit_dim)
-		if unit in valid_units:
+		"""Set the unit, without touching the `raw_*` UI properties.
+
+		Notes:
+			To set a new unit, **and** convert the `raw_*` UI properties to the new unit, use `self.convert_unit()` instead.
+		"""
+		if unit in self.physical_type.valid_units:
 			self.active_unit = sp.sstr(unit)
 
-		msg = f'Tried to set invalid unit {unit} (unit dim "{self.unit_dim}" only supports "{valid_units}")'
+		msg = f'Tried to set invalid unit {unit} (physical type "{self.physical_type}" only supports "{self.physical_type.valid_units}")'
 		raise ValueError(msg)
+
+	def convert_unit(self, unit_to: spux.Unit) -> None:
+		if self.active_kind == ct.FlowKind.Value:
+			current_value = self.value
+			self.unit = unit_to
+			self.value = current_value
+		elif self.active_kind == ct.FlowKind.LazyArrayRange:
+			current_lazy_array_range = self.lazy_array_range
+			self.unit = unit_to
+			self.lazy_array_range = current_lazy_array_range
+
+	####################
+	# - Property Callback
+	####################
+	def on_socket_prop_changed(self, prop_name: str) -> None:
+		if prop_name == 'unit' and self.active_unit is not None:
+			self.convert_unit(spux.unit_str_to_unit(self.active_unit))
 
 	####################
 	# - Methods
 	####################
 	def _parse_expr_info(
 		self, expr: spux.SympyExpr
-	) -> tuple[spux.MathType, typ.Literal[None, 2, 3], spux.UnitDimension]:
+	) -> tuple[spux.MathType, tuple[int, ...] | None, spux.UnitDimension]:
 		# Parse MathType
 		mathtype = spux.MathType.from_expr(expr)
 		if self.mathtype != mathtype:
@@ -188,18 +215,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				raise ValueError(msg)
 
 		# Parse Dimensions
-		size = spux.parse_size(expr)
-		if size != self.size:
-			msg = f'Expr {expr} has {size} dimensions, which is incompatible with the expr socket ({self.size} dimensions)'
+		shape = spux.parse_shape(expr)
+		if shape != self.shape:
+			msg = f'Expr {expr} has shape {shape}, which is incompatible with the expr socket (shape {self.shape})'
 			raise ValueError(msg)
 
-		# Parse Unit Dimension
-		unit_dim = spux.parse_unit_dim(expr)
-		if unit_dim != self.unit_dim:
-			msg = f'Expr {expr} has unit dimension {unit_dim}, which is incompatible with socket unit dimension {self.unit_dim}'
-			raise ValueError(msg)
-
-		return mathtype, size, unit_dim
+		return mathtype, shape
 
 	def _to_raw_value(self, expr: spux.SympyExpr):
 		if self.unit is not None:
@@ -212,7 +233,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			locals={sym.name: sym for sym in self.symbols},
 			strict=False,
 			convert_xor=True,
-		).subs(spux.ALL_UNIT_SYMBOLS) * (self.unit if self.unit is not None else 1)
+		).subs(spux.UNIT_BY_SYMBOL) * (self.unit if self.unit is not None else 1)
 
 		# Try Parsing and Returning the Expression
 		try:
@@ -245,7 +266,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Return:
 			The expression defined by the socket, in the socket's unit.
 		"""
-		if self.symbols:
+		if self.symbols or self.shape not in [None, (2,), (3,)]:
 			expr = self.raw_value_sp
 			if expr is None:
 				return ct.FlowSignal.FlowPending
@@ -266,7 +287,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					self.raw_value_complex[0] + sp.I * self.raw_value_complex[1]
 				),
 			},
-			2: {
+			(2,): {
 				MT_Z: lambda: sp.Matrix([Z(i) for i in self.raw_value_int2]),
 				MT_Q: lambda: sp.Matrix([Q(q[0], q[1]) for q in self.raw_value_rat2]),
 				MT_R: lambda: sp.Matrix([R(r) for r in self.raw_value_float2]),
@@ -274,7 +295,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					[c[0] + sp.I * c[1] for c in self.raw_value_complex2]
 				),
 			},
-			3: {
+			(3,): {
 				MT_Z: lambda: sp.Matrix([Z(i) for i in self.raw_value_int3]),
 				MT_Q: lambda: sp.Matrix([Q(q[0], q[1]) for q in self.raw_value_rat3]),
 				MT_R: lambda: sp.Matrix([R(r) for r in self.raw_value_float3]),
@@ -282,7 +303,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					[c[0] + sp.I * c[1] for c in self.raw_value_complex3]
 				),
 			},
-		}[self.size][self.mathtype]() * (self.unit if self.unit is not None else 1)
+		}[self.shape][self.mathtype]() * (self.unit if self.unit is not None else 1)
 
 	@value.setter
 	def value(self, expr: spux.SympyExpr) -> None:
@@ -291,8 +312,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Called to set the internal `FlowKind.Value` of this socket.
 		"""
-		mathtype, size, unit_dim = self._parse_expr_info(expr)
-		if self.symbols:
+		mathtype, shape = self._parse_expr_info(expr)
+		if self.symbols or self.shape not in [None, (2,), (3,)]:
 			self.raw_value_spstr = sp.sstr(expr)
 
 		else:
@@ -300,7 +321,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			MT_Q = spux.MathType.Rational
 			MT_R = spux.MathType.Real
 			MT_C = spux.MathType.Complex
-			if size is None:
+			if shape is None:
 				if mathtype == MT_Z:
 					self.raw_value_int = self._to_raw_value(expr)
 				elif mathtype == MT_Q:
@@ -309,7 +330,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					self.raw_value_float = self._to_raw_value(expr)
 				elif mathtype == MT_C:
 					self.raw_value_complex = self._to_raw_value(expr)
-			elif size == 2:
+			elif shape == (2,):
 				if mathtype == MT_Z:
 					self.raw_value_int2 = self._to_raw_value(expr)
 				elif mathtype == MT_Q:
@@ -318,7 +339,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					self.raw_value_float2 = self._to_raw_value(expr)
 				elif mathtype == MT_C:
 					self.raw_value_complex2 = self._to_raw_value(expr)
-			elif size == 3:
+			elif shape == (3,):
 				if mathtype == MT_Z:
 					self.raw_value_int3 = self._to_raw_value(expr)
 				elif mathtype == MT_Q:
@@ -341,9 +362,35 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Return:
 			The range of lengths, which uses no symbols.
 		"""
+		if self.symbols:
+			return ct.LazyArrayRangeFlow(
+				start=self.raw_min_sp,
+				stop=self.raw_max_sp,
+				steps=self.steps,
+				scaling='lin',
+				unit=self.unit,
+				symbols=self.symbols,
+			)
+
+		MT_Z = spux.MathType.Integer
+		MT_Q = spux.MathType.Rational
+		MT_R = spux.MathType.Real
+		MT_C = spux.MathType.Complex
+		Z = sp.Integer
+		Q = sp.Rational
+		R = sp.RealNumber
+		min_bound, max_bound = {
+			MT_Z: lambda: [Z(bound) for bound in self.raw_range_int],
+			MT_Q: lambda: [Q(bound[0], bound[1]) for bound in self.raw_range_rat],
+			MT_R: lambda: [R(bound) for bound in self.raw_range_float],
+			MT_C: lambda: [
+				bound[0] + sp.I * bound[1] for bound in self.raw_range_complex
+			],
+		}[self.mathtype]()
+
 		return ct.LazyArrayRangeFlow(
-			start=sp.S(self.min_value) * self.unit,
-			stop=sp.S(self.max_value) * self.unit,
+			start=min_bound,
+			stop=max_bound,
 			steps=self.steps,
 			scaling='lin',
 			unit=self.unit,
@@ -356,24 +403,73 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Called to compute the internal `FlowKind.LazyArrayRange` of this socket.
 		"""
-		self.min_value = spux.sympy_to_python(
-			spux.scale_to_unit(value.start * value.unit, self.unit)
-		)
-		self.max_value = spux.sympy_to_python(
-			spux.scale_to_unit(value.stop * value.unit, self.unit)
-		)
 		self.steps = value.steps
+		self.unit = value.unit
+
+		if self.symbols:
+			self.raw_min_spstr = sp.sstr(value.start)
+			self.raw_max_spstr = sp.sstr(value.stop)
+
+		else:
+			MT_Z = spux.MathType.Integer
+			MT_Q = spux.MathType.Rational
+			MT_R = spux.MathType.Real
+			MT_C = spux.MathType.Complex
+
+			if value.mathtype == MT_Z:
+				self.raw_range_int = [
+					self._to_raw_value(bound) for bound in [value.start, value.stop]
+				]
+			elif value.mathtype == MT_Q:
+				self.raw_range_rat = [
+					self._to_raw_value(bound) for bound in [value.start, value.stop]
+				]
+			elif value.mathtype == MT_R:
+				self.raw_range_float = [
+					self._to_raw_value(bound) for bound in [value.start, value.stop]
+				]
+			elif value.mathtype == MT_C:
+				self.raw_range_complex = [
+					self._to_raw_value(bound) for bound in [value.start, value.stop]
+				]
 
 	####################
-	# - FlowKind: LazyValueFunc
+	# - FlowKind: LazyValueFunc (w/Params if Constant)
 	####################
 	@property
 	def lazy_value_func(self) -> ct.LazyValueFuncFlow:
+		# Lazy Value: Arbitrary Expression
+		if self.symbols or self.shape not in [None, (2,), (3,)]:
+			return ct.LazyValueFuncFlow(
+				func=sp.lambdify(self.symbols, self.value, 'jax'),
+				func_args=[spux.MathType.from_expr(sym) for sym in self.symbols],
+				supports_jax=True,
+			)
+
+		# Lazy Value: Constant
+		## -> A very simple function, which takes a single argument.
+		## -> What will be passed is a unit-scaled/stripped, pytype-converted Expr:Value.
+		## -> Until then, the user can utilize this LVF in a function composition chain.
 		return ct.LazyValueFuncFlow(
-			func=sp.lambdify(self.symbols, self.value, 'jax'),
-			func_args=[spux.sympy_to_python_type(sym) for sym in self.symbols],
+			func=lambda v: v,
+			func_args=[
+				self.physical_type if self.physical_type is not None else self.mathtype
+			],
 			supports_jax=True,
 		)
+
+	@property
+	def params(self) -> ct.ParamsFlow:
+		# Params Value: Symbolic
+		## -> The Expr socket does not declare actual values for the symbols.
+		## -> Those values must come from elsewhere.
+		## -> If someone tries to load them anyway, tell them 'NoFlow'.
+		if self.symbols or self.shape not in [None, (2,), (3,)]:
+			return ct.FlowSignal.NoFlow
+
+		# Params Value: Constant
+		## -> Simply pass the Expr:Value as parameter.
+		return ct.ParamsFlow(func_args=[self.value])
 
 	####################
 	# - FlowKind: Array
@@ -396,7 +492,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	def info(self) -> ct.ArrayFlow:
 		return ct.InfoFlow(
 			output_name='_',  ## TODO: Something else
-			output_shape=(self.size,) if self.size is not None else None,
+			output_shape=self.shape,
 			output_mathtype=self.mathtype,
 			output_unit=self.unit,
 		)
@@ -416,6 +512,16 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - UI
 	####################
+	def draw_label_row(self, row: bpy.types.UILayout, text) -> None:
+		if self.active_unit is not None:
+			split = row.split(factor=0.6, align=True)
+
+			_row = split.row(align=True)
+			_row.label(text=text)
+
+			_col = split.column(align=True)
+			_col.prop(self, 'active_unit', text='')
+
 	def draw_value(self, col: bpy.types.UILayout) -> None:
 		# Property Interface
 		if self.symbols:
@@ -426,7 +532,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			MT_Q = spux.MathType.Rational
 			MT_R = spux.MathType.Real
 			MT_C = spux.MathType.Complex
-			if self.size is None:
+			if self.shape is None:
 				if self.mathtype == MT_Z:
 					col.prop(self, self.blfields['raw_value_int'], text='')
 				elif self.mathtype == MT_Q:
@@ -435,7 +541,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					col.prop(self, self.blfields['raw_value_float'], text='')
 				elif self.mathtype == MT_C:
 					col.prop(self, self.blfields['raw_value_complex'], text='')
-			elif self.size == 2:
+			elif self.shape == (2,):
 				if self.mathtype == MT_Z:
 					col.prop(self, self.blfields['raw_value_int2'], text='')
 				elif self.mathtype == MT_Q:
@@ -444,7 +550,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					col.prop(self, self.blfields['raw_value_float2'], text='')
 				elif self.mathtype == MT_C:
 					col.prop(self, self.blfields['raw_value_complex2'], text='')
-			elif self.size == 3:
+			elif self.shape == (3,):
 				if self.mathtype == MT_Z:
 					col.prop(self, self.blfields['raw_value_int3'], text='')
 				elif self.mathtype == MT_Q:
@@ -579,34 +685,57 @@ class ExprSocketDef(base.SocketDef):
 		ct.FlowKind.Value
 	)
 
-	# Properties
-	size: typ.Literal[None, 2, 3] = None
+	# Socket Interface
+	## TODO: __hash__ like socket method based on these?
+	shape: tuple[int, ...] | None = None
 	mathtype: spux.MathType = spux.MathType.Real
+	physical_type: spux.PhysicalType | None = None
 	symbols: frozenset[spux.Symbol] = frozenset()
-	## Units
-	unit_dim: spux.UnitDimension | None = None
-	## Info Display
-	show_info_columns: bool = False
+
+	# Socket Units
+	default_unit: spux.Unit | None = None
+
+	# FlowKind: Value
+	default_value: spux.SympyExpr = sp.S(0)
+
+	# FlowKind: LazyArrayRange
+	default_min: spux.SympyExpr = sp.S(0)
+	default_max: spux.SympyExpr = sp.S(1)
+	default_steps: int = 2
+	## TODO: Configure lin/log/... scaling (w/enumprop in UI)
 
 	## TODO: Buncha validation :)
 
-	# Defaults
-	default_unit: spux.Unit | None = None
-	default_value: spux.SympyExpr = sp.S(1)
-	default_min: spux.SympyExpr = sp.S(0)
-	default_max: spux.SympyExpr = sp.S(1)
-	default_steps: spux.SympyExpr = sp.S(2)
+	# UI
+	show_info_columns: bool = False
 
 	def init(self, bl_socket: ExprBLSocket) -> None:
 		bl_socket.active_kind = self.active_kind
-		bl_socket.size = self.size
-		bl_socket.mathtype = self.size
-		bl_socket.symbols = self.symbols
-		bl_socket.unit_dim = self.size
-		bl_socket.unit = self.symbols
-		bl_socket.show_info_columns = self.show_info_columns
 
-		bl_socket.value = self.default
+		# Socket Interface
+		bl_socket.shape = self.shape
+		bl_socket.mathtype = self.mathtype
+		bl_socket.physical_type = self.physical_type
+		bl_socket.symbols = self.symbols
+
+		# Socket Units
+		if self.default_unit is not None:
+			bl_socket.unit = self.default_unit
+
+		# FlowKind: Value
+		bl_socket.value = self.default_value
+
+		# FlowKind: LazyArrayRange
+		bl_socket.lazy_array_range = ct.LazyArrayRangeFlow(
+			start=self.default_min,
+			stop=self.default_max,
+			steps=self.default_steps,
+			scaling='lin',
+			unit=self.default_unit,
+		)
+
+		# UI
+		bl_socket.show_info_columns = self.show_info_columns
 
 
 ####################

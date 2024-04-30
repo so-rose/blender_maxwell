@@ -41,18 +41,17 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 	input_socket_sets: typ.ClassVar = {
 		'Sim Data': {'Sim Data': sockets.MaxwellFDTDSimDataSocketDef()},
-		'Monitor Data': {'Monitor Data': sockets.DataSocketDef(format='monitor_data')},
+		'Monitor Data': {'Monitor Data': sockets.MaxwellMonitorDataSocketDef()},
 	}
 	output_socket_sets: typ.ClassVar = {
-		'Sim Data': {'Monitor Data': sockets.DataSocketDef(format='monitor_data')},
-		'Monitor Data': {'Data': sockets.DataSocketDef(format='jax')},
+		'Sim Data': {'Monitor Data': sockets.MaxwellMonitorDataSocketDef()},
+		'Monitor Data': {'Expr': sockets.ExprSocketDef()},
 	}
 
 	####################
 	# - Properties
 	####################
 	extract_filter: enum.Enum = bl_cache.BLField(
-		None,
 		prop_ui=True,
 		enum_cb=lambda self, _: self.search_extract_filters(),
 	)
@@ -62,7 +61,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	@property
 	def sim_data(self) -> td.SimulationData | None:
-		"""Computes the (cached) simulation data from the input socket.
+		"""Extracts the simulation data from the input socket.
 
 		Return:
 			Either the simulation data, if available, or None.
@@ -70,14 +69,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 		sim_data = self._compute_input(
 			'Sim Data', kind=ct.FlowKind.Value, optional=True
 		)
-		if not ct.FlowSignal.check(sim_data):
+		has_sim_data = not ct.FlowSignal.check(sim_data)
+		if has_sim_data:
 			return sim_data
 
 		return None
 
 	@bl_cache.cached_bl_property()
 	def sim_data_monitor_nametype(self) -> dict[str, str] | None:
-		"""For simulation data, computes and and caches a map from name to "type".
+		"""For simulation data, deduces a map from the monitor name to the monitor "type".
 
 		Return:
 			The name to type of monitors in the simulation data.
@@ -95,7 +95,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	@property
 	def monitor_data(self) -> TDMonitorData | None:
-		"""Computes the (cached) monitor data from the input socket.
+		"""Extracts the monitor data from the input socket.
 
 		Return:
 			Either the monitor data, if available, or None.
@@ -103,17 +103,26 @@ class ExtractDataNode(base.MaxwellSimNode):
 		monitor_data = self._compute_input(
 			'Monitor Data', kind=ct.FlowKind.Value, optional=True
 		)
-		if not ct.FlowSignal.check(monitor_data):
+		has_monitor_data = not ct.FlowSignal.check(monitor_data)
+		if has_monitor_data:
 			return monitor_data
 
 		return None
 
 	@bl_cache.cached_bl_property()
 	def monitor_data_type(self) -> str | None:
-		"""For monitor data, computes and caches the monitor "type".
+		r"""For monitor data, deduces the monitor "type".
+
+		- **Field(Time)**: A monitor storing values/pixels/voxels with electromagnetic field values, on the time or frequency domain.
+		- **Permittivity**: A monitor storing values/pixels/voxels containing the diagonal of the relative permittivity tensor.
+		- **Flux(Time)**: A monitor storing the directional flux on the time or frequency domain.
+			For planes, an explicit direction is defined.
+			For volumes, the the integral of all outgoing energy is stored.
+		- **FieldProjection(...)**: A monitor storing the spherical-coordinate electromagnetic field components of a near-to-far-field projection.
+		- **Diffraction**: A monitor storing a near-to-far-field projection by diffraction order.
 
 		Notes:
-			Should be invalidated with (before) `self.monitor_data_components`.
+			Should be invalidated with (before) `self.monitor_data_attrs`.
 
 		Return:
 			The "type" of the monitor, if available, else None.
@@ -124,10 +133,10 @@ class ExtractDataNode(base.MaxwellSimNode):
 		return None
 
 	@bl_cache.cached_bl_property()
-	def monitor_data_components(self) -> list[str] | None:
-		r"""For monitor data, computes and caches the component sof the monitor.
+	def monitor_data_attrs(self) -> list[str] | None:
+		r"""For monitor data, deduces the valid data-containing attributes.
 
-		The output depends entirely on the output of `self.monitor_data`.
+		The output depends entirely on the output of `self.monitor_data_type`, since the valid attributes of each monitor type is well-defined without needing to perform dynamic lookups.
 
 		- **Field(Time)**: Whichever `[E|H][x|y|z]` are not `None` on the monitor.
 		- **Permittivity**: Specifically `['xx', 'yy', 'zz']`.
@@ -183,7 +192,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		"""Compute valid values for `self.extract_filter`, for a dynamic `EnumProperty`.
 
 		Notes:
-			Should be reset (via `self.extract_filter`) with (after) `self.sim_data_monitor_nametype`, `self.monitor_data_components`, and (implicitly) `self.monitor_type`.
+			Should be reset (via `self.extract_filter`) with (after) `self.sim_data_monitor_nametype`, `self.monitor_data_attrs`, and (implicitly) `self.monitor_type`.
 
 			See `bl_cache.BLField` for more on dynamic `EnumProperty`.
 
@@ -198,26 +207,71 @@ class ExtractDataNode(base.MaxwellSimNode):
 				)
 			]
 
-		if self.monitor_data_components is not None:
-			return [
-				(
-					component_name,
-					component_name,
-					f'ℂ {component_name[1]}-polarization of the {"electric" if component_name[0] == "E" else "magnetic"} field',
-					'',
-					i,
-				)
-				for i, component_name in enumerate(self.monitor_data_components)
-			]
+		if self.monitor_data_attrs is not None:
+			# Field/FieldTime
+			if self.monitor_data_type in ['Field', 'FieldTime']:
+				return [
+					(
+						monitor_attr,
+						monitor_attr,
+						f'ℂ {monitor_attr[1]}-polarization of the {"electric" if monitor_attr[0] == "E" else "magnetic"} field',
+						'',
+						i,
+					)
+					for i, monitor_attr in enumerate(self.monitor_data_attrs)
+				]
+
+			# Permittivity
+			if self.monitor_data_type == 'Permittivity':
+				return [
+					(monitor_attr, monitor_attr, f'ℂ ε_{monitor_attr}', '', i)
+					for i, monitor_attr in enumerate(self.monitor_data_attrs)
+				]
+
+			# Flux/FluxTime
+			if self.monitor_data_type in ['Flux', 'FluxTime']:
+				return [
+					(
+						monitor_attr,
+						monitor_attr,
+						'Power flux integral through the plane / out of the volume',
+						'',
+						i,
+					)
+					for i, monitor_attr in enumerate(self.monitor_data_attrs)
+				]
+
+			# FieldProjection(Angle/Cartesian/KSpace)/Diffraction
+			if self.monitor_data_type in [
+				'FieldProjectionAngle',
+				'FieldProjectionCartesian',
+				'FieldProjectionKSpace',
+				'Diffraction',
+			]:
+				return [
+					(
+						monitor_attr,
+						monitor_attr,
+						f'ℂ {monitor_attr[1]}-component of the spherical {"electric" if monitor_attr[0] == "E" else "magnetic"} field',
+						'',
+						i,
+					)
+					for i, monitor_attr in enumerate(self.monitor_data_attrs)
+				]
 
 		return []
 
 	####################
 	# - UI
 	####################
-	def draw_label(self):
+	def draw_label(self) -> None:
+		"""Show the extracted data (if any) in the node's header label.
+
+		Notes:
+			Called by Blender to determine the text to place in the node's header.
+		"""
 		has_sim_data = self.sim_data_monitor_nametype is not None
-		has_monitor_data = self.monitor_data_components is not None
+		has_monitor_data = self.monitor_data_attrs is not None
 
 		if has_sim_data or has_monitor_data:
 			return f'Extract: {self.extract_filter}'
@@ -245,11 +299,11 @@ class ExtractDataNode(base.MaxwellSimNode):
 		"""Invalidate the cached properties for sim data / monitor data, and reset the extraction filter."""
 		self.sim_data_monitor_nametype = bl_cache.Signal.InvalidateCache
 		self.monitor_data_type = bl_cache.Signal.InvalidateCache
-		self.monitor_data_components = bl_cache.Signal.InvalidateCache
+		self.monitor_data_attrs = bl_cache.Signal.InvalidateCache
 		self.extract_filter = bl_cache.Signal.ResetEnumItems
 
 	####################
-	# - Output: Sim Data -> Monitor Data
+	# - Output (Value): Sim Data -> Monitor Data
 	####################
 	@events.computes_output_socket(
 		# Trigger
@@ -262,96 +316,84 @@ class ExtractDataNode(base.MaxwellSimNode):
 	def compute_monitor_data(
 		self, props: dict, input_sockets: dict
 	) -> TDMonitorData | ct.FlowSignal:
-		"""Compute `Monitor Data` by querying an attribute of `Sim Data`.
-
-		Notes:
-			The attribute to query is read directly from `self.extract_filter`.
-			This is also the mechanism that protects from trying to reference an invalid attribute.
+		"""Compute `Monitor Data` by querying the attribute of `Sim Data` referenced by the property `self.extract_filter`.
 
 		Returns:
 			Monitor data, if available, else `ct.FlowSignal.FlowPending`.
 		"""
+		extract_filter = props['extract_filter']
 		sim_data = input_sockets['Sim Data']
 		has_sim_data = not ct.FlowSignal.check(sim_data)
 
-		if has_sim_data and props['extract_filter'] != 'NONE':
-			return input_sockets['Sim Data'].monitor_data[props['extract_filter']]
-
-		# Propagate NoFlow
-		if ct.FlowSignal.check_single(sim_data, ct.FlowSignal.NoFlow):
-			return ct.FlowSignal.NoFlow
+		if has_sim_data and extract_filter is not None:
+			return sim_data.monitor_data[extract_filter]
 
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - Output: Monitor Data -> Data
+	# - Output (Array): Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
 		# Trigger
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Array,
 		# Loaded
 		props={'extract_filter'},
 		input_sockets={'Monitor Data'},
 		input_socket_kinds={'Monitor Data': ct.FlowKind.Value},
 	)
-	def compute_data(
+	def compute_expr(
 		self, props: dict, input_sockets: dict
 	) -> jax.Array | ct.FlowSignal:
-		"""Compute `Data:Array` by querying an array-like attribute of `Monitor Data`, then constructing an `ct.ArrayFlow`.
+		"""Compute `Expr:Array` by querying an array-like attribute of `Monitor Data`, then constructing an `ct.ArrayFlow` around it.
 
 		Uses the internal `xarray` data returned by Tidy3D.
 		By using `np.array` on the `.data` attribute of the `xarray`, instead of the usual JAX array constructor, we should save a (possibly very big) copy.
 
-		Notes:
-			The attribute to query is read directly from `self.extract_filter`.
-			This is also the mechanism that protects from trying to reference an invalid attribute.
-
-			Used as the first part of the `LazyFuncValue` chain used for further array manipulations with Math nodes.
-
 		Returns:
 			The data array, if available, else `ct.FlowSignal.FlowPending`.
 		"""
-		has_monitor_data = not ct.FlowSignal.check(input_sockets['Monitor Data'])
+		extract_filter = props['extract_filter']
+		monitor_data = input_sockets['Monitor Data']
+		has_monitor_data = not ct.FlowSignal.check(monitor_data)
 
-		if has_monitor_data and props['extract_filter'] != 'NONE':
-			xarray_data = getattr(
-				input_sockets['Monitor Data'], props['extract_filter']
-			)
+		if has_monitor_data and extract_filter is not None:
+			xarray_data = getattr(monitor_data, extract_filter)
 			return ct.ArrayFlow(values=np.array(xarray_data.data), unit=None)
 
 		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
 		# Trigger
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.LazyValueFunc,
 		# Loaded
-		output_sockets={'Data'},
-		output_socket_kinds={'Data': ct.FlowKind.Array},
+		output_sockets={'Expr'},
+		output_socket_kinds={'Expr': ct.FlowKind.Array},
 	)
 	def compute_extracted_data_lazy(
 		self, output_sockets: dict
 	) -> ct.LazyValueFuncFlow | None:
-		"""Declare `Data:LazyValueFunc` by creating a simple function that directly wraps `Data:Array`.
+		"""Declare `Expr:LazyValueFunc` by creating a simple function that directly wraps `Expr:Array`.
 
 		Returns:
 			The composable function array, if available, else `ct.FlowSignal.FlowPending`.
 		"""
-		has_output_data = not ct.FlowSignal.check(output_sockets['Data'])
+		output_expr = output_sockets['Expr']
+		has_output_expr = not ct.FlowSignal.check(output_expr)
 
-		if has_output_data:
+		if has_output_expr:
 			return ct.LazyValueFuncFlow(
-				func=lambda: output_sockets['Data'].values, supports_jax=True
+				func=lambda: output_expr.values, supports_jax=True
 			)
 
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - Auxiliary: Monitor Data -> Data
+	# - Auxiliary (Params): Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Params,
 	)
 	def compute_data_params(self) -> ct.ParamsFlow:
@@ -362,6 +404,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 		"""
 		return ct.ParamsFlow()
 
+	####################
+	# - Auxiliary (Info): Monitor Data -> Expr
+	####################
 	@events.computes_output_socket(
 		# Trigger
 		'Data',
@@ -380,20 +425,21 @@ class ExtractDataNode(base.MaxwellSimNode):
 		Returns:
 			Information describing the `Data:LazyValueFunc`, if available, else `ct.FlowSignal.FlowPending`.
 		"""
-		has_monitor_data = not ct.FlowSignal.check(input_sockets['Monitor Data'])
+		monitor_data = input_sockets['Monitor Data']
+		monitor_data_type = props['monitor_data_type']
+		extract_filter = props['extract_filter']
+
+		has_monitor_data = not ct.FlowSignal.check(monitor_data)
 
 		# Retrieve XArray
-		if has_monitor_data and props['extract_filter'] != 'NONE':
-			xarr = getattr(input_sockets['Monitor Data'], props['extract_filter'])
+		if has_monitor_data and extract_filter is not None:
+			xarr = getattr(monitor_data, extract_filter)
 		else:
 			return ct.FlowSignal.FlowPending
 
-		info_output_name = props['extract_filter']
-		info_output_shape = None
-
 		# Compute InfoFlow from XArray
 		## XYZF: Field / Permittivity / FieldProjectionCartesian
-		if props['monitor_data_type'] in {
+		if monitor_data_type in {
 			'Field',
 			'Permittivity',
 			#'FieldProjectionCartesian',
@@ -413,18 +459,16 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Complex,
 				output_unit=(
-					spu.volt / spu.micrometer
-					if props['monitor_data_type'] == 'Field'
-					else None
+					spu.volt / spu.micrometer if monitor_data_type == 'Field' else None
 				),
 			)
 
 		## XYZT: FieldTime
-		if props['monitor_data_type'] == 'FieldTime':
+		if monitor_data_type == 'FieldTime':
 			return ct.InfoFlow(
 				dim_names=['x', 'y', 'z', 't'],
 				dim_idx={
@@ -440,18 +484,16 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Complex,
 				output_unit=(
-					spu.volt / spu.micrometer
-					if props['monitor_data_type'] == 'Field'
-					else None
+					spu.volt / spu.micrometer if monitor_data_type == 'Field' else None
 				),
 			)
 
 		## F: Flux
-		if props['monitor_data_type'] == 'Flux':
+		if monitor_data_type == 'Flux':
 			return ct.InfoFlow(
 				dim_names=['f'],
 				dim_idx={
@@ -461,14 +503,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Real,
 				output_unit=spu.watt,
 			)
 
 		## T: FluxTime
-		if props['monitor_data_type'] == 'FluxTime':
+		if monitor_data_type == 'FluxTime':
 			return ct.InfoFlow(
 				dim_names=['t'],
 				dim_idx={
@@ -478,14 +520,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Real,
 				output_unit=spu.watt,
 			)
 
 		## RThetaPhiF: FieldProjectionAngle
-		if props['monitor_data_type'] == 'FieldProjectionAngle':
+		if monitor_data_type == 'FieldProjectionAngle':
 			return ct.InfoFlow(
 				dim_names=['r', 'theta', 'phi', 'f'],
 				dim_idx={
@@ -508,18 +550,18 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Real,
 				output_unit=(
 					spu.volt / spu.micrometer
-					if props['extract_filter'].startswith('E')
+					if extract_filter.startswith('E')
 					else spu.ampere / spu.micrometer
 				),
 			)
 
 		## UxUyRF: FieldProjectionKSpace
-		if props['monitor_data_type'] == 'FieldProjectionKSpace':
+		if monitor_data_type == 'FieldProjectionKSpace':
 			return ct.InfoFlow(
 				dim_names=['ux', 'uy', 'r', 'f'],
 				dim_idx={
@@ -540,18 +582,18 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Real,
 				output_unit=(
 					spu.volt / spu.micrometer
-					if props['extract_filter'].startswith('E')
+					if extract_filter.startswith('E')
 					else spu.ampere / spu.micrometer
 				),
 			)
 
 		## OrderxOrderyF: Diffraction
-		if props['monitor_data_type'] == 'Diffraction':
+		if monitor_data_type == 'Diffraction':
 			return ct.InfoFlow(
 				dim_names=['orders_x', 'orders_y', 'f'],
 				dim_idx={
@@ -569,17 +611,17 @@ class ExtractDataNode(base.MaxwellSimNode):
 						is_sorted=True,
 					),
 				},
-				output_name=props['extract_filter'],
+				output_name=extract_filter,
 				output_shape=None,
 				output_mathtype=spux.MathType.Real,
 				output_unit=(
 					spu.volt / spu.micrometer
-					if props['extract_filter'].startswith('E')
+					if extract_filter.startswith('E')
 					else spu.ampere / spu.micrometer
 				),
 			)
 
-		msg = f'Unsupported Monitor Data Type {props["monitor_data_type"]} in "FlowKind.Info" of "{self.bl_label}"'
+		msg = f'Unsupported Monitor Data Type {monitor_data_type} in "FlowKind.Info" of "{self.bl_label}"'
 		raise RuntimeError(msg)
 
 

@@ -1,6 +1,7 @@
 import typing as typ
 
 import sympy as sp
+import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
@@ -25,22 +26,44 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'Size': sockets.PhysicalSize3DSocketDef(),
-		'Samples/Space': sockets.Integer3DVectorSocketDef(
-			default_value=sp.Matrix([10, 10, 10])
+		'Center': sockets.ExprSocketDef(
+			shape=(3,),
+			physical_type=spux.PhysicalType.Length,
 		),
+		'Size': sockets.ExprSocketDef(
+			shape=(3,),
+			physical_type=spux.PhysicalType.Length,
+		),
+		'Spatial Subdivs': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Integer,
+			default_value=sp.Matrix([10, 10, 10]),
+		),
+		## TODO: Pass a grid instead of size and resolution
+		## TODO: 1D (line), 2D (plane), 3D modes
 	}
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
-			'Freqs': sockets.PhysicalFreqSocketDef(
-				is_array=True,
+			'Freqs': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.LazyArrayRange,
+				physical_type=spux.PhysicalType.Freq,
+				default_unit=spux.THz,
+				default_min=374.7406,  ## 800nm
+				default_max=1498.962,  ## 200nm
+				default_steps=100,
 			),
 		},
 		'Time Domain': {
-			'Rec Start': sockets.PhysicalTimeSocketDef(),
-			'Rec Stop': sockets.PhysicalTimeSocketDef(default_value=200 * spux.fs),
-			'Samples/Time': sockets.IntegerNumberSocketDef(
+			'Time Range': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.LazyArrayRange,
+				physical_type=spux.PhysicalType.Time,
+				default_unit=spu.picosecond,
+				default_min=0,
+				default_max=10,
+				default_steps=2,
+			),
+			'Temporal Subdivs': sockets.ExprSocketDef(
+				mathtype=spux.MathType.Integer,
 				default_value=100,
 			),
 		},
@@ -56,7 +79,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Output Sockets
+	# - Output
 	####################
 	@events.computes_output_socket(
 		'Freq Monitor',
@@ -64,7 +87,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		input_sockets={
 			'Center',
 			'Size',
-			'Samples/Space',
+			'Spatial Subdivs',
 			'Freqs',
 		},
 		input_socket_kinds={
@@ -93,12 +116,12 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			center=input_sockets['Center'],
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
-			interval_space=tuple(input_sockets['Samples/Space']),
+			interval_space=tuple(input_sockets['Spatial Subdivs']),
 			freqs=input_sockets['Freqs'].realize().values,
 		)
 
 	####################
-	# - Preview - Changes to Input Sockets
+	# - Preview
 	####################
 	@events.on_value_changed(
 		socket_name={'Center', 'Size'},

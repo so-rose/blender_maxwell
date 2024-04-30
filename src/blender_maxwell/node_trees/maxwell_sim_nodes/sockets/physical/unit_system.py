@@ -1,6 +1,6 @@
 import bpy
 
-from blender_maxwell.utils.pydantic_sympy import SympyExpr
+#from blender_maxwell.utils.pydantic_sympy import SympyExpr
 
 from ... import contracts as ct
 from .. import base

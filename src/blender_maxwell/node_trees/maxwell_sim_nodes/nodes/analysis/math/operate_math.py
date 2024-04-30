@@ -14,6 +14,29 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+FUNCS = {
+	'ADD': lambda exprs: exprs[0] + exprs[1],
+	'SUB': lambda exprs: exprs[0] - exprs[1],
+	'MUL': lambda exprs: exprs[0] * exprs[1],
+	'DIV': lambda exprs: exprs[0] / exprs[1],
+	'POW': lambda exprs: exprs[0] ** exprs[1],
+}
+
+SP_FUNCS = FUNCS
+JAX_FUNCS = FUNCS | {
+	# Number | *
+	'ATAN2': lambda exprs: jnp.atan2(exprs[1], exprs[0]),
+	# Vector | Vector
+	'VEC_VEC_DOT': lambda exprs: jnp.matmul(exprs[0], exprs[1]),
+	'CROSS': lambda exprs: jnp.cross(exprs[0], exprs[1]),
+	# Matrix | Vector
+	'MAT_VEC_DOT': lambda exprs: jnp.matmul(exprs[0], exprs[1]),
+	'LIN_SOLVE': lambda exprs: jnp.linalg.solve(exprs[0], exprs[1]),
+	'LSQ_SOLVE': lambda exprs: jnp.linalg.lstsq(exprs[0], exprs[1]),
+	# Matrix | Matrix
+	'MAT_MAT_DOT': lambda exprs: jnp.matmul(exprs[0], exprs[1]),
+}
+
 
 class OperateMathNode(base.MaxwellSimNode):
 	r"""Applies a function that depends on two inputs.
@@ -28,40 +51,12 @@ class OperateMathNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.OperateMath
 	bl_label = 'Operate Math'
 
-	input_socket_sets: typ.ClassVar = {
-		'Expr | Expr': {
-			'Expr L': sockets.ExprSocketDef(),
-			'Expr R': sockets.ExprSocketDef(),
-		},
-		'Data | Data': {
-			'Data L': sockets.DataSocketDef(
-				format='jax', default_show_info_columns=False
-			),
-			'Data R': sockets.DataSocketDef(
-				format='jax', default_show_info_columns=False
-			),
-		},
-		'Expr | Data': {
-			'Expr L': sockets.ExprSocketDef(),
-			'Data R': sockets.DataSocketDef(
-				format='jax', default_show_info_columns=False
-			),
-		},
+	input_sockets: typ.ClassVar = {
+		'Expr L': sockets.ExprSocketDef(show_info_columns=False),
+		'Expr R': sockets.ExprSocketDef(show_info_columns=False),
 	}
-	output_socket_sets: typ.ClassVar = {
-		'Expr | Expr': {
-			'Expr': sockets.ExprSocketDef(),
-		},
-		'Data | Data': {
-			'Data': sockets.DataSocketDef(
-				format='jax', default_show_info_columns=False
-			),
-		},
-		'Expr | Data': {
-			'Data': sockets.DataSocketDef(
-				format='jax', default_show_info_columns=False
-			),
-		},
+	output_sockets: typ.ClassVar = {
+		'Expr': sockets.ExprSocketDef(),
 	}
 
 	####################
@@ -77,15 +72,15 @@ class OperateMathNode(base.MaxwellSimNode):
 
 	def search_categories(self) -> list[ct.BLEnumElement]:
 		"""Deduce and return a list of valid categories for the current socket set and input data."""
-		data_l_info = self._compute_input(
-			'Data L', kind=ct.FlowKind.Info, optional=True
+		expr_l_info = self._compute_input(
+			'Expr L', kind=ct.FlowKind.Info, optional=True
 		)
-		data_r_info = self._compute_input(
-			'Data R', kind=ct.FlowKind.Info, optional=True
+		expr_r_info = self._compute_input(
+			'Expr R', kind=ct.FlowKind.Info, optional=True
 		)
 
-		has_data_l_info = not ct.FlowSignal.check(data_l_info)
-		has_data_r_info = not ct.FlowSignal.check(data_r_info)
+		has_expr_l_info = not ct.FlowSignal.check(expr_l_info)
+		has_expr_r_info = not ct.FlowSignal.check(expr_r_info)
 
 		# Categories by Socket Set
 		NUMBER_NUMBER = (
@@ -120,63 +115,44 @@ class OperateMathNode(base.MaxwellSimNode):
 		)
 		categories = []
 
-		## Expr | Expr
-		if self.active_socket_set == 'Expr | Expr':
-			return [NUMBER_NUMBER]
-
-		## Data | Data
-		if (
-			self.active_socket_set == 'Data | Data'
-			and has_data_l_info
-			and has_data_r_info
-		):
+		if has_expr_l_info and has_expr_r_info:
 			# Check Valid Broadcasting
 			## Number | Number
-			if data_l_info.output_shape is None and data_r_info.output_shape is None:
+			if expr_l_info.output_shape is None and expr_r_info.output_shape is None:
 				categories = [NUMBER_NUMBER]
 
 			## Number | Vector
 			elif (
-				data_l_info.output_shape is None and len(data_r_info.output_shape) == 1
+				expr_l_info.output_shape is None and len(expr_r_info.output_shape) == 1
 			):
 				categories = [NUMBER_VECTOR]
 
 			## Number | Matrix
 			elif (
-				data_l_info.output_shape is None and len(data_r_info.output_shape) == 2
-			):  # noqa: PLR2004
+				expr_l_info.output_shape is None and len(expr_r_info.output_shape) == 2
+			):
 				categories = [NUMBER_MATRIX]
 
 			## Vector | Vector
 			elif (
-				len(data_l_info.output_shape) == 1
-				and len(data_r_info.output_shape) == 1
+				len(expr_l_info.output_shape) == 1
+				and len(expr_r_info.output_shape) == 1
 			):
 				categories = [VECTOR_VECTOR]
 
 			## Matrix | Vector
 			elif (
-				len(data_l_info.output_shape) == 2  # noqa: PLR2004
-				and len(data_r_info.output_shape) == 1
+				len(expr_l_info.output_shape) == 2  # noqa: PLR2004
+				and len(expr_r_info.output_shape) == 1
 			):
 				categories = [MATRIX_VECTOR]
 
 			## Matrix | Matrix
 			elif (
-				len(data_l_info.output_shape) == 2  # noqa: PLR2004
-				and len(data_r_info.output_shape) == 2  # noqa: PLR2004
+				len(expr_l_info.output_shape) == 2  # noqa: PLR2004
+				and len(expr_r_info.output_shape) == 2  # noqa: PLR2004
 			):
 				categories = [MATRIX_MATRIX]
-
-		## Expr | Data
-		if self.active_socket_set == 'Expr | Data' and has_data_r_info:
-			if data_r_info.output_shape is None:
-				categories = [NUMBER_NUMBER]
-			else:
-				categories = {
-					1: [NUMBER_NUMBER, NUMBER_VECTOR],
-					2: [NUMBER_NUMBER, NUMBER_MATRIX],
-				}[len(data_r_info.output_shape)]
 
 		return [
 			(*category, '', i) if category is not None else None
@@ -248,11 +224,10 @@ class OperateMathNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Expr L', 'Expr R', 'Data L', 'Data R'},
-		prop_name='active_socket_set',
+		socket_name={'Expr L', 'Expr R'},
 		run_on_init=True,
 	)
-	def on_socket_set_changed(self) -> None:
+	def on_socket_changed(self) -> None:
 		# Recompute Valid Categories
 		self.category = bl_cache.Signal.ResetEnumItems
 		self.operation = bl_cache.Signal.ResetEnumItems
@@ -272,184 +247,76 @@ class OperateMathNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Value,
 		props={'operation'},
 		input_sockets={'Expr L', 'Expr R'},
+		input_socket_kinds={
+			'Expr L': ct.FlowKind.Value,
+			'Expr R': ct.FlowKind.Value,
+		},
 	)
-	def compute_expr(self, props: dict, input_sockets: dict):
+	def compute_value(self, props: dict, input_sockets: dict):
+		operation = props['operation']
 		expr_l = input_sockets['Expr L']
 		expr_r = input_sockets['Expr R']
 
-		return {
-			'ADD': lambda: expr_l + expr_r,
-			'SUB': lambda: expr_l - expr_r,
-			'MUL': lambda: expr_l * expr_r,
-			'DIV': lambda: expr_l / expr_r,
-			'POW': lambda: expr_l**expr_r,
-			'ATAN2': lambda: sp.atan2(expr_r, expr_l),
-		}[props['operation']]()
+		has_expr_l_value = not ct.FlowSignal.check(expr_l)
+		has_expr_r_value = not ct.FlowSignal.check(expr_r)
+
+		if has_expr_l_value and has_expr_r_value and operation is not None:
+			return SP_FUNCS[operation]([expr_l, expr_r])
+
+		return ct.Flowsignal.FlowPending
 
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.LazyValueFunc,
 		props={'operation'},
-		input_sockets={'Data L', 'Data R'},
+		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
-			'Data L': ct.FlowKind.LazyValueFunc,
-			'Data R': ct.FlowKind.LazyValueFunc,
-		},
-		input_sockets_optional={
-			'Data L': True,
-			'Data R': True,
+			'Expr L': ct.FlowKind.LazyValueFunc,
+			'Expr R': ct.FlowKind.LazyValueFunc,
 		},
 	)
-	def compute_data(self, props: dict, input_sockets: dict):
-		data_l = input_sockets['Data L']
-		data_r = input_sockets['Data R']
-		has_data_l = not ct.FlowSignal.check(data_l)
+	def compose_func(self, props: dict, input_sockets: dict):
+		operation = props['operation']
+		if operation is None:
+			return ct.FlowSignal.FlowPending
 
-		mapping_func = {
-			# Number | *
-			'ADD': lambda datas: datas[0] + datas[1],
-			'SUB': lambda datas: datas[0] - datas[1],
-			'MUL': lambda datas: datas[0] * datas[1],
-			'DIV': lambda datas: datas[0] / datas[1],
-			'POW': lambda datas: datas[0] ** datas[1],
-			'ATAN2': lambda datas: jnp.atan2(datas[1], datas[0]),
-			# Vector | Vector
-			'VEC_VEC_DOT': lambda datas: jnp.matmul(datas[0], datas[1]),
-			'CROSS': lambda datas: jnp.cross(datas[0], datas[1]),
-			# Matrix | Vector
-			'MAT_VEC_DOT': lambda datas: jnp.matmul(datas[0], datas[1]),
-			'LIN_SOLVE': lambda datas: jnp.linalg.solve(datas[0], datas[1]),
-			'LSQ_SOLVE': lambda datas: jnp.linalg.lstsq(datas[0], datas[1]),
-			# Matrix | Matrix
-			'MAT_MAT_DOT': lambda datas: jnp.matmul(datas[0], datas[1]),
-		}[props['operation']]
+		expr_l = input_sockets['Expr L']
+		expr_r = input_sockets['Expr R']
 
-		# Compose by Socket Set
-		## Data | Data
-		if has_data_l:
-			return (data_l | data_r).compose_within(
-				mapping_func,
+		has_expr_l = not ct.FlowSignal.check(expr_l)
+		has_expr_r = not ct.FlowSignal.check(expr_r)
+
+		if has_expr_l and has_expr_r:
+			return (expr_l | expr_r).compose_within(
+				JAX_FUNCS[operation],
 				supports_jax=True,
 			)
-
-		## Expr | Data
-		expr_l_lazy_value_func = ct.LazyValueFuncFlow(
-			func=lambda expr_l_value: expr_l_value,
-			func_args=[typ.Any],
-			supports_jax=True,
-		)
-		return (expr_l_lazy_value_func | data_r).compose_within(
-			mapping_func,
-			supports_jax=True,
-		)
+		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Array,
-		output_sockets={'Data'},
+		output_sockets={'Expr'},
 		output_socket_kinds={
-			'Data': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Params},
+			'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Params},
 		},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 	)
-	def compute_array(self, output_sockets: dict) -> ct.ArrayFlow:
-		lazy_value_func = output_sockets['Data'][ct.FlowKind.LazyValueFunc]
-		params = output_sockets['Data'][ct.FlowKind.Params]
+	def compute_array(self, output_sockets, unit_systems) -> ct.ArrayFlow:
+		lazy_value_func = output_sockets['Expr'][ct.FlowKind.LazyValueFunc]
+		params = output_sockets['Expr'][ct.FlowKind.Params]
 
 		has_lazy_value_func = not ct.FlowSignal.check(lazy_value_func)
 		has_params = not ct.FlowSignal.check(params)
 
 		if has_lazy_value_func and has_params:
+			unit_system = unit_systems['BlenderUnits']
 			return ct.ArrayFlow(
 				values=lazy_value_func.func_jax(
-					*params.func_args, **params.func_kwargs
+					*params.scaled_func_args(unit_system),
+					**params.scaled_func_kwargs(unit_system),
 				),
 				unit=None,
-			)
-
-		return ct.FlowSignal.FlowPending
-
-	####################
-	# - Auxiliary: Params
-	####################
-	@events.computes_output_socket(
-		'Data',
-		kind=ct.FlowKind.Params,
-		props={'operation'},
-		input_sockets={'Expr L', 'Data L', 'Data R'},
-		input_socket_kinds={
-			'Expr L': ct.FlowKind.Value,
-			'Data L': {ct.FlowKind.Info, ct.FlowKind.Params},
-			'Data R': {ct.FlowKind.Info, ct.FlowKind.Params},
-		},
-		input_sockets_optional={
-			'Expr L': True,
-			'Data L': True,
-			'Data R': True,
-		},
-	)
-	def compute_data_params(
-		self, props, input_sockets
-	) -> ct.ParamsFlow | ct.FlowSignal:
-		expr_l = input_sockets['Expr L']
-		data_l_info = input_sockets['Data L'][ct.FlowKind.Info]
-		data_l_params = input_sockets['Data L'][ct.FlowKind.Params]
-		data_r_info = input_sockets['Data R'][ct.FlowKind.Info]
-		data_r_params = input_sockets['Data R'][ct.FlowKind.Params]
-
-		has_expr_l = not ct.FlowSignal.check(expr_l)
-		has_data_l_info = not ct.FlowSignal.check(data_l_info)
-		has_data_l_params = not ct.FlowSignal.check(data_l_params)
-		has_data_r_info = not ct.FlowSignal.check(data_r_info)
-		has_data_r_params = not ct.FlowSignal.check(data_r_params)
-
-		# Compose by Socket Set
-		## Data | Data
-		if (
-			has_data_l_info
-			and has_data_l_params
-			and has_data_r_info
-			and has_data_r_params
-		):
-			return data_l_params | data_r_params
-
-		## Expr | Data
-		if has_expr_l and has_data_r_info and has_data_r_params:
-			operation = props['operation']
-			data_unit = data_r_info.output_unit
-
-			# By Operation
-			## Add/Sub: Scale to Output Unit
-			if operation in ['ADD', 'SUB', 'MUL', 'DIV']:
-				if not spux.uses_units(expr_l):
-					value = spux.sympy_to_python(expr_l)
-				else:
-					value = spux.sympy_to_python(spux.scale_to_unit(expr_l, data_unit))
-
-				return data_r_params.compose_within(
-					enclosing_func_args=[value],
-				)
-
-			## Pow: Doesn't Exist (?)
-			## -> See https://math.stackexchange.com/questions/4326081/units-of-the-exponential-function
-			if operation == 'POW':
-				return ct.FlowSignal.FlowPending
-
-			## atan2(): Only Length
-			## -> Implicitly presume that Data L/R use length units.
-			if operation == 'ATAN2':
-				if not spux.uses_units(expr_l):
-					value = spux.sympy_to_python(expr_l)
-				else:
-					value = spux.sympy_to_python(spux.scale_to_unit(expr_l, data_unit))
-
-				return data_r_params.compose_within(
-					enclosing_func_args=[value],
-				)
-
-			return data_r_params.compose_within(
-				enclosing_func_args=[
-					spux.sympy_to_python(spux.scale_to_unit(expr_l, data_unit))
-				]
 			)
 
 		return ct.FlowSignal.FlowPending
@@ -458,38 +325,57 @@ class OperateMathNode(base.MaxwellSimNode):
 	# - Auxiliary: Info
 	####################
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Info,
-		input_sockets={'Expr L', 'Data L', 'Data R'},
+		props={'operation'},
+		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
-			'Expr L': ct.FlowKind.Value,
-			'Data L': ct.FlowKind.Info,
-			'Data R': ct.FlowKind.Info,
-		},
-		input_sockets_optional={
-			'Expr L': True,
-			'Data L': True,
-			'Data R': True,
+			'Expr L': ct.FlowKind.Info,
+			'Expr R': ct.FlowKind.Info,
 		},
 	)
-	def compute_data_info(self, input_sockets: dict) -> ct.InfoFlow:
-		expr_l = input_sockets['Expr L']
-		data_l_info = input_sockets['Data L']
-		data_r_info = input_sockets['Data R']
+	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
+		operation = props['operation']
+		info_l = input_sockets['Expr L']
+		info_r = input_sockets['Expr R']
 
-		has_expr_l = not ct.FlowSignal.check(expr_l)
-		has_data_l_info = not ct.FlowSignal.check(data_l_info)
-		has_data_r_info = not ct.FlowSignal.check(data_r_info)
+		has_info_l = not ct.FlowSignal.check(info_l)
+		has_info_r = not ct.FlowSignal.check(info_r)
 
-		# Info by Socket Set
-		## Data | Data
-		if has_data_l_info and has_data_r_info:
-			return data_r_info
+		# Return Info of RHS
+		## -> Fundamentall, this is why 'category' only has the given options.
+		## -> Via 'category', we enforce that the operated-on structure is always RHS.
+		## -> That makes it super duper easy to track info changes.
+		if has_info_l and has_info_r and operation is not None:
+			return info_r
 
-		## Expr | Data
-		if has_expr_l and has_data_r_info:
-			return data_r_info
+		return ct.FlowSignal.FlowPending
 
+	####################
+	# - Auxiliary: Params
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=ct.FlowKind.Params,
+		props={'operation'},
+		input_sockets={'Expr L', 'Expr R'},
+		input_socket_kinds={
+			'Expr L': ct.FlowKind.Params,
+			'Expr R': ct.FlowKind.Params,
+		},
+	)
+	def compute_params(
+		self, props, input_sockets
+	) -> ct.ParamsFlow | ct.FlowSignal:
+		operation = props['operation']
+		params_l = input_sockets['Expr L']
+		params_r = input_sockets['Expr R']
+
+		has_params_l = not ct.FlowSignal.check(params_l)
+		has_params_r = not ct.FlowSignal.check(params_r)
+
+		if has_params_l and has_params_r and operation is not None:
+			return params_l | params_r
 		return ct.FlowSignal.FlowPending
 
 

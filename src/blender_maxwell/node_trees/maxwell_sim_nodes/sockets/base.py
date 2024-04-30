@@ -5,10 +5,8 @@ from types import MappingProxyType
 
 import bpy
 import pydantic as pyd
-import sympy as sp
 
 from blender_maxwell.utils import bl_cache, logger, serialize
-from blender_maxwell.utils import extra_sympy_units as spux
 
 from .. import contracts as ct
 
@@ -126,7 +124,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	socket_color: tuple
 
 	# Options
-	use_units: bool = False
 	use_prelock: bool = False
 	use_info_draw: bool = False
 
@@ -210,35 +207,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			'active_kind', bpy.props.StringProperty, default=str(ct.FlowKind.Value)
 		)
 
-		# Configure Use of Units
-		if cls.use_units:
-			if not (socket_units := ct.SOCKET_UNITS.get(cls.socket_type)):
-				msg = f'{cls.socket_type}: Tried to define "use_units", but there is no unit for {cls.socket_type} defined in "contracts.SOCKET_UNITS"'
-				raise RuntimeError(msg)
-
-			cls.set_prop(
-				'active_unit',
-				bpy.props.EnumProperty,
-				name='Unit',
-				items=[
-					(unit_name, spux.sp_to_str(unit_value), sp.srepr(unit_value))
-					for unit_name, unit_value in socket_units['values'].items()
-				],
-				default=socket_units['default'],
-			)
-			cls.set_prop(
-				'prev_active_unit',
-				bpy.props.StringProperty,
-				default=socket_units['default'],
-			)
-
-	####################
-	# - Units
-	####################
-	@property
-	def prev_unit(self) -> sp.Expr:
-		return self.possible_units[self.prev_active_unit]
-
 	####################
 	# - Property Event: On Update
 	####################
@@ -250,8 +218,21 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		self.display_shape = (
 			'SQUARE' if self.active_kind == ct.FlowKind.LazyValueRange else 'CIRCLE'
-		) + ('_DOT' if self.use_units else '')
+		)  # + ('_DOT' if self.use_units else '')
 		## TODO: Valid Active Kinds should be a subset/subenum(?) of FlowKind
+
+	def on_socket_prop_changed(self, prop_name: str) -> None:
+		"""Called when a property has been updated.
+
+		Notes:
+			Can be overridden if a socket needs to respond to a property change.
+
+			**Always prefer using node events when possible**.
+			Think very carefully before using this, and use it with the greatest of care.
+
+		Attributes:
+			prop_name: The name of the property that was changed.
+		"""
 
 	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated.
@@ -259,27 +240,25 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
 
 		- **Active Kind** (`self.active_kind`): Sets the socket shape to reflect the active `FlowKind`.
-		- **Unit** (`self.unit`): Corrects the internal `FlowKind` representation to match the new unit.
 
 		Attributes:
 			prop_name: The name of the property that was changed.
 		"""
-		# Property: Active Kind
-		if prop_name == 'active_kind':
-			self._on_active_kind_changed()
-		elif prop_name == 'unit':
-			self._on_unit_changed()
-
-		# Valid Properties
-		elif hasattr(self, prop_name):
+		if hasattr(self, prop_name):
 			# Invalidate UI BLField Caches
 			if prop_name in self.ui_blfields:
 				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
 
+			# Property Callbacks: Active Kind
+			if prop_name == 'active_kind':
+				self._on_active_kind_changed()
+
+			# Property Callbacks: Per-Socket
+			self.on_socket_prop_changed(prop_name)
+
 			# Trigger Event
 			self.trigger_event(ct.FlowEvent.DataChanged)
 
-		# Undefined Properties
 		else:
 			msg = f'Property {prop_name} not defined on socket {self.bl_label} ({self.socket_type})'
 			raise RuntimeError(msg)
@@ -760,7 +739,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		- **Locked** (`self.locked`): The UI will be unusable.
 		- **Linked** (`self.is_linked`): Only the socket label will display.
-		- **Use Units** (`self.use_units`): The currently active unit will display as a dropdown menu.
 		- **Use Prelock** (`self.use_prelock`): The "prelock" UI drawn with `self.draw_prelock()`, which shows **regardless of `self.locked`**.
 		- **FlowKind**: The `FlowKind`-specific UI corresponding to the current `self.active_kind`.
 
@@ -787,17 +765,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if self.is_linked:
 			self.draw_input_label_row(row, text)
 		else:
-			# User Label Row (incl. Units)
-			if self.use_units:
-				split = row.split(factor=0.6, align=True)
-
-				_row = split.row(align=True)
-				self.draw_label_row(_row, text)
-
-				_col = split.column(align=True)
-				_col.prop(self, 'active_unit', text='')
-			else:
-				self.draw_label_row(row, text)
+			self.draw_label_row(row, text)
 
 			# User Prelock Row
 			row = col.row(align=False)

@@ -1,6 +1,7 @@
 import typing as typ
 
 import sympy as sp
+import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
@@ -23,23 +24,43 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'Size': sockets.PhysicalSize3DSocketDef(),
-		'Samples/Space': sockets.Integer3DVectorSocketDef(
-			default_value=sp.Matrix([10, 10, 10])
+		'Center': sockets.ExprSocketDef(
+			shape=(3,),
+			physical_type=spux.PhysicalType.Length,
+		),
+		'Size': sockets.ExprSocketDef(
+			shape=(3,),
+			physical_type=spux.PhysicalType.Length,
+		),
+		'Samples/Space': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Integer,
+			default_value=sp.Matrix([10, 10, 10]),
 		),
 		'Direction': sockets.BoolSocketDef(),
 	}
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
-			'Freqs': sockets.PhysicalFreqSocketDef(
-				is_array=True,
+			'Freqs': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.LazyArrayRange,
+				physical_type=spux.PhysicalType.Freq,
+				default_unit=spux.THz,
+				default_min=374.7406,  ## 800nm
+				default_max=1498.962,  ## 200nm
+				default_steps=100,
 			),
 		},
 		'Time Domain': {
-			'Rec Start': sockets.PhysicalTimeSocketDef(),
-			'Rec Stop': sockets.PhysicalTimeSocketDef(default_value=200 * spux.fs),
-			'Samples/Time': sockets.IntegerNumberSocketDef(
+			'Time Range': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.LazyArrayRange,
+				physical_type=spux.PhysicalType.Time,
+				default_unit=spu.picosecond,
+				default_min=0,
+				default_max=10,
+				default_steps=2,
+			),
+			'Samples/Time': sockets.ExprSocketDef(
+				mathtype=spux.MathType.Integer,
 				default_value=100,
 			),
 		},

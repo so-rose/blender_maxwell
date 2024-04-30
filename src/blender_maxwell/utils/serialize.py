@@ -141,7 +141,7 @@ def _dec_hook(_type: type, obj: NaivelyEncodableType) -> typ.Any:
 		is_representation(obj) and obj[0] == TypeID.SympyType
 	):
 		obj_value = obj[2]
-		return sp.sympify(obj_value).subs(spux.ALL_UNIT_SYMBOLS)
+		return sp.sympify(obj_value).subs(spux.UNIT_BY_SYMBOL)
 
 	if hasattr(_type, 'parse_as_msgspec') and (
 		is_representation(obj) and obj[0] in [TypeID.SocketDef, TypeID.ManagedObj]

@@ -147,7 +147,7 @@ class VizTarget(enum.StrEnum):
 	@staticmethod
 	def valid_targets_for(viz_mode: VizMode) -> list[typ.Self] | None:
 		return {
-			'NONE': [],
+			None: [],
 			VizMode.Hist1D: [VizTarget.Plot2D],
 			VizMode.BoxPlot1D: [VizTarget.Plot2D],
 			VizMode.Curve2D: [VizTarget.Plot2D],
@@ -192,7 +192,7 @@ class VizNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.DataSocketDef(format='jax'),
+		'Expr': sockets.ExprSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
 		'Preview': sockets.AnySocketDef(),
@@ -222,7 +222,7 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	@property
 	def data_info(self) -> ct.InfoFlow:
-		return self._compute_input('Data', kind=ct.FlowKind.Info)
+		return self._compute_input('Expr', kind=ct.FlowKind.Info)
 
 	def search_modes(self) -> list[ct.BLEnumElement]:
 		if not ct.FlowSignal.check(self.data_info):
@@ -243,7 +243,7 @@ class VizNode(base.MaxwellSimNode):
 	## - Target Searcher
 	#####################
 	def search_targets(self) -> list[ct.BLEnumElement]:
-		if self.viz_mode != 'NONE':
+		if self.viz_mode is not None:
 			return [
 				(
 					viz_target,
@@ -271,15 +271,15 @@ class VizNode(base.MaxwellSimNode):
 	# - Events
 	####################
 	@events.on_value_changed(
-		socket_name='Data',
-		input_sockets={'Data'},
+		socket_name='Expr',
+		input_sockets={'Expr'},
 		run_on_init=True,
-		input_socket_kinds={'Data': ct.FlowKind.Info},
-		input_sockets_optional={'Data': True},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		input_sockets_optional={'Expr': True},
 	)
 	def on_any_changed(self, input_sockets: dict):
 		if not ct.FlowSignal.check_single(
-			input_sockets['Data'], ct.FlowSignal.FlowPending
+			input_sockets['Expr'], ct.FlowSignal.FlowPending
 		):
 			self.viz_mode = bl_cache.Signal.ResetEnumItems
 			self.viz_target = bl_cache.Signal.ResetEnumItems
@@ -297,8 +297,8 @@ class VizNode(base.MaxwellSimNode):
 	@events.on_show_plot(
 		managed_objs={'plot'},
 		props={'viz_mode', 'viz_target', 'colormap'},
-		input_sockets={'Data'},
-		input_socket_kinds={'Data': {ct.FlowKind.Array, ct.FlowKind.Info}},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': {ct.FlowKind.Array, ct.FlowKind.Info}},
 		stop_propagation=True,
 	)
 	def on_show_plot(
@@ -308,14 +308,14 @@ class VizNode(base.MaxwellSimNode):
 		props: dict,
 	):
 		# Retrieve Inputs
-		array_flow = input_sockets['Data'][ct.FlowKind.Array]
-		info = input_sockets['Data'][ct.FlowKind.Info]
+		array_flow = input_sockets['Expr'][ct.FlowKind.Array]
+		info = input_sockets['Expr'][ct.FlowKind.Info]
 
 		# Check Flow
 		if (
 			any(ct.FlowSignal.check(inp) for inp in [array_flow, info])
-			or props['viz_mode'] == 'NONE'
-			or props['viz_target'] == 'NONE'
+			or props['viz_mode'] is None
+			or props['viz_target'] is None
 		):
 			return
 

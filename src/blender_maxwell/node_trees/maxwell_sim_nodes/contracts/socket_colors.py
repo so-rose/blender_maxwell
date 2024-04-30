@@ -4,42 +4,13 @@ from .socket_types import SocketType as ST
 SOCKET_COLORS = {
 	# Basic
 	ST.Any: (0.9, 0.9, 0.9, 1.0),  # Light Grey
-	ST.Data: (0.8, 0.8, 0.8, 1.0),  # Light Grey
 	ST.Bool: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.String: (0.7, 0.7, 0.7, 1.0),  # Medium Light Grey
 	ST.FilePath: (0.6, 0.6, 0.6, 1.0),  # Medium Grey
 	ST.Expr: (0.5, 0.5, 0.5, 1.0),  # Medium Grey
-	# Number
-	ST.IntegerNumber: (0.5, 0.5, 1.0, 1.0),  # Light Blue
-	ST.RationalNumber: (0.4, 0.4, 0.9, 1.0),  # Medium Light Blue
-	ST.RealNumber: (0.3, 0.3, 0.8, 1.0),  # Medium Blue
-	ST.ComplexNumber: (0.2, 0.2, 0.7, 1.0),  # Dark Blue
-	# Vector
-	ST.Integer2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
-	ST.Real2DVector: (0.5, 1.0, 0.5, 1.0),  # Light Green
-	ST.Complex2DVector: (0.4, 0.9, 0.4, 1.0),  # Medium Light Green
-	ST.Integer3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
-	ST.Real3DVector: (0.3, 0.8, 0.3, 1.0),  # Medium Green
-	ST.Complex3DVector: (0.2, 0.7, 0.2, 1.0),  # Dark Green
 	# Physical
 	ST.PhysicalUnitSystem: (1.0, 0.5, 0.5, 1.0),  # Light Red
-	ST.PhysicalTime: (1.0, 0.5, 0.5, 1.0),  # Light Red
-	ST.PhysicalAngle: (0.9, 0.45, 0.45, 1.0),  # Medium Light Red
-	ST.PhysicalLength: (0.8, 0.4, 0.4, 1.0),  # Medium Red
-	ST.PhysicalArea: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
-	ST.PhysicalVolume: (0.6, 0.3, 0.3, 1.0),  # Dark Red
-	ST.PhysicalPoint2D: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
-	ST.PhysicalPoint3D: (0.6, 0.3, 0.3, 1.0),  # Dark Red
-	ST.PhysicalSize2D: (0.7, 0.35, 0.35, 1.0),  # Medium Dark Red
-	ST.PhysicalSize3D: (0.6, 0.3, 0.3, 1.0),  # Dark Red
-	ST.PhysicalMass: (0.9, 0.6, 0.4, 1.0),  # Light Orange
-	ST.PhysicalSpeed: (0.8, 0.55, 0.35, 1.0),  # Medium Light Orange
-	ST.PhysicalAccelScalar: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
-	ST.PhysicalForceScalar: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
-	ST.PhysicalAccel3D: (0.7, 0.5, 0.3, 1.0),  # Medium Orange
-	ST.PhysicalForce3D: (0.6, 0.45, 0.25, 1.0),  # Medium Dark Orange
 	ST.PhysicalPol: (0.5, 0.4, 0.2, 1.0),  # Dark Orange
-	ST.PhysicalFreq: (1.0, 0.7, 0.5, 1.0),  # Light Peach
 	# Blender
 	ST.BlenderMaterial: (0.8, 0.6, 1.0, 1.0),  # Lighter Purple
 	ST.BlenderObject: (0.7, 0.5, 1.0, 1.0),  # Light Purple
@@ -56,6 +27,7 @@ SOCKET_COLORS = {
 	ST.MaxwellBoundConds: (0.9, 0.8, 0.5, 1.0),  # Light Gold
 	ST.MaxwellBoundCond: (0.8, 0.7, 0.45, 1.0),  # Medium Light Gold
 	ST.MaxwellMonitor: (0.7, 0.6, 0.4, 1.0),  # Medium Gold
+	ST.MaxwellMonitorData: (0.7, 0.6, 0.4, 1.0),  # Medium Gold
 	ST.MaxwellFDTDSim: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
 	ST.MaxwellFDTDSimData: (0.6, 0.5, 0.35, 1.0),  # Medium Dark Gold
 	ST.MaxwellSimGrid: (0.5, 0.4, 0.3, 1.0),  # Dark Gold

@@ -118,11 +118,9 @@ quartodoc:
     - subtitle: "`bl_maxwell.utils`"
       desc: Utilities wo/shared global state.
       contents:
-        - utils.analyze_geonodes
         - utils.blender_type_enum
         - utils.extra_sympy_units
         - utils.logger
-        - utils.pydantic_sympy
 
     - subtitle: "`bl_maxwell.services`"
       desc: Utilities w/shared global state.
@@ -172,7 +170,6 @@ quartodoc:
         - socket_colors
         - bl_socket_types
         - bl_socket_desc_map
-        - socket_units
 
         - unit_systems
 

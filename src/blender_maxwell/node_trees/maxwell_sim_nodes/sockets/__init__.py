@@ -1,11 +1,11 @@
 from blender_maxwell.utils import logger
 
 from .. import contracts as ct
-from . import basic, blender, maxwell, physical, tidy3d
+from . import basic, blender, expr, maxwell, physical, tidy3d
 from .scan_socket_defs import scan_for_socket_defs
 
 log = logger.get(__name__)
-sockets_modules = [basic, physical, blender, maxwell, tidy3d]
+sockets_modules = [basic, blender, expr, maxwell, physical, tidy3d]
 
 ####################
 # - Scan for SocketDefs
@@ -28,21 +28,24 @@ for socket_type in ct.SocketType:
 	):
 		log.warning('Missing SocketDef for %s', socket_type.value)
 
+
 ####################
 # - Exports
 ####################
 BL_REGISTER = [
 	*basic.BL_REGISTER,
-	*physical.BL_REGISTER,
 	*blender.BL_REGISTER,
+	*expr.BL_REGISTER,
 	*maxwell.BL_REGISTER,
+	*physical.BL_REGISTER,
 	*tidy3d.BL_REGISTER,
 ]
 
 __all__ = [
 	'basic',
-	'physical',
 	'blender',
+	'expr',
 	'maxwell',
+	'physical',
 	'tidy3d',
 ] + [socket_def_type.__name__ for socket_def_type in SOCKET_DEFS.values()]

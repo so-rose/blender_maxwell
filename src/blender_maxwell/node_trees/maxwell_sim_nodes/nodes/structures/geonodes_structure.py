@@ -2,7 +2,7 @@ import typing as typ
 
 import tidy3d as td
 
-from blender_maxwell.utils import analyze_geonodes, logger
+from blender_maxwell.utils import bl_cache, logger
 
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
@@ -20,9 +20,9 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
+		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
 		'Structure': sockets.MaxwellStructureSocketDef(),
@@ -34,7 +34,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Event Methods
+	# - Output
 	####################
 	@events.computes_output_socket(
 		'Structure',
@@ -46,9 +46,10 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		input_sockets: dict,
 		managed_objs: dict,
 	) -> td.Structure:
+		"""Computes a triangle-mesh based Tidy3D structure, by manually copying mesh data from Blender to a `td.TriangleMesh`."""
 		# Simulate Input Value Change
 		## This ensures that the mesh has been re-computed.
-		self.on_input_changed()
+		self.on_input_socket_changed()
 
 		## TODO: mesh_as_arrays might not take the Center into account.
 		## - Alternatively, Tidy3D might have a way to transform?
@@ -62,96 +63,109 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		)
 
 	####################
-	# - Event Methods
+	# - Events: Preview Active Changed
 	####################
 	@events.on_value_changed(
-		socket_name={'GeoNodes', 'Center'},
 		prop_name='preview_active',
-		any_loose_input_socket=True,
-		run_on_init=True,
-		# Pass Data
 		props={'preview_active'},
+		input_sockets={'Center'},
+		managed_objs={'mesh'},
+	)
+	def on_preview_changed(self, props, input_sockets) -> None:
+		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
+		mesh = managed_objs['mesh']
+
+		# No Mesh: Create Empty Object
+		## Ensures that when there is mesh data, it'll be correctly previewed.
+		## Bit of a workaround - the idea is usually to make the MObj as needed.
+		if not mesh.exists:
+			center = input_sockets['Center']
+			_ = mesh.bl_object(location=center)
+
+		# Push Preview State to Managed Mesh
+		if props['preview_active']:
+			mesh.show_preview()
+		else:
+			mesh.hide_preview()
+
+	####################
+	# - Events: GN Input Changed
+	####################
+	@events.on_value_changed(
+		socket_name={'Center'},
+		any_loose_input_socket=True,
+		# Pass Data
 		managed_objs={'mesh', 'modifier'},
 		input_sockets={'Center', 'GeoNodes'},
 		all_loose_input_sockets=True,
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={'Center': 'BlenderUnits'},
 	)
-	def on_input_changed(
-		self,
-		props: dict,
-		managed_objs: dict,
-		input_sockets: dict,
-		loose_input_sockets: dict,
-		unit_systems: dict,
+	def on_input_socket_changed(
+		self, input_sockets, loose_input_sockets, unit_systems
 	) -> None:
-		# No GeoNodes: Remove Modifier (if any)
-		if (geonodes := input_sockets['GeoNodes']) is None:
-			if (
-				managed_objs['modifier'].name
-				in managed_objs['mesh'].bl_object().modifiers.keys().copy()
-			):
-				managed_objs['modifier'].free_from_bl_object(
-					managed_objs['mesh'].bl_object()
-				)
+		"""Pushes any change in GeoNodes-bound input sockets to the GeoNodes modifier.
 
-				# Reset Loose Input Sockets
-				self.loose_input_sockets = {}
-			return
+		Also pushes the `Center:Value` socket to govern the object's center in 3D space.
+		"""
+		geonodes = input_sockets['GeoNodes']
+		has_geonodes = not ct.FlowSignal.check(geonodes)
 
-		# No Loose Input Sockets: Create from GeoNodes Interface
-		## TODO: Other reasons to trigger re-filling loose_input_sockets.
-		if not loose_input_sockets:
-			# Retrieve the GeoNodes Interface
-			geonodes_interface = analyze_geonodes.interface(
-				input_sockets['GeoNodes'], direc='INPUT'
+		if has_geonodes:
+			mesh = managed_objs['mesh']
+			modifier = managed_objs['modifier']
+			center = input_sockets['Center']
+			unit_system = unit_systems['BlenderUnits']
+
+			# Push Loose Input Values to GeoNodes Modifier
+			modifier.bl_modifier(
+				mesh.bl_object(location=center),
+				'NODES',
+				{
+					'node_group': geonodes,
+					'inputs': loose_input_sockets,
+					'unit_system': unit_system,
+				},
 			)
 
+	####################
+	# - Events: GN Tree Changed
+	####################
+	@events.on_value_changed(
+		socket_name={'GeoNodes'},
+		# Pass Data
+		managed_objs={'mesh', 'modifier'},
+		input_sockets={'GeoNodes', 'Center'},
+	)
+	def on_input_changed(
+		self,
+		managed_objs: dict,
+		input_sockets: dict,
+	) -> None:
+		"""Declares new loose input sockets in response to a new GeoNodes tree (if any)."""
+		geonodes = input_sockets['GeoNodes']
+		has_geonodes = not ct.FlowSignal.check(geonodes)
+
+		if has_geonodes:
+			mesh = managed_objs['mesh']
+			modifier = managed_objs['modifier']
+
 			# Fill the Loose Input Sockets
+			## -> The SocketDefs contain the default values from the interface.
 			log.info(
 				'Initializing GeoNodes Structure Node "%s" from GeoNodes Group "%s"',
 				self.bl_label,
 				str(geonodes),
 			)
-			self.loose_input_sockets = {
-				socket_name: bl_socket_map.socket_def_from_bl_socket(iface_socket)()
-				for socket_name, iface_socket in geonodes_interface.items()
-			}
+			self.loose_input_sockets = bl_socket_map.sockets_from_geonodes(geonodes)
 
-			# Set Loose Input Sockets to Interface (Default) Values
-			## Changing socket.value invokes recursion of this function.
-			## The else: below ensures that only one push occurs.
-			## (well, one push per .value set, which simplifies to one push)
-			log.info(
-				'Setting Loose Input Sockets of "%s" to GeoNodes Defaults',
-				self.bl_label,
-			)
-			for socket_name in self.loose_input_sockets:
-				socket = self.inputs[socket_name]
-				socket.value = bl_socket_map.read_bl_socket_default_value(
-					geonodes_interface[socket_name],
-					unit_systems['BlenderUnits'],
-					allow_unit_not_in_unit_system=True,
-				)
-			log.info(
-				'Set Loose Input Sockets of "%s" to: %s',
-				self.bl_label,
-				str(self.loose_input_sockets),
-			)
-		else:
-			# Push Loose Input Values to GeoNodes Modifier
-			managed_objs['modifier'].bl_modifier(
-				managed_objs['mesh'].bl_object(location=input_sockets['Center']),
-				'NODES',
-				{
-					'node_group': input_sockets['GeoNodes'],
-					'unit_system': unit_systems['BlenderUnits'],
-					'inputs': loose_input_sockets,
-				},
-			)
-			# Push Preview State
-			if props['preview_active']:
-				managed_objs['mesh'].show_preview()
+			## -> The loose socket creation triggers 'on_input_socket_changed'
+
+		elif self.loose_input_sockets:
+			self.loose_input_sockets = {}
+
+			if modifier.name in mesh.bl_object().modifiers.keys().copy():
+				modifier.free_from_bl_object(mesh.bl_object())
 
 
 ####################

@@ -3,12 +3,12 @@ import sympy as sp
 import sympy.physics.optics.polarization as spo_pol
 import sympy.physics.units as spu
 
-from blender_maxwell.utils.pydantic_sympy import SympyExpr
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
 
-StokesVector = SympyExpr
+StokesVector = spux.SympyExpr
 
 
 class PhysicalPolBLSocket(base.MaxwellSimSocket):

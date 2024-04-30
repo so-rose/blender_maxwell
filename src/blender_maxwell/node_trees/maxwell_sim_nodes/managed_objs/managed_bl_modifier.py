@@ -4,7 +4,8 @@ import typing as typ
 
 import bpy
 
-from blender_maxwell.utils import analyze_geonodes, logger
+from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from .. import bl_socket_map
 from .. import contracts as ct
@@ -25,13 +26,12 @@ class ModifierAttrsNODES(typ.TypedDict):
 		node_group: The GeoNodes group to use in the modifier.
 		unit_system: The unit system used by the GeoNodes output.
 			Generally, `ct.UNITS_BLENDER` is a good choice.
-		inputs: Values to associate with each GeoNodes interface socket.
-			Use `analyze_geonodes.interface(..., direc='INPUT')` to determine acceptable values.
+		inputs: Values to associate with each GeoNodes interface socket name.
 	"""
 
 	node_group: bpy.types.GeometryNodeTree
 	unit_system: UnitSystem
-	inputs: dict[ct.BLNodeTreeInterfaceID, typ.Any]
+	inputs: dict[ct.SocketName, typ.Any]
 
 
 class ModifierAttrsARRAY(typ.TypedDict):
@@ -47,7 +47,7 @@ MODIFIER_NAMES = {
 
 
 ####################
-# - Read Modifier Information
+# - Read Modifier
 ####################
 def read_modifier(bl_modifier: bpy.types.Modifier) -> ModifierAttrs:
 	if bl_modifier.type == 'NODES':
@@ -62,7 +62,7 @@ def read_modifier(bl_modifier: bpy.types.Modifier) -> ModifierAttrs:
 
 
 ####################
-# - Write Modifier Information
+# - Write Modifier: GeoNodes
 ####################
 def write_modifier_geonodes(
 	bl_modifier: bpy.types.NodesModifier,
@@ -78,6 +78,7 @@ def write_modifier_geonodes(
 		True if the modifier was altered.
 	"""
 	modifier_altered = False
+
 	# Alter GeoNodes Group
 	if bl_modifier.node_group != modifier_attrs['node_group']:
 		log.info(
@@ -89,53 +90,22 @@ def write_modifier_geonodes(
 		modifier_altered = True
 
 	# Alter GeoNodes Modifier Inputs
-	## First we retrieve the interface items by-Socket Name
-	geonodes_interface = analyze_geonodes.interface(
-		bl_modifier.node_group, direc='INPUT'
-	)
-	for (
-		socket_name,
-		value,
-	) in modifier_attrs['inputs'].items():
-		# Compute Writable BL Socket Value
-		## Analyzes the socket and unitsys to prep a ready-to-write value.
-		## Write directly to the modifier dict.
-		bl_socket_value = bl_socket_map.writable_bl_socket_value(
-			geonodes_interface[socket_name],
-			value,
-			unit_system=modifier_attrs['unit_system'],
-			allow_unit_not_in_unit_system=True,
+	socket_infos = bl_socket_map.info_from_geonodes(bl_modifier.node_group)
+
+	for socket_name in modifier_attrs['inputs']:
+		iface_id = socket_infos[socket_name].bl_isocket_identifier
+		bl_modifier[iface_id] = spux.scale_to_unit_system(
+			modifier_attrs['inputs'][socket_name], modifier_attrs['unit_system']
 		)
+	modifier_altered = True
+	## TODO: More fine-grained alterations
 
-		# Compute Interface ID from Socket Name
-		## We can't index the modifier by socket name; only by Interface ID.
-		## Still, we require that socket names are unique.
-		iface_id = geonodes_interface[socket_name].identifier
-
-		# IF List-Like: Alter Differing Elements
-		if isinstance(bl_socket_value, tuple):
-			for i, bl_socket_subvalue in enumerate(bl_socket_value):
-				if bl_modifier[iface_id][i] != bl_socket_subvalue:
-					bl_modifier[iface_id][i] = bl_socket_subvalue
-					modifier_altered = True
-
-		# IF int/float Mismatch: Assign Float-Cast of Integer
-		## Blender is strict; only floats can set float vals.
-		## We are less strict; if the user passes an int, that's okay.
-		elif isinstance(bl_socket_value, int) and isinstance(
-			bl_modifier[iface_id],
-			float,
-		):
-			bl_modifier[iface_id] = float(bl_socket_value)
-			modifier_altered = True
-		else:
-			## TODO: Whitelist what can be here. I'm done with the TypeErrors.
-			bl_modifier[iface_id] = bl_socket_value
-			modifier_altered = True
-
-	return modifier_altered
+	return modifier_altered  # noqa: RET504
 
 
+####################
+# - Write Modifier
+####################
 def write_modifier(
 	bl_modifier: bpy.types.Modifier,
 	modifier_attrs: ModifierAttrs,
@@ -184,8 +154,11 @@ class ManagedBLModifier(base.ManagedObj):
 	def __init__(self, name: str):
 		self.name = name
 
-	def bl_select(self) -> None: pass
-	def hide_preview(self) -> None: pass
+	def bl_select(self) -> None:
+		pass
+
+	def hide_preview(self) -> None:
+		pass
 
 	####################
 	# - Deallocation
@@ -255,7 +228,8 @@ class ManagedBLModifier(base.ManagedObj):
 				type=modifier_type,
 			)
 
-		if modifier_altered := write_modifier(bl_modifier, modifier_attrs):
+		modifier_altered = write_modifier(bl_modifier, modifier_attrs)
+		if modifier_altered:
 			bl_object.data.update()
 
 		return bl_modifier

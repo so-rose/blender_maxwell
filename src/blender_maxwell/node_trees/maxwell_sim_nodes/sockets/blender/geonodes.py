@@ -70,8 +70,8 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 	# - Default Value
 	####################
 	@property
-	def value(self) -> bpy.types.NodeTree | None:
-		return self.raw_value
+	def value(self) -> bpy.types.NodeTree | ct.FlowSignal:
+		return self.raw_value if self.raw_value is not None else ct.FlowSignal.NoFlow
 
 	@value.setter
 	def value(self, value: bpy.types.NodeTree) -> None:
