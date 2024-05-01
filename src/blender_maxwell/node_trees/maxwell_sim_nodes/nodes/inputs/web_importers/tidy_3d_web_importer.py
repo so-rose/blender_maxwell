@@ -35,7 +35,7 @@ class LoadCloudSim(bpy.types.Operator):
 		node = context.node
 
 		# Try Loading Simulation Data
-		node.sim_data = bl_cache.Signal.InvalidateCache
+		#node.sim_data = bl_cache.Signal.InvalidateCache
 		sim_data = node.sim_data
 		if sim_data is None:
 			self.report(
@@ -70,18 +70,26 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 			should_exist=True,
 		),
 	}
+	output_sockets: typ.ClassVar = {
+		'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
+	}
 
+	####################
+	# - Properties
+	####################
 	sim_data_loaded: bool = bl_cache.BLField(False)
 
-	@bl_cache.cached_bl_property()
+	####################
+	# - Computed
+	####################
+	@property
 	def sim_data(self) -> td.SimulationData | None:
 		cloud_task = self._compute_input(
 			'Cloud Task', kind=ct.FlowKind.Value, optional=True
 		)
+		has_cloud_task = not ct.FlowSignal.check(cloud_task)
 		if (
-			# Check Flow
-			not ct.FlowSignal.check(cloud_task)
-			# Check Task
+			has_cloud_task
 			and cloud_task is not None
 			and isinstance(cloud_task, tdcloud.CloudTask)
 			and cloud_task.status == 'success'
@@ -97,7 +105,7 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
-	def draw_operators(self, context, layout):
+	def draw_operators(self, _: bpy.types.Context, layout: bpy.types.UILayout):
 		if self.sim_data_loaded:
 			layout.operator(ct.OperatorType.NodeLoadCloudSim, text='Reload Sim')
 		else:
@@ -106,11 +114,6 @@ class Tidy3DWebImporterNode(base.MaxwellSimNode):
 	####################
 	# - Events
 	####################
-	@events.on_value_changed(socket_name='Cloud Task')
-	def on_cloud_task_changed(self):
-		self.inputs['Cloud Task'].on_cloud_updated()
-		## TODO: Must we babysit sockets like this?
-
 	@events.on_value_changed(
 		prop_name='sim_data_loaded', run_on_init=True, props={'sim_data_loaded'}
 	)

@@ -2,7 +2,7 @@ import typing as typ
 
 import bpy
 
-from blender_maxwell.utils import sci_constants as constants
+from blender_maxwell.utils import bl_cache, sci_constants
 
 from .... import contracts as ct
 from .... import sockets
@@ -20,16 +20,11 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	sci_constant: bpy.props.StringProperty(
-		name='Sci Constant',
-		description='The name of a scientific constant',
-		default='',
-		search=lambda self, _, edit_text: self.search_sci_constants(edit_text),
-		update=lambda self, context: self.on_update_sci_constant(context),
+	sci_constant: str = bl_cache.BLField(
+		'',
+		prop_ui=True,
+		str_cb=lambda self, _, edit_text: self.search_sci_constants(edit_text),
 	)
-
-	cache__units: bpy.props.StringProperty(default='')
-	cache__uncertainty: bpy.props.StringProperty(default='')
 
 	def search_sci_constants(
 		self,
@@ -37,46 +32,31 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	):
 		return [
 			name
-			for name in constants.SCI_CONSTANTS
+			for name in sci_constants.SCI_CONSTANTS
 			if edit_text.lower() in name.lower()
 		]
-
-	def on_update_sci_constant(
-		self,
-		context: bpy.types.Context,
-	):
-		if self.sci_constant:
-			self.cache__units = str(
-				constants.SCI_CONSTANTS_INFO[self.sci_constant]['units']
-			)
-			self.cache__uncertainty = str(
-				constants.SCI_CONSTANTS_INFO[self.sci_constant]['uncertainty']
-			)
-		else:
-			self.cache__units = ''
-			self.cache__uncertainty = ''
-
-		self.on_prop_changed('sci_constant', context)
 
 	####################
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		col.prop(self, 'sci_constant', text='')
+		col.prop(self, self.blfields['sci_constant'], text='')
 
 	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
 		if self.sci_constant:
-			col.label(text=f'Units: {self.cache__units}')
-			col.label(text=f'Uncertainty: {self.cache__uncertainty}')
-
-		col.label(text=f'Ref: {constants.SCI_CONSTANTS_REF[0]}')
+			col.label(
+				text=f'Units: {sci_constants.SCI_CONSTANTS_INFO[self.sci_constant]["units"]}'
+			)
+			col.label(
+				text=f'Uncertainty: {sci_constants.SCI_CONSTANTS_INFO[self.sci_constant]["uncertainty"]}'
+			)
 
 	####################
-	# - Callbacks
+	# - Output
 	####################
 	@events.computes_output_socket('Value', props={'sci_constant'})
 	def compute_value(self, props: dict) -> typ.Any:
-		return constants.SCI_CONSTANTS[props['sci_constant']]
+		return sci_constants.SCI_CONSTANTS[props['sci_constant']]
 
 
 ####################

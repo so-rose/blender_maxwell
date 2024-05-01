@@ -25,58 +25,60 @@ class BLSocketInfo:
 	bl_isocket_identifier: spux.ScalarUnitlessRealExpr
 
 
-@blender_type_enum.prefix_values_with('NodeSocket')
 class BLSocketType(enum.StrEnum):
-	Virtual = 'Virtual'
+	Virtual = 'NodeSocketVirtual'
 	# Blender
-	Image = 'Image'
-	Shader = 'Shader'
-	Material = 'Material'
-	Geometry = 'Material'
-	Object = 'Object'
-	Collection = 'Collection'
+	Image = 'NodeSocketImage'
+	Shader = 'NodeSocketShader'
+	Material = 'NodeSocketMaterial'
+	Geometry = 'NodeSocketGeometry'
+	Object = 'NodeSocketObject'
+	Collection = 'NodeSocketCollection'
 	# Basic
-	Bool = 'Bool'
-	String = 'String'
-	Menu = 'Menu'
+	Bool = 'NodeSocketBool'
+	String = 'NodeSocketString'
+	Menu = 'NodeSocketMenu'
 	# Float
-	Float = 'Float'
-	FloatUnsigned = 'FloatUnsigned'
-	FloatAngle = 'FloatAngle'
-	FloatDistance = 'FloatDistance'
-	FloatFactor = 'FloatFactor'
-	FloatPercentage = 'FloatPercentage'
-	FloatTime = 'FloatTime'
-	FloatTimeAbsolute = 'FloatTimeAbsolute'
+	Float = 'NodeSocketFloat'
+	FloatUnsigned = 'NodeSocketFloatUnsigned'
+	FloatAngle = 'NodeSocketFloatAngle'
+	FloatDistance = 'NodeSocketFloatDistance'
+	FloatFactor = 'NodeSocketFloatFactor'
+	FloatPercentage = 'NodeSocketFloatPercentage'
+	FloatTime = 'NodeSocketFloatTime'
+	FloatTimeAbsolute = 'NodeSocketFloatTimeAbsolute'
 	# Int
-	Int = 'Int'
-	IntFactor = 'IntFactor'
-	IntPercentage = 'IntPercentage'
-	IntUnsigned = 'IntUnsigned'
+	Int = 'NodeSocketInt'
+	IntFactor = 'NodeSocketIntFactor'
+	IntPercentage = 'NodeSocketIntPercentage'
+	IntUnsigned = 'NodeSocketIntUnsigned'
 	# Vector
-	Color = 'Color'
-	Rotation = 'Rotation'
-	Vector = 'Vector'
-	VectorAcceleration = 'Acceleration'
-	VectorDirection = 'Direction'
-	VectorEuler = 'Euler'
-	VectorTranslation = 'Translation'
-	VectorVelocity = 'Velocity'
-	VectorXYZ = 'XYZ'
+	Color = 'NodeSocketColor'
+	Rotation = 'NodeSocketRotation'
+	Vector = 'NodeSocketVector'
+	VectorAcceleration = 'NodeSocketAcceleration'
+	VectorDirection = 'NodeSocketDirection'
+	VectorEuler = 'NodeSocketEuler'
+	VectorTranslation = 'NodeSocketTranslation'
+	VectorVelocity = 'NodeSocketVelocity'
+	VectorXYZ = 'NodeSocketXYZ'
 
 	@staticmethod
 	def from_bl_isocket(
 		bl_isocket: bpy.types.NodeTreeInterfaceSocket,
 	) -> typ.Self:
-		return BLSocketType[bl_isocket.bl_socket_idname]
+		return BLSocketType(bl_isocket.bl_socket_idname)
 
 	@staticmethod
 	def info_from_bl_isocket(
 		bl_isocket: bpy.types.NodeTreeInterfaceSocket,
 	) -> typ.Self:
-		return BLSocketType.from_bl_isocket(bl_isocket).parse(
-			bl_isocket.default_value, bl_isocket.description, bl_isocket.identifier
-		)
+		bl_socket_type = BLSocketType.from_bl_isocket(bl_isocket)
+		if bl_socket_type.has_support:
+			return bl_socket_type.parse(
+				bl_isocket.default_value, bl_isocket.description, bl_isocket.identifier
+			)
+		return bl_socket_type.parse(None, bl_isocket.description, bl_isocket.identifier)
 
 	####################
 	# - Direct Properties
@@ -288,7 +290,7 @@ class BLSocketType(enum.StrEnum):
 		)
 
 		# Parse the Default Value
-		if self.mathtype is not None:
+		if self.mathtype is not None and bl_default_value is not None:
 			if self.size == spux.NumberSize1D.Scalar:
 				default_value = self.mathtype.pytype(bl_default_value)
 			elif description.startswith('2D'):

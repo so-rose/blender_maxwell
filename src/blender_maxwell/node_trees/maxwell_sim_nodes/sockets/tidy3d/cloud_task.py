@@ -96,6 +96,23 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 
 	new_task_name: str = bl_cache.BLField('', prop_ui=True)
 
+	####################
+	# - Property Changes
+	####################
+	def on_socket_prop_changed(self, prop_name: str) -> None:
+		if prop_name in [
+			'api_key',
+			'existing_folder_id',
+			'existing_task_id',
+			'new_task_name',
+			'should_exist',
+		]:
+			self.existing_folder_id = bl_cache.Signal.ResetEnumItems
+			self.existing_task_id = bl_cache.Signal.ResetEnumItems
+
+	####################
+	# - FlowKinds
+	####################
 	@property
 	def capabilities(self) -> ct.CapabilitiesFlow:
 		return ct.CapabilitiesFlow(
@@ -122,7 +139,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 				return (self.new_task_name, cloud_folder)
 
 			# No Task Selected: Return None
-			if self.existing_task_id == 'NONE':
+			if self.existing_task_id is None:
 				return None
 
 			# Retrieve Cloud Task
@@ -135,7 +152,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 
 			return cloud_task
 
-		return None
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - Searchers
@@ -158,7 +175,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 		return []
 
 	def search_cloud_tasks(self) -> list[ct.BLEnumElement]:
-		if self.existing_folder_id == 'NONE' or not tdcloud.IS_AUTHENTICATED:
+		if self.existing_folder_id is None or not tdcloud.IS_AUTHENTICATED:
 			return []
 
 		# Get Cloud Folder
@@ -220,10 +237,6 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 
 	def on_prepare_new_task(self):
 		self.should_exist = False
-
-	def on_cloud_updated(self):
-		self.existing_folder_id = bl_cache.Signal.ResetEnumItems
-		self.existing_task_id = bl_cache.Signal.ResetEnumItems
 
 	####################
 	# - UI

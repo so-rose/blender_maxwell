@@ -401,8 +401,8 @@ class MapMathNode(base.MaxwellSimNode):
 		run_on_init=True,
 	)
 	def on_input_changed(self):
-		if self.operation not in MapOperation.by_element_shape(self.expr_output_shape):
-			self.operation = bl_cache.Signal.ResetEnumItems
+		# if self.operation not in MapOperation.by_element_shape(self.expr_output_shape):
+		self.operation = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
 		# Trigger

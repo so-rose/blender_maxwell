@@ -44,7 +44,7 @@ class NumberConstantNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
-	def draw_value(self, col: bpy.types.UILayout) -> None:
+	def draw_props(self, _, col: bpy.types.UILayout) -> None:
 		row = col.row(align=True)
 		row.prop(self, self.blfields['mathtype'], text='')
 		row.prop(self, self.blfields['size'], text='')
@@ -56,7 +56,7 @@ class NumberConstantNode(base.MaxwellSimNode):
 	def on_mathtype_size_changed(self, props) -> None:
 		"""Change the input/output expression sockets to match the mathtype declared in the node."""
 		self.inputs['Value'].mathtype = props['mathtype']
-		self.inputs['Value'].shape = props['mathtype'].shape
+		self.inputs['Value'].shape = props['size'].shape
 
 	####################
 	# - FlowKind

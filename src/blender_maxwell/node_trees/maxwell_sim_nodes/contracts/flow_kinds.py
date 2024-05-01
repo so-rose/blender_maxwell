@@ -57,19 +57,22 @@ class FlowKind(enum.StrEnum):
 	Info = enum.auto()
 
 	@classmethod
-	def scale_to_unit_system(cls, kind: typ.Self, value, socket_type, unit_system):
+	def scale_to_unit_system(
+		cls,
+		kind: typ.Self,
+		value,
+		unit_system: spux.UnitSystem,
+	):
 		if kind == cls.Value:
-			return spux.sympy_to_python(
-				spux.scale_to_unit(
-					value,
-					unit_system[socket_type],
-				)
+			return spux.scale_to_unit_system(
+				value,
+				unit_system,
 			)
 		if kind == cls.LazyArrayRange:
-			return value.rescale_to_unit(unit_system[socket_type])
+			return value.rescale_to_unit_system(unit_system)
 
 		if kind == cls.Params:
-			return value.rescale_to_unit(unit_system[socket_type])
+			return value.rescale_to_unit_system(unit_system)
 
 		msg = 'Tried to scale unknown kind'
 		raise ValueError(msg)
@@ -186,6 +189,9 @@ class ArrayFlow:
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
 		raise ValueError(msg)
+
+	def rescale_to_unit_system(self, unit: spu.Quantity) -> typ.Self:
+		raise NotImplementedError
 
 
 ####################
@@ -469,14 +475,13 @@ class LazyArrayRangeFlow:
 
 		# Get Stop Mathtype
 		if isinstance(self.stop, spux.SympyType):
-			stop_mathtype = spux.MathType.from_expr(type(self.stop))
+			stop_mathtype = spux.MathType.from_expr(self.stop)
 		else:
-			stop_mathtype = spux.MathType.from_pytype(type(self.stop))
+			stop_mathtype = spux.MathType.from_pytype(self.stop)
 
 		# Check Equal
 		if start_mathtype != stop_mathtype:
-			msg = "Mathtypes of start and stop don't agree. Please fix!"
-			raise ValueError(msg)
+			return spux.MathType.combine(start_mathtype, stop_mathtype)
 
 		return start_mathtype
 
@@ -525,8 +530,8 @@ class LazyArrayRangeFlow:
 		"""
 		if self.unit is not None:
 			return LazyArrayRangeFlow(
-				start=spu.scale_to_unit(self.start * self.unit, unit),
-				stop=spu.scale_to_unit(self.stop * self.unit, unit),
+				start=spux.scale_to_unit(self.start * self.unit, unit),
+				stop=spux.scale_to_unit(self.stop * self.unit, unit),
 				steps=self.steps,
 				scaling=self.scaling,
 				unit=unit,
@@ -534,6 +539,39 @@ class LazyArrayRangeFlow:
 			)
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
+		raise ValueError(msg)
+
+	def rescale_to_unit_system(self, unit_system: spux.Unit) -> typ.Self:
+		"""Replaces the units, **with** rescaling of the bounds.
+
+		Parameters:
+			unit: The unit to convert the bounds to.
+
+		Returns:
+			A new `LazyArrayRangeFlow` with replaced unit.
+
+		Raises:
+			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
+		"""
+		if self.unit is not None:
+			return LazyArrayRangeFlow(
+				start=spux.strip_unit_system(
+					spux.convert_to_unit_system(self.start * self.unit, unit_system),
+					unit_system,
+				),
+				stop=spux.strip_unit_system(
+					spux.convert_to_unit_system(self.start * self.unit, unit_system),
+					unit_system,
+				),
+				steps=self.steps,
+				scaling=self.scaling,
+				unit=unit_system[spux.PhysicalType.from_unit(self.unit)],
+				symbols=self.symbols,
+			)
+
+		msg = (
+			f'Tried to rescale unitless LazyDataValueRange to unit system {unit_system}'
+		)
 		raise ValueError(msg)
 
 	####################

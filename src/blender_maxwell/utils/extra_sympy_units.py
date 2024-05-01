@@ -25,6 +25,10 @@ from pydantic_core import core_schema as pyd_core_schema
 
 from blender_maxwell import contracts as ct
 
+from . import logger
+
+log = logger.get(__name__)
+
 SympyType = (
 	sp.Basic
 	| sp.Expr
@@ -47,21 +51,42 @@ class MathType(enum.StrEnum):
 	Real = enum.auto()
 	Complex = enum.auto()
 
+	@staticmethod
 	def combine(*mathtypes: list[typ.Self]) -> typ.Self:
 		if MathType.Complex in mathtypes:
 			return MathType.Complex
-		elif MathType.Real in mathtypes:
+		if MathType.Real in mathtypes:
 			return MathType.Real
-		elif MathType.Rational in mathtypes:
+		if MathType.Rational in mathtypes:
 			return MathType.Rational
-		elif MathType.Integer in mathtypes:
+		if MathType.Integer in mathtypes:
 			return MathType.Integer
-		elif MathType.Bool in mathtypes:
+		if MathType.Bool in mathtypes:
 			return MathType.Bool
+
+		msg = f"Can't combine mathtypes {mathtypes}"
+		raise ValueError(msg)
+
+	def is_compatible(self, other: typ.Self) -> bool:
+		MT = MathType
+		return (
+			other
+			in {
+				MT.Bool: [MT.Bool],
+				MT.Integer: [MT.Integer],
+				MT.Rational: [MT.Integer, MT.Rational],
+				MT.Real: [MT.Integer, MT.Rational, MT.Real],
+				MT.Complex: [MT.Integer, MT.Rational, MT.Real, MT.Complex],
+			}[self]
+		)
 
 	@staticmethod
 	def from_expr(sp_obj: SympyType) -> type:
-		## TODO: Support for sp.Matrix
+		if isinstance(sp_obj, sp.MatrixBase):
+			return MathType.combine(
+				*[MathType.from_expr(v) for v in sp.flatten(sp_obj)]
+			)
+
 		if isinstance(sp_obj, sp.logic.boolalg.Boolean):
 			return MathType.Bool
 		if sp_obj.is_integer:
@@ -172,7 +197,7 @@ class NumberSize1D(enum.StrEnum):
 			None: NS.Scalar,
 			(2,): NS.Vec2,
 			(3,): NS.Vec3,
-			(4,): NS.Vec3,
+			(4,): NS.Vec4,
 		}[shape]
 
 	@property
@@ -182,7 +207,7 @@ class NumberSize1D(enum.StrEnum):
 			NS.Scalar: None,
 			NS.Vec2: (2,),
 			NS.Vec3: (3,),
-			NS.Vec3: (4,),
+			NS.Vec4: (4,),
 		}[self]
 
 
@@ -702,7 +727,6 @@ def scale_to_unit(sp_obj: SympyType, unit: spu.Quantity) -> Number:
 	Raises:
 		ValueError: If the result of unit-conversion and -stripping still has units, as determined by `uses_units()`.
 	"""
-	## TODO: An LFU cache could do better than an LRU.
 	unitless_expr = spu.convert_to(sp_obj, unit) / unit
 	if not uses_units(unitless_expr):
 		return unitless_expr
@@ -739,7 +763,7 @@ def unit_str_to_unit(unit_str: str) -> Unit | None:
 	if unit_str in _UNIT_STR_MAP:
 		return _UNIT_STR_MAP[unit_str]
 
-	msg = 'No valid unit for unit string {unit_str}'
+	msg = f'No valid unit for unit string {unit_str}'
 	raise ValueError(msg)
 
 
@@ -802,7 +826,7 @@ class PhysicalType(enum.StrEnum):
 			# Global
 			PT.Time: Dims.time,
 			PT.Angle: Dims.angle,
-			PT.SolidAngle: Dims.steradian,  ## MISSING
+			PT.SolidAngle: spu.steradian.dimension,  ## MISSING
 			PT.Freq: Dims.frequency,
 			PT.AngFreq: Dims.angle * Dims.frequency,
 			# Cartesian
@@ -836,7 +860,7 @@ class PhysicalType(enum.StrEnum):
 			PT.HField: Dims.current / Dims.length,
 			# Luminal
 			PT.LumIntensity: Dims.luminous_intensity,
-			PT.LumFlux: Dims.luminous_intensity * Dims.steradian,
+			PT.LumFlux: Dims.luminous_intensity * spu.steradian.dimension,
 			PT.Illuminance: Dims.luminous_intensity / Dims.length**2,
 			# Optics
 			PT.OrdinaryWaveVector: Dims.frequency,
@@ -1263,12 +1287,23 @@ def convert_to_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyE
 	return spu.convert_to(sp_obj, _flat_unit_system_units(unit_system))
 
 
+def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
+	"""Strip units occurring in the given unit system from the expression.
+
+	Unit stripping is a "dumb" operation: "Substitute any `sympy` object in `unit_system.values()` with `1`".
+	Obviously, the semantic correctness of this operation depends entirely on _the units adding no semantic meaning to the expression_.
+
+	Notes:
+		You should probably use `scale_to_unit_system()` or `convert_to_unit_system()`.
+	"""
+	return sp_obj.subs({unit: 1 for unit in unit_system.values()})
+
+
 def scale_to_unit_system(
 	sp_obj: SympyExpr, unit_system: UnitSystem, use_jax_array: bool = False
 ) -> int | float | complex | tuple | jax.Array:
 	"""Convert an expression to the units of a given unit system, then strip all units of the unit system.
 
-	Unit stripping is "dumb": Substitute any `sympy` object in `unit_system.values()` with `1`.
 	Afterwards, it is converted to an appropriate Python type.
 
 	Notes:
@@ -1287,8 +1322,6 @@ def scale_to_unit_system(
 		If the returned type is array-like, and `use_jax_array` is specified, then (and **only** then) will a `jax.Array` be returned instead of a nested `tuple`.
 	"""
 	return sympy_to_python(
-		convert_to_unit_system(sp_obj, unit_system).subs(
-			{unit: 1 for unit in unit_system.values()}
-		),
+		strip_unit_system(convert_to_unit_system(sp_obj, unit_system), unit_system),
 		use_jax_array=use_jax_array,
 	)

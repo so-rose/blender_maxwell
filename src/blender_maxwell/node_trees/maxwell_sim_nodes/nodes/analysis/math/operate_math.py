@@ -20,6 +20,10 @@ FUNCS = {
 	'MUL': lambda exprs: exprs[0] * exprs[1],
 	'DIV': lambda exprs: exprs[0] / exprs[1],
 	'POW': lambda exprs: exprs[0] ** exprs[1],
+	'ATAN2': lambda exprs: sp.atan2(exprs[1], exprs[0]),
+	# Vector | Vector
+	'VEC_VEC_DOT': lambda exprs: exprs[0].dot(exprs[1]),
+	'CROSS': lambda exprs: exprs[0].cross(exprs[1]),
 }
 
 SP_FUNCS = FUNCS
@@ -52,8 +56,8 @@ class OperateMathNode(base.MaxwellSimNode):
 	bl_label = 'Operate Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr L': sockets.ExprSocketDef(show_info_columns=False),
-		'Expr R': sockets.ExprSocketDef(show_info_columns=False),
+		'Expr L': sockets.ExprSocketDef(),
+		'Expr R': sockets.ExprSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(),
@@ -73,10 +77,12 @@ class OperateMathNode(base.MaxwellSimNode):
 	def search_categories(self) -> list[ct.BLEnumElement]:
 		"""Deduce and return a list of valid categories for the current socket set and input data."""
 		expr_l_info = self._compute_input(
-			'Expr L', kind=ct.FlowKind.Info, optional=True
+			'Expr L',
+			kind=ct.FlowKind.Info,
 		)
 		expr_r_info = self._compute_input(
-			'Expr R', kind=ct.FlowKind.Info, optional=True
+			'Expr R',
+			kind=ct.FlowKind.Info,
 		)
 
 		has_expr_l_info = not ct.FlowSignal.check(expr_l_info)
@@ -120,6 +126,10 @@ class OperateMathNode(base.MaxwellSimNode):
 			## Number | Number
 			if expr_l_info.output_shape is None and expr_r_info.output_shape is None:
 				categories = [NUMBER_NUMBER]
+
+			## * | Number
+			elif expr_r_info.output_shape is None:
+				categories = []
 
 			## Number | Vector
 			elif (
@@ -170,13 +180,12 @@ class OperateMathNode(base.MaxwellSimNode):
 				('POW', 'L^R', 'Power'),
 				('ATAN2', 'atan2(L,R)', 'atan2(L,R)'),
 			]
-		if self.category in 'Vector | Vector':
+		if self.category == 'Vector | Vector':
 			if items:
 				items += [None]
 			items += [
 				('VEC_VEC_DOT', 'L · R', 'Vector-Vector Product'),
 				('CROSS', 'L x R', 'Cross Product'),
-				('PROJ', 'proj(L, R)', 'Projection'),
 			]
 		if self.category == 'Matrix | Vector':
 			if items:
@@ -364,9 +373,7 @@ class OperateMathNode(base.MaxwellSimNode):
 			'Expr R': ct.FlowKind.Params,
 		},
 	)
-	def compute_params(
-		self, props, input_sockets
-	) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
 		operation = props['operation']
 		params_l = input_sockets['Expr L']
 		params_r = input_sockets['Expr R']

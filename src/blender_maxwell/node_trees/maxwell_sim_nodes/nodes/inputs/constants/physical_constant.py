@@ -1,6 +1,6 @@
-import enum
 import typing as typ
 
+import bpy
 import sympy as sp
 
 from blender_maxwell.utils import bl_cache
@@ -10,7 +10,7 @@ from .... import contracts, sockets
 from ... import base, events
 
 
-class PhysicalConstantNode(base.MaxwellSimTreeNode):
+class PhysicalConstantNode(base.MaxwellSimNode):
 	"""A number of configurable unit dimension, ex. time, length, etc. .
 
 	Attributes:
@@ -36,12 +36,12 @@ class PhysicalConstantNode(base.MaxwellSimTreeNode):
 		prop_ui=True,
 	)
 
-	mathtype: enum.Enum = bl_cache.BLField(
+	mathtype: spux.MathType = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_mathtypes(),
 		prop_ui=True,
 	)
 
-	size: enum.Enum = bl_cache.BLField(
+	size: spux.NumberSize1D = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_sizes(),
 		prop_ui=True,
 	)
@@ -63,15 +63,24 @@ class PhysicalConstantNode(base.MaxwellSimTreeNode):
 		]
 
 	####################
+	# - UI
+	####################
+	def draw_props(self, _, col: bpy.types.UILayout) -> None:
+		row = col.row(align=True)
+		row.prop(self, self.blfields['mathtype'], text='')
+		row.prop(self, self.blfields['size'], text='')
+
+	####################
 	# - Events
 	####################
 	@events.on_value_changed(
 		prop_name={'physical_type', 'mathtype', 'size'},
+		run_on_init=True,
 		props={'physical_type', 'mathtype', 'size'},
 	)
 	def on_mathtype_or_size_changed(self, props) -> None:
 		"""Change the input/output expression sockets to match the mathtype and size declared in the node."""
-		shape = spux.NumberSize1D(props['size']).shape
+		shape = props['size'].shape
 
 		# Set Input Socket Physical Type
 		if self.inputs['Value'].physical_type != props['physical_type']:
@@ -90,9 +99,9 @@ class PhysicalConstantNode(base.MaxwellSimTreeNode):
 	####################
 	# - Callbacks
 	####################
-	@events.computes_output_socket('value')
-	def compute_value(self: contracts.NodeTypeProtocol) -> sp.Expr:
-		return self.compute_input('value')
+	@events.computes_output_socket('Value', input_sockets={'Value'})
+	def compute_value(self, input_sockets) -> sp.Expr:
+		return input_sockets['Value']
 
 
 ####################

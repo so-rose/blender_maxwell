@@ -547,6 +547,9 @@ class BLField:
 		self._str_cb = str_cb
 		self._enum_cb = enum_cb
 
+		## Type Coercion
+		self._coerce_output_to = None
+
 		## Vector/Matrix Identity
 		## -> Matrix Shape assists in the workaround for Matrix Display Bug
 		self._is_vector = False
@@ -797,7 +800,11 @@ class BLField:
 			}
 
 		## StrEnum
-		elif inspect.isclass(AttrType) and issubclass(AttrType, enum.StrEnum):
+		elif (
+			inspect.isclass(AttrType)
+			and issubclass(AttrType, enum.StrEnum)
+			and self._enum_cb is None
+		):
 			default_value = self._default_value
 			BLProp = bpy.props.EnumProperty
 			kwargs_prop |= {
@@ -814,9 +821,14 @@ class BLField:
 			}
 			if self._enum_many:
 				kwargs_prop['options'].add('ENUM_FLAG')
+			self._coerce_output_to = AttrType
 
 		## Dynamic Enum
-		elif AttrType is enum.Enum and self._enum_cb is not None:
+		elif (
+			AttrType is enum.Enum
+			or (inspect.isclass(AttrType) and issubclass(AttrType, enum.StrEnum))
+			and self._enum_cb is not None
+		):
 			if self._default_value is not None:
 				msg = 'When using dynamic enum, default value must be None'
 				raise ValueError(msg)
@@ -828,6 +840,8 @@ class BLField:
 			}
 			if self._enum_many:
 				kwargs_prop['options'].add('ENUM_FLAG')
+			if AttrType is not enum.Enum:
+				self._coerce_output_to = AttrType
 
 		## BL Reference
 		elif AttrType in typ.get_args(ct.BLIDStruct):
@@ -888,6 +902,9 @@ class BLField:
 	def __get__(
 		self, bl_instance: BLInstance | None, owner: type[BLInstance]
 	) -> typ.Any:
+		if bl_instance is None:
+			return None
+
 		value = self._cached_bl_property.__get__(bl_instance, owner)
 
 		# enum.Enum: Cast Auto-Injected Dynamic Enum 'NONE' -> None
@@ -913,13 +930,20 @@ class BLField:
 		## -> Reject modernity. Return to tuple[].
 		if self._is_vector:
 			## -> tuple()ify the np.array to respect tuple[] type annotation.
-			return tuple(np.array(value))
+			return tuple(value)
 
 		if self._is_matrix:
 			# Matrix Display Bug: Correctly Read Row-Major Values w/Reshape
 			return tuple(
 				map(tuple, np.array(value).flatten().reshape(self._matrix_shape))
 			)
+
+		# Coerce Output
+		## -> Mainly useful for getting the "real" StrEnum back.
+		if self._coerce_output_to is not None and value is not None:
+			if self._enum_many:
+				return {self._coerce_output_to(v) for v in value}
+			return self._coerce_output_to(value)
 
 		return value
 

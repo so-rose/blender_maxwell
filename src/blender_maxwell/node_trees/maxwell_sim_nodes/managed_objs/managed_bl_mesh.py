@@ -110,26 +110,23 @@ class ManagedBLMesh(base.ManagedObj):
 
 		If it's already included, do nothing.
 		"""
-		if (bl_object := bpy.data.objects.get(self.name)) is not None:
-			if bl_object.name not in preview_collection().objects:
-				log.info('Moving "%s" to Preview Collection', bl_object.name)
-				preview_collection().objects.link(bl_object)
-		else:
-			msg = 'Managed BLMesh does not exist'
-			raise ValueError(msg)
+		bl_object = bpy.data.objects.get(self.name)
+		if bl_object is None:
+			bl_object = self.bl_object()
+
+		if bl_object.name not in preview_collection().objects:
+			log.info('Moving "%s" to Preview Collection', bl_object.name)
+			preview_collection().objects.link(bl_object)
 
 	def hide_preview(self) -> None:
 		"""Removes the managed Blender object from the preview collection.
 
 		If it's already removed, do nothing.
 		"""
-		if (bl_object := bpy.data.objects.get(self.name)) is not None:
-			if bl_object.name in preview_collection().objects:
-				log.info('Removing "%s" from Preview Collection', bl_object.name)
-				preview_collection().objects.unlink(bl_object)
-		else:
-			msg = 'Managed BLMesh does not exist'
-			raise ValueError(msg)
+		bl_object = bpy.data.objects.get(self.name)
+		if bl_object is not None and bl_object.name in preview_collection().objects:
+			log.info('Removing "%s" from Preview Collection', bl_object.name)
+			preview_collection().objects.unlink(bl_object)
 
 	def bl_select(self) -> None:
 		"""Selects the managed Blender object, causing it to be ex. outlined in the 3D viewport."""

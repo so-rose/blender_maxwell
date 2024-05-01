@@ -599,22 +599,28 @@ class MaxwellSimNode(bpy.types.Node):
 				It must be currently active.
 			kind: The data flow kind to compute.
 		"""
-		if (bl_socket := self.inputs.get(input_socket_name)) is not None:
-			return (
-				ct.FlowKind.scale_to_unit_system(
-					kind,
-					bl_socket.compute_data(kind=kind),
-					bl_socket.socket_type,
-					unit_system,
+		bl_socket = self.inputs.get(input_socket_name)
+		if bl_socket is not None:
+			if bl_socket.instance_id:
+				return (
+					ct.FlowKind.scale_to_unit_system(
+						kind,
+						bl_socket.compute_data(kind=kind),
+						unit_system,
+					)
+					if unit_system is not None
+					else bl_socket.compute_data(kind=kind)
 				)
-				if unit_system is not None
-				else bl_socket.compute_data(kind=kind)
-			)
+
+			# No Socket Instance ID
+			## -> Indicates that socket_def.preinit() has not yet run.
+			## -> Anyone needing results will need to wait on preinit().
+			return ct.FlowSignal.FlowInitializing
 
 		if optional:
 			return ct.FlowSignal.NoFlow
 
-		msg = f'Input socket "{input_socket_name}" on "{self.bl_idname}" is not an active input socket'
+		msg = f'{self.sim_node_name}: Input socket "{input_socket_name}" cannot be computed, as it is not an active input socket'
 		raise ValueError(msg)
 
 	####################

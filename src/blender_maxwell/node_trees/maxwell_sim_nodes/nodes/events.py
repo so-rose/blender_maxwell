@@ -3,6 +3,7 @@ import inspect
 import typing as typ
 from types import MappingProxyType
 
+from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
 from .. import contracts as ct
@@ -10,7 +11,6 @@ from .. import contracts as ct
 log = logger.get(__name__)
 
 UnitSystemID = str
-UnitSystem = dict[ct.SocketType, typ.Any]
 
 
 ####################
@@ -70,7 +70,7 @@ def event_decorator(
 	all_loose_input_sockets: bool = False,
 	all_loose_output_sockets: bool = False,
 	# Request Unit System Scaling
-	unit_systems: dict[UnitSystemID, UnitSystem] = MappingProxyType({}),
+	unit_systems: dict[UnitSystemID, spux.UnitSystem] = MappingProxyType({}),
 	scale_input_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
 	scale_output_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
 ):
@@ -213,7 +213,6 @@ def event_decorator(
 						kind=kind,
 						optional=output_sockets_optional.get(output_socket_name, False),
 					),
-					node.outputs[output_socket_name].socket_type,
 					unit_systems.get(scale_output_sockets.get(output_socket_name)),
 				)
 
@@ -269,9 +268,21 @@ def event_decorator(
 				else {}
 			)
 
+			# Propagate Initialization
+			## If there is a FlowInitializing, then the method would fail.
+			## Therefore, propagate FlowInitializing if found.
+			if any(
+				ct.FlowSignal.FlowInitializing in sockets.values()
+				for sockets in [
+					method_kw_args.get('input_sockets', {}),
+					method_kw_args.get('loose_input_sockets', {}),
+					method_kw_args.get('output_sockets', {}),
+					method_kw_args.get('loose_output_sockets', {}),
+				]
+			):
+				return ct.FlowSignal.FlowInitializing
+
 			# Call Method
-			## If there is a FlowPending, then the method would fail.
-			## Therefore, propagate FlowPending if found.
 			return method(
 				node,
 				**method_kw_args,

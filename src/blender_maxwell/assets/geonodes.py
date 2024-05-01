@@ -168,13 +168,13 @@ class GeoNodes(enum.StrEnum):
 			GN.StructurePrimitiveCapsule: GN_INTERNAL_STRUCTURES_PATH,
 			GN.StructurePrimitiveCone: GN_INTERNAL_STRUCTURES_PATH,
 			## Monitor
-			GN.MonitorEHField: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorPowerFlux: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorEpsTensor: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorDiffraction: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorProjCartEHField: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorProjAngEHField: GN_INTERNAL_STRUCTURES_PATH,
-			GN.MonitorProjKSpaceEHField: GN_INTERNAL_STRUCTURES_PATH,
+			GN.MonitorEHField: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorPowerFlux: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorEpsTensor: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorDiffraction: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorProjCartEHField: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorProjAngEHField: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorProjKSpaceEHField: GN_INTERNAL_MONITORS_PATH,
 			## Simulation
 			GN.SimulationSimDomain: GN_INTERNAL_SIMULATIONS_PATH,
 			GN.SimulationBoundConds: GN_INTERNAL_SIMULATIONS_PATH,
@@ -225,7 +225,7 @@ def import_geonodes(
 	if import_method == 'link' and geonodes in bpy.data.node_groups:
 		return bpy.data.node_groups[geonodes]
 
-	filename = geonodes
+	filename = str(geonodes)
 	filepath = str(geonodes.parent_path / (geonodes + '.blend') / 'NodeTree' / geonodes)
 	directory = filepath.removesuffix(geonodes)
 	log.info(

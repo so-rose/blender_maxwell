@@ -2,8 +2,11 @@ import enum
 import typing as typ
 
 import bpy
+import jax
+import jax.numpy as jnp
 import jaxtyping as jtyp
 import matplotlib.axis as mpl_ax
+import sympy as sp
 
 from blender_maxwell.utils import bl_cache, image_ops, logger
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -192,7 +195,10 @@ class VizNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(
+			symbols={_x := sp.Symbol('x', real=True)},
+			default_value=2 * _x,
+		),
 	}
 	output_sockets: typ.ClassVar = {
 		'Preview': sockets.AnySocketDef(),
@@ -221,8 +227,12 @@ class VizNode(base.MaxwellSimNode):
 	## - Mode Searcher
 	#####################
 	@property
-	def data_info(self) -> ct.InfoFlow:
-		return self._compute_input('Expr', kind=ct.FlowKind.Info)
+	def data_info(self) -> ct.InfoFlow | None:
+		info = self._compute_input('Expr', kind=ct.FlowKind.Info)
+		if not ct.FlowSignal.check(info):
+			return info
+
+		return None
 
 	def search_modes(self) -> list[ct.BLEnumElement]:
 		if not ct.FlowSignal.check(self.data_info):
@@ -298,7 +308,9 @@ class VizNode(base.MaxwellSimNode):
 		managed_objs={'plot'},
 		props={'viz_mode', 'viz_target', 'colormap'},
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': {ct.FlowKind.Array, ct.FlowKind.Info}},
+		input_socket_kinds={
+			'Expr': {ct.FlowKind.Array, ct.FlowKind.LazyValueFunc, ct.FlowKind.Info}
+		},
 		stop_propagation=True,
 	)
 	def on_show_plot(

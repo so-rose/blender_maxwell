@@ -1,5 +1,5 @@
 # Working TODO
-- [ ] Wave Constant
+- [x] Wave Constant
 - Bounds
 	- [ ] Boundary Conds
 	- [ ] PML
@@ -18,8 +18,8 @@
 	- [ ] Data File Import
 	- [ ] DataFit Medium
 - Monitors
-	- [ ] EH Field
-	- [ ] Power Flux
+	- [x] EH Field
+	- [x] Power Flux
 	- [ ] Permittivity
 	- [ ] Diffraction
 - Structures
@@ -49,9 +49,9 @@
 - Integration
 	- [ ] Simulation and Analysis of Maxim's Cavity
 - Constants
-	- [ ] Number Constant
-	- [ ] Vector Constant
-	- [ ] Physical Constant
+	- [x] Number Constant
+	- [x] Vector Constant
+	- [x] Physical Constant
 
 - [ ] Fix many problems by persisting `_enum_cb_cache` and `_str_cb_cache`.
 
@@ -70,7 +70,7 @@
 		- [ ] Pol SocketType: 3D Poincare sphere visualization of Stokes vectors.
 
 - [x] Math / Map Math
-	- [ ] Remove "By x" socket set let socket sets only be "Function"/"Expr"; then add a dynamic enum underneath to select "By x" based on data support.
+	- [x] Remove "By x" socket set let socket sets only be "Function"/"Expr"; then add a dynamic enum underneath to select "By x" based on data support.
 	- [ ] Filter the operations based on data support, ex. use positive-definiteness to guide cholesky.
 	- [ ] Implement support for additional symbols via `Expr`.
 - [x] Math / Filter Math
@@ -81,8 +81,6 @@
 
 ## Inputs
 - [x] Wave Constant
-	- [ ] Fix the LazyValueRange (again!)
-	- [ ] Document
 - [x] Scene
 	- [ ] Implement export of scene time via. Blender unit system.
 	- [ ] Implement optional scene-synced time exporting, so that the simulation definition and scene definition match for analysis needs.
@@ -90,14 +88,14 @@
 - [x] Constants / Expr Constant
 	- See IDEAS.
 - [x] Constants / Number Constant
-	- [ ] Fix non-integer sockets
-- [ ] Constants / Vector Constant
-- [ ] Constants / Physical Constant
+- [x] Constants / Vector Constant
+- [x] Constants / Physical Constant
 - [x] Constants / Scientific Constant
 	- [ ] Nicer (boxed?) node information, maybe centered headers, in a box, etc. .
-- [x] Constants / Unit System Constant
+- [ ] Constants / Unit System Constant
+	- [ ] Re-implement with `PhysicalType`.
 	- [ ] Implement presets, including "Tidy3D" and "Blender", shown in the label row.
-- [x] Constants / Blender Constant
+- [ ] Constants / Blender Constant
 	- [ ] Fix it!
 
 - [ ] Web / Tidy3D Web Importer

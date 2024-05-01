@@ -206,6 +206,8 @@ class MaxwellSimTree(bpy.types.NodeTree):
 		"""Unlock all nodes in the node tree, making them editable."""
 		log.info('Unlocking All Nodes in NodeTree "%s"', self.bl_label)
 		for node in self.nodes:
+			if node.type in ['REROUTE', 'FRAME']:
+				continue
 			node.locked = False
 			for bl_socket in [*node.inputs, *node.outputs]:
 				bl_socket.locked = False
@@ -229,7 +231,9 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	@contextlib.contextmanager
 	def repreview_all(self) -> None:
 		all_nodes_with_preview_active = {
-			node.instance_id: node for node in self.nodes if node.preview_active
+			node.instance_id: node
+			for node in self.nodes
+			if node.type not in ['REROUTE', 'FRAME'] and node.preview_active
 		}
 		self.is_currently_repreviewing = True
 		self.newly_previewed_nodes = {}

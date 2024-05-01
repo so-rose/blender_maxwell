@@ -81,6 +81,7 @@ _NaivelyEncodableTypeSet = frozenset(typ.get_args(NaivelyEncodableType))
 class TypeID(enum.StrEnum):
 	Complex: str = '!type=complex'
 	SympyType: str = '!type=sympytype'
+	SympyExpr: str = '!type=sympyexpr'
 	SocketDef: str = '!type=socketdef'
 	ManagedObj: str = '!type=managedobj'
 

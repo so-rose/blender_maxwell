@@ -16,6 +16,7 @@ class FlowSignal(enum.StrEnum):
 
 	"""
 
+	FlowInitializing = enum.auto()
 	FlowPending = enum.auto()
 	NoFlow = enum.auto()
 

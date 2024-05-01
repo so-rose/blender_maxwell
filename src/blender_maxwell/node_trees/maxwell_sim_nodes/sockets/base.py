@@ -217,7 +217,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
 		self.display_shape = (
-			'SQUARE' if self.active_kind == ct.FlowKind.LazyValueRange else 'CIRCLE'
+			'SQUARE' if self.active_kind == ct.FlowKind.LazyArrayRange else 'CIRCLE'
 		)  # + ('_DOT' if self.use_units else '')
 		## TODO: Valid Active Kinds should be a subset/subenum(?) of FlowKind
 

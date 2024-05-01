@@ -33,6 +33,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Wavelength': {
 			'WL': sockets.ExprSocketDef(
+				active_kind=ct.FlowKind.Value,
 				physical_type=spux.PhysicalType.Length,
 				# Defaults
 				default_unit=spu.nm,
@@ -58,18 +59,18 @@ class WaveConstantNode(base.MaxwellSimNode):
 	output_sockets: typ.ClassVar = {
 		'WL': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Value,
-			unit_dimension=spux.Dims.length,
+			physical_type=spux.PhysicalType.Length,
 		),
 		'Freq': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Value,
-			unit_dimension=spux.Dims.frequency,
+			physical_type=spux.PhysicalType.Freq,
 		),
 	}
 
 	####################
 	# - Properties
 	####################
-	use_range: bool = bl_cache.BLField(False)
+	use_range: bool = bl_cache.BLField(False, prop_ui=True)
 
 	####################
 	# - UI
@@ -80,14 +81,14 @@ class WaveConstantNode(base.MaxwellSimNode):
 		Parameters:
 			col: Target for defining UI elements.
 		"""
-		col.prop(self, self.blfields['use_range'], toggle=True)
+		col.prop(self, self.blfields['use_range'], toggle=True, text='Range')
 
 	####################
 	# - Events
 	####################
 	@events.on_value_changed(
 		prop_name={'active_socket_set', 'use_range'},
-		props='use_range',
+		props={'use_range'},
 		run_on_init=True,
 	)
 	def on_use_range_changed(self, props: dict) -> None:
@@ -128,7 +129,8 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_wl_value(self, input_sockets: dict) -> sp.Expr:
 		"""Compute a single wavelength value from either wavelength/frequency."""
-		if input_sockets['WL'] is not None:
+		has_wl = not ct.FlowSignal.check(input_sockets['WL'])
+		if has_wl:
 			return input_sockets['WL']
 
 		return sci_constants.vac_speed_of_light / input_sockets['Freq']
@@ -141,7 +143,8 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_freq_value(self, input_sockets: dict) -> sp.Expr:
 		"""Compute a single frequency value from either wavelength/frequency."""
-		if input_sockets['Freq'] is not None:
+		has_freq = not ct.FlowSignal.check(input_sockets['Freq'])
+		if has_freq:
 			return input_sockets['Freq']
 
 		return sci_constants.vac_speed_of_light / input_sockets['WL']
@@ -158,11 +161,20 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_wl_range(self, input_sockets: dict) -> sp.Expr:
 		"""Compute wavelength range from either wavelength/frequency ranges."""
-		if input_sockets['WL'] is not None:
+		has_wl = not ct.FlowSignal.check(input_sockets['WL'])
+		if has_wl:
 			return input_sockets['WL']
 
-		return input_sockets['Freq'].rescale_bounds(
-			lambda bound: sci_constants.vac_speed_of_light / bound, reverse=True
+		freq = input_sockets['Freq']
+		return ct.LazyArrayRangeFlow(
+			start=spux.scale_to_unit(
+				sci_constants.vac_speed_of_light / (freq.stop * freq.unit), spu.um
+			),
+			stop=spux.scale_to_unit(
+				sci_constants.vac_speed_of_light / (freq.start * freq.unit), spu.um
+			),
+			steps=freq.steps,
+			unit=spu.um,
 		)
 
 	@events.computes_output_socket(
@@ -177,11 +189,20 @@ class WaveConstantNode(base.MaxwellSimNode):
 	)
 	def compute_freq_range(self, input_sockets: dict) -> sp.Expr:
 		"""Compute frequency range from either wavelength/frequency ranges."""
-		if input_sockets['Freq'] is not None:
+		has_freq = not ct.FlowSignal.check(input_sockets['Freq'])
+		if has_freq:
 			return input_sockets['Freq']
 
-		return input_sockets['WL'].rescale_bounds(
-			lambda bound: sci_constants.vac_speed_of_light / bound, reverse=True
+		wl = input_sockets['WL']
+		return ct.LazyArrayRangeFlow(
+			start=spux.scale_to_unit(
+				sci_constants.vac_speed_of_light / (wl.stop * wl.unit), spux.THz
+			),
+			stop=spux.scale_to_unit(
+				sci_constants.vac_speed_of_light / (wl.start * wl.unit), spux.THz
+			),
+			steps=wl.steps,
+			unit=spux.THz,
 		)
 
 

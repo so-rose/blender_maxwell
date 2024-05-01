@@ -13,6 +13,7 @@ def prefix_values_with(prefix: str) -> type[enum.Enum]:
 	Returns:
 		A new StrEnum class with altered member values.
 	"""
+	## TODO: DO NOT USE FOR ENUMS WITH METHODS
 
 	def _decorator(cls: enum.StrEnum):
 		new_members = {

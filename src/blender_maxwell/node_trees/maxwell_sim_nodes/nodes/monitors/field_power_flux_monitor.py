@@ -31,6 +31,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 		'Size': sockets.ExprSocketDef(
 			shape=(3,),
 			physical_type=spux.PhysicalType.Length,
+			default_value=sp.Matrix([1, 1, 1]),
 		),
 		'Samples/Space': sockets.ExprSocketDef(
 			shape=(3,),
@@ -123,11 +124,29 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 	# - Preview - Changes to Input Sockets
 	####################
 	@events.on_value_changed(
-		socket_name={'Center', 'Size'},
+		# Trigger
 		prop_name='preview_active',
+		# Loaded
+		managed_objs={'mesh'},
 		props={'preview_active'},
-		input_sockets={'Center', 'Size'},
+	)
+	def on_preview_changed(self, managed_objs, props):
+		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
+		mesh = managed_objs['mesh']
+
+		# Push Preview State to Managed Mesh
+		if props['preview_active']:
+			mesh.show_preview()
+		else:
+			mesh.hide_preview()
+
+	@events.on_value_changed(
+		# Trigger
+		socket_name={'Center', 'Size'},
+		run_on_init=True,
+		# Loaded
 		managed_objs={'mesh', 'modifier'},
+		input_sockets={'Center', 'Size'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
@@ -135,7 +154,6 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 	)
 	def on_inputs_changed(
 		self,
-		props: dict,
 		managed_objs: dict,
 		input_sockets: dict,
 		unit_systems: dict,
@@ -152,9 +170,6 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 				},
 			},
 		)
-		# Push Preview State
-		if props['preview_active']:
-			managed_objs['mesh'].show_preview()
 
 
 ####################
