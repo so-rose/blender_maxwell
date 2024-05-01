@@ -90,8 +90,6 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	BoundConds = enum.auto()
 	## Bounds / Bound Conds
 	PMLBoundCond = enum.auto()
-	PECBoundCond = enum.auto()
-	PMCBoundCond = enum.auto()
 	BlochBoundCond = enum.auto()
 	AbsorbingBoundCond = enum.auto()
 

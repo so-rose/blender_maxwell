@@ -1,123 +1,101 @@
+"""Implements the `MaxwellBoundCondsBLSocket` socket."""
+
 import bpy
 import tidy3d as td
+
+from blender_maxwell.utils import bl_cache, logger
 
 from ... import contracts as ct
 from .. import base
 
-BOUND_FACE_ITEMS = [
-	('PML', 'PML', 'Perfectly matched layer'),
-	('PEC', 'PEC', 'Perfect electrical conductor'),
-	('PMC', 'PMC', 'Perfect magnetic conductor'),
-	('PERIODIC', 'Periodic', 'Infinitely periodic layer'),
-]
-BOUND_MAP = {
-	'PML': td.PML(),
-	'PEC': td.PECBoundary(),
-	'PMC': td.PMCBoundary(),
-	'PERIODIC': td.Periodic(),
-}
+log = logger.get(__name__)
 
 
 class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
+	"""Describes a set of boundary conditions to apply to a simulation domain.
+
+	Attributes:
+		show_definition: Toggle to show/hide default per-axis boundary conditions.
+		x_pos: Default boundary condition to apply at the boundary of the sim domain's positive x-axis.
+		x_neg: Default boundary condition to apply at the boundary of the sim domain's negative x-axis.
+		y_pos: Default boundary condition to apply at the boundary of the sim domain's positive y-axis.
+		y_neg: Default boundary condition to apply at the boundary of the sim domain's negative y-axis.
+		z_pos: Default boundary condition to apply at the boundary of the sim domain's positive z-axis.
+		z_neg: Default boundary condition to apply at the boundary of the sim domain's negative z-axis.
+	"""
+
 	socket_type = ct.SocketType.MaxwellBoundConds
 	bl_label = 'Maxwell Bound Box'
 
 	####################
 	# - Properties
 	####################
-	show_definition: bpy.props.BoolProperty(
-		name='Show Bounds Definition',
-		description='Toggle to show bound faces',
-		default=False,
-		update=(lambda self, context: self.on_prop_changed('show_definition', context)),
-	)
+	show_definition: bool = bl_cache.BLField(False, prop_ui=True)
 
-	x_pos: bpy.props.EnumProperty(
-		name='+x Bound Face',
-		description='+x choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('x_pos', context)),
-	)
-	x_neg: bpy.props.EnumProperty(
-		name='-x Bound Face',
-		description='-x choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('x_neg', context)),
-	)
-	y_pos: bpy.props.EnumProperty(
-		name='+y Bound Face',
-		description='+y choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('y_pos', context)),
-	)
-	y_neg: bpy.props.EnumProperty(
-		name='-y Bound Face',
-		description='-y choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('y_neg', context)),
-	)
-	z_pos: bpy.props.EnumProperty(
-		name='+z Bound Face',
-		description='+z choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('z_pos', context)),
-	)
-	z_neg: bpy.props.EnumProperty(
-		name='-z Bound Face',
-		description='-z choice of default boundary face',
-		items=BOUND_FACE_ITEMS,
-		default='PML',
-		update=(lambda self, context: self.on_prop_changed('z_neg', context)),
-	)
+	x_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	x_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	y_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	y_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	z_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	z_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
 
 	####################
 	# - UI
 	####################
 	def draw_label_row(self, row: bpy.types.UILayout, text) -> None:
 		row.label(text=text)
-		row.prop(self, 'show_definition', toggle=True, text='', icon='MOD_LENGTH')
+		row.prop(
+			self,
+			self.blfields['show_definition'],
+			toggle=True,
+			text='',
+			icon=ct.Icon.ToggleSocketInfo,
+		)
 
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		if not self.show_definition:
-			return
+		if self.show_definition:
+			for axis in ['x', 'y', 'z']:
+				row = col.row(align=False)
+				split = row.split(factor=0.2, align=False)
 
-		for axis in ['x', 'y', 'z']:
-			row = col.row(align=False)
-			split = row.split(factor=0.2, align=False)
+				_col = split.column(align=True)
+				_col.alignment = 'RIGHT'
+				_col.label(text=axis + ' -')
+				_col.label(text=' +')
 
-			_col = split.column(align=True)
-			_col.alignment = 'RIGHT'
-			_col.label(text=axis + ' -')
-			_col.label(text=' +')
-
-			_col = split.column(align=True)
-			_col.prop(self, axis + '_neg', text='')
-			_col.prop(self, axis + '_pos', text='')
-
-	draw_value_array = draw_value
+				_col = split.column(align=True)
+				_col.prop(self, self.blfields[axis + '_neg'], text='')
+				_col.prop(self, self.blfields[axis + '_pos'], text='')
 
 	####################
 	# - Computation of Default Value
 	####################
 	@property
 	def value(self) -> td.BoundarySpec:
+		"""Compute a user-defined default value for simulation boundary conditions, from certain common/sensible options.
+
+		Each half-axis has a selection pulled from `ct.BoundCondType`.
+
+		Returns:
+			A usable `tidy3d` boundary specification.
+		"""
+		log.debug(
+			'%s|%s: Computing default value for Boundary Conditions',
+			self.node.sim_node_name,
+			self.bl_label,
+		)
 		return td.BoundarySpec(
 			x=td.Boundary(
-				plus=BOUND_MAP[self.x_pos],
-				minus=BOUND_MAP[self.x_neg],
+				plus=self.x_pos.tidy3d_boundary_edge,
+				minus=self.x_neg.tidy3d_boundary_edge,
 			),
 			y=td.Boundary(
-				plus=BOUND_MAP[self.y_pos],
-				minus=BOUND_MAP[self.y_neg],
+				plus=self.y_pos.tidy3d_boundary_edge,
+				minus=self.y_neg.tidy3d_boundary_edge,
 			),
 			z=td.Boundary(
-				plus=BOUND_MAP[self.z_pos],
-				minus=BOUND_MAP[self.z_neg],
+				plus=self.z_pos.tidy3d_boundary_edge,
+				minus=self.z_neg.tidy3d_boundary_edge,
 			),
 		)
 
@@ -128,8 +106,20 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 class MaxwellBoundCondsSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundConds
 
+	default_x_pos: ct.BoundCondType = ct.BoundCondType.Pml
+	default_x_neg: ct.BoundCondType = ct.BoundCondType.Pml
+	default_y_pos: ct.BoundCondType = ct.BoundCondType.Pml
+	default_y_neg: ct.BoundCondType = ct.BoundCondType.Pml
+	default_z_pos: ct.BoundCondType = ct.BoundCondType.Pml
+	default_z_neg: ct.BoundCondType = ct.BoundCondType.Pml
+
 	def init(self, bl_socket: MaxwellBoundCondsBLSocket) -> None:
-		pass
+		bl_socket.x_pos = self.default_x_pos
+		bl_socket.x_neg = self.default_x_neg
+		bl_socket.y_pos = self.default_y_pos
+		bl_socket.y_neg = self.default_y_neg
+		bl_socket.z_pos = self.default_z_pos
+		bl_socket.z_neg = self.default_z_neg
 
 
 ####################

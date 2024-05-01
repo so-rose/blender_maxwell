@@ -1,10 +1,10 @@
 # Working TODO
 - [x] Wave Constant
 - Bounds
-	- [ ] Boundary Conds
-	- [ ] PML
-	- [ ] PEC
-	- [ ] PMC
+	- [x] Boundary Conds
+	- [x] PML
+	- [x] PEC
+	- [x] PMC
 	- [ ] Bloch
 	- [ ] Absorbing
 - Sources
@@ -198,13 +198,11 @@
 
 ## Bounds
 - [x] Boundary Conds
-- [ ] Boundary Cond / PML Bound Face
-	- [ ] Dropdown for "Normal" and "Stable"
-- [ ] Boundary Cond / PEC Bound Face
-- [ ] Boundary Cond / PMC Bound Face
-- [ ] Boundary Cond / Bloch Bound Face
+- [x] Boundary Cond / PML Bound Cond
+	- [ ] 1D plot visualizing the effect of parameters on a 1D wave function
+- [ ] Boundary Cond / Bloch Bound Cond
 	- [ ] Implement "simple" mode aka "periodic" mode in Tidy3D
-- [ ] Boundary Cond / Absorbing Bound Face
+- [ ] Boundary Cond / Absorbing Bound Cond
 
 ## Monitors
 - [x] EH Field Monitor

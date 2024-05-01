@@ -1,10 +1,10 @@
-from . import bound_box, bound_faces
+from . import bound_cond_nodes, bound_conds
 
 BL_REGISTER = [
-	*bound_box.BL_REGISTER,
-	*bound_faces.BL_REGISTER,
+	*bound_conds.BL_REGISTER,
+	*bound_cond_nodes.BL_REGISTER,
 ]
 BL_NODES = {
-	**bound_box.BL_NODES,
-	**bound_faces.BL_NODES,
+	**bound_conds.BL_NODES,
+	**bound_cond_nodes.BL_NODES,
 }

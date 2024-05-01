@@ -741,6 +741,10 @@ class ExprSocketDef(base.SocketDef):
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = sp.RealNumber(0)
+	abs_min: spux.SympyExpr | None = None  ## TODO: Not used (yet)
+	abs_max: spux.SympyExpr | None = None  ## TODO: Not used (yet)
+	## TODO: Idea is to use this scalar uniformly for all shape elements
+	## TODO: -> But we may want to **allow** using same-shape for diff. bounds.
 
 	# FlowKind: LazyArrayRange
 	default_min: spux.SympyExpr = sp.RealNumber(0)
@@ -831,7 +835,6 @@ class ExprSocketDef(base.SocketDef):
 		bl_socket.symbols = self.symbols
 
 		# Socket Units & FlowKind.Value
-		log.critical(self)
 		if self.physical_type is not None:
 			bl_socket.unit = self.default_unit
 			bl_socket.value = self.default_value * self.default_unit
