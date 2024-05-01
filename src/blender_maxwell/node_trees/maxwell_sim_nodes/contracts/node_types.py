@@ -91,7 +91,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	## Bounds / Bound Conds
 	PMLBoundCond = enum.auto()
 	BlochBoundCond = enum.auto()
-	AbsorbingBoundCond = enum.auto()
+	AdiabAbsorbBoundCond = enum.auto()
 
 	# Monitors
 	EHFieldMonitor = enum.auto()

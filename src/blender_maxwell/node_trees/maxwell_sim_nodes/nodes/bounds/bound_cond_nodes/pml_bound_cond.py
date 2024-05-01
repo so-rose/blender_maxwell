@@ -147,11 +147,11 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 			'α Range': True,
 		},
 	)
-	def compute_pml_boundary_cond(self, props, input_sockets) -> td.BoundarySpec:
+	def compute_pml_boundary_cond(self, props, input_sockets) -> td.PML:
 		r"""Computes the PML boundary condition based on the active socket set.
 
-		- **Simple**: Use `tidy3d`'s default parameters for defining the PML conductor.
-		- **Full**: Use the user-defined $\sigma$, $\kappa$, and $\alpha$ parameters, specifically polynomial order, and sim-relative min/max conductivity values.
+		- **Simple**: Use `tidy3d`'s default parameters for defining the PML conductor (apart from number of layers).
+		- **Full**: Use the user-defined $\sigma$, $\kappa$, and $\alpha$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
 		log.debug(
 			'%s: Computing "%s" PML Boundary Condition (Input Sockets = %s)',

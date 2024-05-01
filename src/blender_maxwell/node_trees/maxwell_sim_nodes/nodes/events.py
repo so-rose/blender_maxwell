@@ -272,13 +272,14 @@ def event_decorator(
 			## If there is a FlowInitializing, then the method would fail.
 			## Therefore, propagate FlowInitializing if found.
 			if any(
-				ct.FlowSignal.FlowInitializing in sockets.values()
+				ct.FlowSignal.check_single(value, ct.FlowSignal.FlowInitializing)
 				for sockets in [
 					method_kw_args.get('input_sockets', {}),
 					method_kw_args.get('loose_input_sockets', {}),
 					method_kw_args.get('output_sockets', {}),
 					method_kw_args.get('loose_output_sockets', {}),
 				]
+				for value in sockets.values()
 			):
 				return ct.FlowSignal.FlowInitializing
 
