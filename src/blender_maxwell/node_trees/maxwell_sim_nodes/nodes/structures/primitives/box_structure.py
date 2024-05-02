@@ -5,10 +5,14 @@ import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
+
+log = logger.get(__name__)
 
 
 class BoxStructureNode(base.MaxwellSimNode):
@@ -21,9 +25,20 @@ class BoxStructureNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Medium': sockets.MaxwellMediumSocketDef(),
-		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'Size': sockets.PhysicalSize3DSocketDef(
-			default_value=sp.Matrix([500, 500, 500]) * spu.nm
+		'Center': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Real,
+			physical_type=spux.PhysicalType.Length,
+			default_unit=spu.micrometer,
+			default_value=sp.Matrix([0, 0, 0]),
+		),
+		'Size': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Real,
+			physical_type=spux.PhysicalType.Length,
+			default_unit=spu.nanometer,
+			default_value=sp.Matrix([500, 500, 500]),
+			abs_min=0.001,
 		),
 	}
 	output_sockets: typ.ClassVar = {
@@ -36,7 +51,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Event Methods
+	# - Outputs
 	####################
 	@events.computes_output_socket(
 		'Structure',
@@ -47,7 +62,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			'Size': 'Tidy3DUnits',
 		},
 	)
-	def compute_structure(self, input_sockets: dict, unit_systems: dict) -> td.Box:
+	def compute_structure(self, input_sockets, unit_systems) -> td.Box:
 		return td.Structure(
 			geometry=td.Box(
 				center=input_sockets['Center'],
@@ -56,11 +71,27 @@ class BoxStructureNode(base.MaxwellSimNode):
 			medium=input_sockets['Medium'],
 		)
 
+	####################
+	# - Preview
+	####################
 	@events.on_value_changed(
-		socket_name={'Center', 'Size'},
 		prop_name='preview_active',
 		run_on_init=True,
 		props={'preview_active'},
+		managed_objs={'mesh'},
+	)
+	def on_preview_changed(self, props, managed_objs) -> None:
+		mesh = managed_objs['mesh']
+
+		# Push Preview State to Managed Mesh
+		if props['preview_active']:
+			mesh.show_preview()
+		else:
+			mesh.hide_preview()
+
+	@events.on_value_changed(
+		socket_name={'Center', 'Size'},
+		run_on_init=True,
 		input_sockets={'Center', 'Size'},
 		managed_objs={'mesh', 'modifier'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
@@ -70,26 +101,26 @@ class BoxStructureNode(base.MaxwellSimNode):
 	)
 	def on_inputs_changed(
 		self,
-		props: dict,
-		managed_objs: dict,
-		input_sockets: dict,
-		unit_systems: dict,
+		managed_objs,
+		input_sockets,
+		unit_systems,
 	):
-		# Push Input Values to GeoNodes Modifier
-		managed_objs['modifier'].bl_modifier(
-			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+		mesh = managed_objs['mesh']
+		modifier = managed_objs['modifier']
+		center = input_sockets['Center']
+		size = input_sockets['Size']
+		unit_system = unit_systems['BlenderUnits']
+
+		# Push Loose Input Values to GeoNodes Modifier
+		modifier.bl_modifier(
+			mesh.bl_object(location=center),
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
-				'unit_system': unit_systems['BlenderUnits'],
-				'inputs': {
-					'Size': input_sockets['Size'],
-				},
+				'inputs': {'Size': size},
+				'unit_system': unit_system,
 			},
 		)
-		# Push Preview State
-		if props['preview_active']:
-			managed_objs['mesh'].show_preview()
 
 
 ####################

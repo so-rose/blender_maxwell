@@ -1,16 +1,23 @@
-import bpy
+import typing as typ
 
-from ......services import tdcloud
+import bpy
+import tidy3d as td
+
+from blender_maxwell.services import tdcloud
+from blender_maxwell.utils import bl_cache, logger
+
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events
+
+log = logger.get(__name__)
 
 
 ####################
 # - Web Uploader / Loader / Runner / Releaser
 ####################
 class UploadSimulation(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodes__upload_simulation'
+	bl_idname = ct.OperatorType.NodeUploadSimulation
 	bl_label = 'Upload Tidy3D Simulation'
 	bl_description = 'Upload the attached (locked) simulation, such that it is ready to run on the Tidy3D cloud'
 
@@ -23,7 +30,7 @@ class UploadSimulation(bpy.types.Operator):
 			and context.node.lock_tree
 			and tdcloud.IS_AUTHENTICATED
 			and not context.node.tracked_task_id
-			and context.node.inputs['FDTD Sim'].is_linked
+			and context.node.inputs['Sim'].is_linked
 		)
 
 	def execute(self, context):
@@ -33,7 +40,7 @@ class UploadSimulation(bpy.types.Operator):
 
 
 class RunSimulation(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodes__run_simulation'
+	bl_idname = ct.OperatorType.NodeRunSimulation
 	bl_label = 'Run Tracked Tidy3D Sim'
 	bl_description = 'Run the currently tracked simulation task'
 
@@ -61,7 +68,7 @@ class RunSimulation(bpy.types.Operator):
 
 
 class ReloadTrackedTask(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodes__reload_tracked_task'
+	bl_idname = ct.OperatorType.NodeReloadTrackedTask
 	bl_label = 'Reload Tracked Tidy3D Cloud Task'
 	bl_description = 'Reload the currently tracked simulation task'
 
@@ -86,7 +93,7 @@ class ReloadTrackedTask(bpy.types.Operator):
 
 
 class EstCostTrackedTask(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodes__est_cost_tracked_task'
+	bl_idname = ct.OperatorType.NodeEstCostTrackedTask
 	bl_label = 'Est Cost of Tracked Tidy3D Cloud Task'
 	bl_description = 'Reload the currently tracked simulation task'
 
@@ -113,7 +120,7 @@ class EstCostTrackedTask(bpy.types.Operator):
 
 
 class ReleaseTrackedTask(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.nodes__release_tracked_task'
+	bl_idname = ct.OperatorType.ReleaseTrackedTask
 	bl_label = 'Release Tracked Tidy3D Cloud Task'
 	bl_description = 'Release the currently tracked simulation task'
 
@@ -140,92 +147,60 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.Tidy3DWebExporter
 	bl_label = 'Tidy3D Web Exporter'
 
-	input_sockets = {
-		'FDTD Sim': sockets.MaxwellFDTDSimSocketDef(),
+	input_sockets: typ.ClassVar = {
+		'Sim': sockets.MaxwellFDTDSimSocketDef(),
 		'Cloud Task': sockets.Tidy3DCloudTaskSocketDef(
 			should_exist=False,
+		),
+	}
+	output_sockets: typ.ClassVar = {
+		'Sim Data': sockets.Tidy3DCloudTaskSocketDef(
+			should_exist=True,
+		),
+		'Cloud Task': sockets.Tidy3DCloudTaskSocketDef(
+			should_exist=True,
 		),
 	}
 
 	####################
 	# - Properties
 	####################
-	lock_tree: bpy.props.BoolProperty(
-		name='Whether to lock the attached tree',
-		description='Whether or not to lock the attached tree',
-		default=False,
-		update=lambda self, context: self.sync_lock_tree(context),
-	)
-	tracked_task_id: bpy.props.StringProperty(
-		name='Tracked Task ID',
-		description='The currently tracked task ID',
-		default='',
-		update=lambda self, context: self.sync_tracked_task_id(context),
-	)
-
-	# Cache
-	cache_total_monitor_data: bpy.props.FloatProperty(
-		name='(Cached) Total Monitor Data',
-		description='Required storage space by all monitors',
-		default=0.0,
-	)
-	cache_est_cost: bpy.props.FloatProperty(
-		name='(Cached) Estimated Total Cost',
-		description='Est. Cost in FlexCompute units',
-		default=-1.0,
-	)
+	lock_tree: bool = bl_cache.BLField(False, prop_ui=True)
+	tracked_task_id: str = bl_cache.BLField('', prop_ui=True)
 
 	####################
-	# - Sync Methods
+	# - Computed
 	####################
-	def sync_lock_tree(self, context):
-		if self.lock_tree:
-			self.trigger_event(ct.FlowEvent.EnableLock)
-			self.locked = False
-			for bl_socket in self.inputs:
-				if bl_socket.name == 'FDTD Sim':
-					continue
-				bl_socket.locked = False
+	@bl_cache.cached_bl_property(persist=False)
+	def sim(self) -> td.Simulation | None:
+		sim = self._compute_input('Sim')
+		has_sim = not ct.FlowSignal.check(sim)
 
-		else:
-			self.trigger_event(ct.FlowEvent.DisableLock)
+		if has_sim:
+			sim.validate_pre_upload(source_required=True)
+			return sim
+		return None
 
-		self.on_prop_changed('lock_tree', context)
+	@bl_cache.cached_bl_property(persist=False)
+	def total_monitor_data(self) -> float:
+		if self.sim is not None:
+			return sum(self.sim.monitors_data_size.values())
+		return 0.0
 
-	def sync_tracked_task_id(self, context):
-		# Select Tracked Task
-		if self.tracked_task_id:
-			cloud_task = tdcloud.TidyCloudTasks.task(self.tracked_task_id)
+	@bl_cache.cached_bl_property(persist=False)
+	def est_cost(self) -> float | None:
+		if self.tracked_task_id != '':
 			task_info = tdcloud.TidyCloudTasks.task_info(self.tracked_task_id)
+			if task_info is not None:
+				return task_info.cost_est()
 
-			self.loose_output_sockets = {
-				'Cloud Task': sockets.Tidy3DCloudTaskSocketDef(
-					should_exist=True,
-				),
-			}
-			self.inputs['Cloud Task'].locked = True
-
-		# Release Tracked Task
-		else:
-			self.cache_est_cost = -1.0
-			self.loose_output_sockets = {}
-			self.inputs['Cloud Task'].on_prepare_new_task()
-			self.inputs['Cloud Task'].locked = False
-
-		self.on_prop_changed('tracked_task_id', context)
+		return None
 
 	####################
-	# - Output Socket Callbacks
+	# - Methods
 	####################
-	def validate_sim(self):
-		if (sim := self._compute_input('FDTD Sim')) is None:
-			msg = 'Tried to validate simulation, but none is attached'
-			raise ValueError(msg)
-
-		sim.validate_pre_upload(source_required=True)
-
 	def upload_sim(self):
-		if (sim := self._compute_input('FDTD Sim')) is None:
+		if self.sim is None:
 			msg = 'Tried to upload simulation, but none is attached'
 			raise ValueError(msg)
 
@@ -242,7 +217,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		cloud_task = tdcloud.TidyCloudTasks.mk_task(
 			task_name=new_task[0],
 			cloud_folder=new_task[1],
-			sim=sim,
+			sim=self.sim,
 			verbose=True,
 		)
 
@@ -271,22 +246,24 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		# Row: Upload Sim Buttons
 		row = layout.row(align=True)
 		row.operator(
-			UploadSimulation.bl_idname,
+			ct.OperatorType.NodeUploadSimulation,
 			text='Upload',
 		)
 		tree_lock_icon = 'LOCKED' if self.lock_tree else 'UNLOCKED'
-		row.prop(self, 'lock_tree', toggle=True, icon=tree_lock_icon, text='')
+		row.prop(
+			self, self.blfields['lock_tree'], toggle=True, icon=tree_lock_icon, text=''
+		)
 
 		# Row: Run Sim Buttons
 		row = layout.row(align=True)
 		row.operator(
-			RunSimulation.bl_idname,
+			ct.OperatorType.NodeRunSimulation,
 			text='Run',
 		)
 		if self.tracked_task_id:
 			tree_lock_icon = 'LOOP_BACK'
 			row.operator(
-				ReleaseTrackedTask.bl_idname,
+				ct.OperatorType.ReleaseTrackedTask,
 				icon='LOOP_BACK',
 				text='',
 			)
@@ -313,7 +290,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		col.label(icon=conn_icon)
 
 		# Simulation Info
-		if self.inputs['FDTD Sim'].is_linked:
+		if self.inputs['Sim'].is_linked:
 			row = layout.row()
 			row.alignment = 'CENTER'
 			row.label(text='Sim Info')
@@ -327,7 +304,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			## Split: Right Column
 			col = split.column(align=False)
 			col.alignment = 'RIGHT'
-			col.label(text=f'{self.cache_total_monitor_data / 1_000_000:.2f}MB')
+			col.label(text=f'{self.total_monitor_data / 1_000_000:.2f}MB')
 
 		# Cloud Task Info
 		if self.tracked_task_id and tdcloud.IS_AUTHENTICATED:
@@ -348,12 +325,12 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 				text=f'Status: {task_info.status.capitalize()}',
 			)
 			row.operator(
-				ReloadTrackedTask.bl_idname,
+				ct.OperatorType.NodeReloadTrackedTask,
 				text='',
 				icon='FILE_REFRESH',
 			)
 			row.operator(
-				EstCostTrackedTask.bl_idname,
+				ct.OperatorType.NodeEstCostTrackedTask,
 				text='',
 				icon='SORTTIME',
 			)
@@ -369,9 +346,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			col.label(text='Real Cost')
 
 			## Split: Right Column
-			cost_est = (
-				f'{self.cache_est_cost:.2f}' if self.cache_est_cost >= 0 else 'TBD'
-			)
+			cost_est = f'{self.est_cost:.2f}' if self.est_cost >= 0 else 'TBD'
 			cost_real = (
 				f'{task_info.cost_real:.2f}'
 				if task_info.cost_real is not None
@@ -387,8 +362,36 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		# Connection Information
 
 	####################
+	# - Events
+	####################
+	@events.on_value_changed(prop_name='lock_tree', props={'lock_tree'})
+	def on_lock_tree_changed(self, props):
+		if props['lock_tree']:
+			self.trigger_event(ct.FlowEvent.EnableLock)
+			self.locked = False
+			for bl_socket in self.inputs:
+				if bl_socket.name == 'Sim':
+					continue
+				bl_socket.locked = False
+
+		else:
+			self.trigger_event(ct.FlowEvent.DisableLock)
+
+	@events.on_value_changed(prop_name='tracked_task_id', props={'tracked_task_id'})
+	def on_tracked_task_id_changed(self, props):
+		if props['tracked_task_id']:
+			self.inputs['Cloud Task'].locked = True
+
+		else:
+			self.total_monitor_data = bl_cache.Signal.InvalidateCache
+			self.est_cost = bl_cache.Signal.InvalidateCache
+			self.inputs['Cloud Task'].on_prepare_new_task()
+			self.inputs['Cloud Task'].locked = False
+
+	####################
 	# - Output Methods
 	####################
+	## TODO: Retrieve simulation data if/when the simulation is done
 	@events.computes_output_socket(
 		'Cloud Task',
 		input_sockets={'Cloud Task'},
@@ -398,21 +401,6 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			return cloud_task
 
 		return None
-
-	####################
-	# - Output Methods
-	####################
-	@events.on_value_changed(
-		socket_name='FDTD Sim',
-		input_sockets={'FDTD Sim'},
-	)
-	def on_value_changed__fdtd_sim(self, input_sockets):
-		if (sim := self._compute_input('FDTD Sim')) is None:
-			self.cache_total_monitor_data = 0
-			return
-
-		sim.validate_pre_upload(source_required=True)
-		self.cache_total_monitor_data = sum(sim.monitors_data_size.values())
 
 
 ####################

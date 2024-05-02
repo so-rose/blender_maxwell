@@ -1,4 +1,3 @@
-
 from ... import contracts as ct
 from .. import base
 
@@ -18,7 +17,7 @@ class MaxwellStructureSocketDef(base.SocketDef):
 
 	def init(self, bl_socket: MaxwellStructureBLSocket) -> None:
 		if self.is_list:
-			bl_socket.active_kind = ct.FlowKind.ValueArray
+			bl_socket.active_kind = ct.FlowKind.Array
 
 
 ####################

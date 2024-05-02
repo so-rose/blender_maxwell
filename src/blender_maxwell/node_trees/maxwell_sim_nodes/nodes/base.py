@@ -477,6 +477,7 @@ class MaxwellSimNode(bpy.types.Node):
 			for socket_name, socket_def in created_sockets.items():
 				socket_def.preinit(all_bl_sockets[socket_name])
 				socket_def.init(all_bl_sockets[socket_name])
+				socket_def.postinit(all_bl_sockets[socket_name])
 
 	def _sync_sockets(self) -> None:
 		"""Synchronize the node's sockets with the active sockets.

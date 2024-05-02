@@ -1,7 +1,7 @@
 # Working TODO
 - [x] Wave Constant
 - Sources
-	- [ ] Temporal Shapes / Continuous Wave Temporal Shape
+	- [x] Temporal Shapes / Continuous Wave Temporal Shape
 	- [ ] Temporal Shapes / Symbolic Temporal Shape
 	- [ ] Plane Wave Source
 	- [ ] TFSF Source
@@ -149,9 +149,10 @@
 ## Sources
 - [x] Temporal Shapes / Gaussian Pulse Temporal Shape
 - [x] Temporal Shapes / Continuous Wave Temporal Shape
+	- [ ] Merge Gaussian Pulse and Continuous Wave w/a socket set thing, since the I/O is effectively identical.
 - [ ] Temporal Shapes / Expr Temporal Shape
-	- [ ] Specify a Sympy function / data to generate appropriate array based on
-- [ ] Temporal Shapes / Data Temporal Shape
+	- [ ] Specify a Sympy function / data to generate envelope data.
+	- [ ] Merge with the above.
 
 - [x] Point Dipole Source
 	- [ ] Use a viz mesh, not empty (empty doesn't play well with alpha hashing).

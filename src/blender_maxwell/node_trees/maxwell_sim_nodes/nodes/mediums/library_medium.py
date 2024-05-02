@@ -301,15 +301,16 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	@events.on_show_plot(
 		managed_objs={'plot'},
-		props={'material'},
+		props={'medium'},
 		stop_propagation=True,
 	)
 	def on_show_plot(
 		self,
-		managed_objs: dict,
+		managed_objs,
+		props,
 	):
 		managed_objs['plot'].mpl_plot_to_image(
-			lambda ax: self.medium.plot(self.medium.frequency_range, ax=ax),
+			lambda ax: self.medium.plot(props['medium'].frequency_range, ax=ax),
 			bl_select=True,
 		)
 		## TODO: Plot based on Wl, not freq.

@@ -1,3 +1,5 @@
+import typing as typ
+
 import sympy as sp
 import tidy3d as td
 
@@ -13,9 +15,9 @@ class FDTDSimNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
-		'Domain': sockets.MaxwellSimDomainSocketDef(),
+	input_sockets: typ.ClassVar = {
 		'BCs': sockets.MaxwellBoundCondsSocketDef(),
+		'Domain': sockets.MaxwellSimDomainSocketDef(),
 		'Sources': sockets.MaxwellSourceSocketDef(
 			is_list=True,
 		),
@@ -26,31 +28,32 @@ class FDTDSimNode(base.MaxwellSimNode):
 			is_list=True,
 		),
 	}
-	output_sockets = {
-		'FDTD Sim': sockets.MaxwellFDTDSimSocketDef(),
+	output_sockets: typ.ClassVar = {
+		'Sim': sockets.MaxwellFDTDSimSocketDef(),
 	}
 
 	####################
 	# - Output Socket Computation
 	####################
 	@events.computes_output_socket(
-		'FDTD Sim',
+		'Sim',
 		kind=ct.FlowKind.Value,
 		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
+		input_socket_kinds={
+			'Sources': ct.FlowKind.Array,
+			'Structures': ct.FlowKind.Array,
+			'Domain': ct.FlowKind.Value,
+			'BCs': ct.FlowKind.Value,
+			'Monitors': ct.FlowKind.Array,
+		},
 	)
 	def compute_fdtd_sim(self, input_sockets: dict) -> sp.Expr:
+		## TODO: Visualize the boundary conditions on top of the sim domain
 		sim_domain = input_sockets['Domain']
 		sources = input_sockets['Sources']
 		structures = input_sockets['Structures']
 		bounds = input_sockets['BCs']
 		monitors = input_sockets['Monitors']
-
-		# if not isinstance(sources, list):
-		# sources = [sources]
-		# if not isinstance(structures, list):
-		# structures = [structures]
-		# if not isinstance(monitors, list):
-		# monitors = [monitors]
 
 		return td.Simulation(
 			**sim_domain,  ## run_time=, size=, grid=, medium=

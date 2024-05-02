@@ -5,10 +5,12 @@ import typing as typ
 import bpy
 import sympy as sp
 
-from blender_maxwell.utils import blender_type_enum
 from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from .socket_types import SocketType
+
+log = logger.get(__name__)
 
 BL_SOCKET_DESCR_ANNOT_STRING = ':: '
 
@@ -190,13 +192,14 @@ class BLSocketType(enum.StrEnum):
 		return {
 			BLST.Color: S.Vec4,
 			BLST.Rotation: S.Vec3,
+			BLST.Vector: S.Vec3,
 			BLST.VectorAcceleration: S.Vec3,
 			BLST.VectorDirection: S.Vec3,
 			BLST.VectorEuler: S.Vec3,
 			BLST.VectorTranslation: S.Vec3,
 			BLST.VectorVelocity: S.Vec3,
 			BLST.VectorXYZ: S.Vec3,
-		}.get(self, {S.Scalar})
+		}.get(self, S.Scalar)
 
 	@property
 	def unambiguous_physical_type(self) -> spux.PhysicalType | None:

@@ -38,6 +38,14 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		"""
 		bl_socket.reset_instance_id()
 
+	def postinit(self, bl_socket: bpy.types.NodeSocket) -> None:
+		"""Pre-initialize a real Blender node socket from this socket definition.
+
+		Parameters:
+			bl_socket: The Blender node socket to alter using data from this SocketDef.
+		"""
+		bl_socket.initializing = False
+
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
 		"""Initializes a real Blender node socket from this socket definition.
@@ -195,6 +203,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		## Identifiers
 		cls.bl_idname: str = str(cls.socket_type.value)
 		cls.set_prop('instance_id', bpy.props.StringProperty, no_update=True)
+		cls.set_prop(
+			'initializing', bpy.props.BoolProperty, default=True, no_update=True
+		)
 
 		## Special States
 		cls.set_prop('locked', bpy.props.BoolProperty, no_update=True, default=False)
@@ -249,6 +260,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Attributes:
 			prop_name: The name of the property that was changed.
 		"""
+		## TODO: Evaluate this properly
+		if self.initializing:
+			return
+
 		if hasattr(self, prop_name):
 			# Invalidate UI BLField Caches
 			if prop_name in self.ui_blfields:
@@ -537,7 +552,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Value", but socket does not define it'
 		raise NotImplementedError(msg)
 
-	# ValueArray
+	# Array
 	@property
 	def array(self) -> ct.ArrayFlow:
 		"""Throws a descriptive error.

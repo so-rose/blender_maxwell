@@ -56,11 +56,11 @@ class OperateMathNode(base.MaxwellSimNode):
 	bl_label = 'Operate Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr L': sockets.ExprSocketDef(),
-		'Expr R': sockets.ExprSocketDef(),
+		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 
 	####################

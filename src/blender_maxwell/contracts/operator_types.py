@@ -24,3 +24,10 @@ class OperatorType(enum.StrEnum):
 
 	# Node: Tidy3DWebImporter
 	NodeLoadCloudSim = enum.auto()
+
+	# Node: Tidy3DWebExporter
+	NodeUploadSimulation = enum.auto()
+	NodeRunSimulation = enum.auto()
+	NodeReloadTrackedTask = enum.auto()
+	NodeEstCostTrackedTask = enum.auto()
+	ReleaseTrackedTask = enum.auto()

@@ -208,7 +208,7 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			return td.Periodic()
 
 		# Source-Derived
-		if props['active_socket_set'] == 'Naive':
+		if props['active_socket_set'] == 'Source-Derived':
 			sim_domain = input_sockets['Sim Domain']
 			valid_sim_axis = props['valid_sim_axis']
 

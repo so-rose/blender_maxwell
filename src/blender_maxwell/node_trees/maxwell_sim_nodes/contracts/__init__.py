@@ -1,25 +1,25 @@
 from blender_maxwell.contracts import (
-    BLClass,
-    BLColorRGBA,
-    BLEnumElement,
-    BLEnumID,
-    BLIcon,
-    BLIconSet,
-    BLIDStruct,
-    BLKeymapItem,
-    BLModifierType,
-    BLNodeTreeInterfaceID,
-    BLOperatorStatus,
-    BLPropFlag,
-    BLRegionType,
-    BLSpaceType,
-    KeymapItemDef,
-    ManagedObjName,
-    OperatorType,
-    PanelType,
-    PresetName,
-    SocketName,
-    addon,
+	BLClass,
+	BLColorRGBA,
+	BLEnumElement,
+	BLEnumID,
+	BLIcon,
+	BLIconSet,
+	BLIDStruct,
+	BLKeymapItem,
+	BLModifierType,
+	BLNodeTreeInterfaceID,
+	BLOperatorStatus,
+	BLPropFlag,
+	BLRegionType,
+	BLSpaceType,
+	KeymapItemDef,
+	ManagedObjName,
+	OperatorType,
+	PanelType,
+	PresetName,
+	SocketName,
+	addon,
 )
 
 from .bl_socket_types import BLSocketInfo, BLSocketType
@@ -27,20 +27,20 @@ from .category_labels import NODE_CAT_LABELS
 from .category_types import NodeCategory
 from .flow_events import FlowEvent
 from .flow_kinds import (
-    ArrayFlow,
-    CapabilitiesFlow,
-    FlowKind,
-    InfoFlow,
-    LazyArrayRangeFlow,
-    LazyValueFuncFlow,
-    ParamsFlow,
-    ValueFlow,
+	ArrayFlow,
+	CapabilitiesFlow,
+	FlowKind,
+	InfoFlow,
+	LazyArrayRangeFlow,
+	LazyValueFuncFlow,
+	ParamsFlow,
+	ValueFlow,
 )
 from .flow_signals import FlowSignal
 from .icons import Icon
 from .mobj_types import ManagedObjType
 from .node_types import NodeType
-from .sim_types import BoundCondType, SimSpaceAxis
+from .sim_types import BoundCondType, SimSpaceAxis, manual_amp_time
 from .socket_colors import SOCKET_COLORS
 from .socket_types import SocketType
 from .tree_types import TreeType
@@ -80,6 +80,7 @@ __all__ = [
 	'NodeType',
 	'BoundCondType',
 	'SimSpaceAxis',
+	'manual_amp_time',
 	'NodeCategory',
 	'NODE_CAT_LABELS',
 	'ManagedObjType',

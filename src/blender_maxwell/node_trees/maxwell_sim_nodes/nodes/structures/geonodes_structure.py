@@ -1,8 +1,12 @@
 import typing as typ
 
+import sympy as sp
+import sympy.physics.units as spu
 import tidy3d as td
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
@@ -22,7 +26,13 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 		'Medium': sockets.MaxwellMediumSocketDef(),
-		'Center': sockets.PhysicalPoint3DSocketDef(),
+		'Center': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Real,
+			physical_type=spux.PhysicalType.Length,
+			default_unit=spu.micrometer,
+			default_value=sp.Matrix([0, 0, 0]),
+		),
 	}
 	output_sockets: typ.ClassVar = {
 		'Structure': sockets.MaxwellStructureSocketDef(),
@@ -34,7 +44,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Output
+	# - Outputs
 	####################
 	@events.computes_output_socket(
 		'Structure',
@@ -43,14 +53,10 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	)
 	def compute_structure(
 		self,
-		input_sockets: dict,
-		managed_objs: dict,
+		input_sockets,
+		managed_objs,
 	) -> td.Structure:
 		"""Computes a triangle-mesh based Tidy3D structure, by manually copying mesh data from Blender to a `td.TriangleMesh`."""
-		# Simulate Input Value Change
-		## This ensures that the mesh has been re-computed.
-		self.on_input_socket_changed()
-
 		## TODO: mesh_as_arrays might not take the Center into account.
 		## - Alternatively, Tidy3D might have a way to transform?
 		mesh_as_arrays = managed_objs['mesh'].mesh_as_arrays
@@ -68,19 +74,11 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		prop_name='preview_active',
 		props={'preview_active'},
-		input_sockets={'Center'},
 		managed_objs={'mesh'},
 	)
-	def on_preview_changed(self, props, input_sockets) -> None:
+	def on_preview_changed(self, props) -> None:
 		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
 		mesh = managed_objs['mesh']
-
-		# No Mesh: Create Empty Object
-		## Ensures that when there is mesh data, it'll be correctly previewed.
-		## Bit of a workaround - the idea is usually to make the MObj as needed.
-		if not mesh.exists:
-			center = input_sockets['Center']
-			_ = mesh.bl_object(location=center)
 
 		# Push Preview State to Managed Mesh
 		if props['preview_active']:
@@ -139,8 +137,8 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	)
 	def on_input_changed(
 		self,
-		managed_objs: dict,
-		input_sockets: dict,
+		managed_objs,
+		input_sockets,
 	) -> None:
 		"""Declares new loose input sockets in response to a new GeoNodes tree (if any)."""
 		geonodes = input_sockets['GeoNodes']

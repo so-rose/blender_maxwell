@@ -111,7 +111,10 @@ class CapabilitiesFlow:
 				for name in self.must_match
 			)
 			# ∀b (b ∈ A) Constraint
-			and self.present_any.issubset(other.allow_any)
+			and (
+				self.present_any & other.allow_any
+				or (not self.present_any and not self.allow_any)
+			)
 		)
 
 
@@ -777,7 +780,7 @@ class ParamsFlow:
 			raise ValueError(msg)
 
 		return [
-			spux.convert_to_unit_system(arg, unit_system, use_jax_array=True)
+			spux.scale_to_unit_system(arg, unit_system, use_jax_array=True)
 			if arg not in symbol_values
 			else symbol_values[arg]
 			for arg in self.func_args

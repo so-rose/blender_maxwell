@@ -4,7 +4,6 @@ import functools
 import typing as typ
 
 import bpy
-import jax.numpy as jnp
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
@@ -14,38 +13,6 @@ from blender_maxwell.utils import extra_sympy_units as spux
 from .... import contracts as ct
 from .... import managed_objs, sockets
 from ... import base, events
-
-
-def _manual_amp_time(self, time: float) -> complex:
-	"""Copied implementation of `pulse.amp_time` for `tidy3d` temporal shapes, which replaces use of `numpy` with `jax.numpy` for `jit`-ability.
-
-	Since the function is detached from the method, `self` is not implicitly available. It should be pre-defined from a real source time object using `functools.partial`, before `jax.jit`ing.
-
-	## License
-	**This function is directly copied from `tidy3d`**.
-	As such, it should be considered available under the `tidy3d` license (as of writing, LGPL 2.1): <https://github.com/flexcompute/tidy3d/blob/develop/LICENSE>
-
-	## Reference
-	Permalink to GitHub source code: <https://github.com/flexcompute/tidy3d/blob/3ee34904eb6687a86a5fb3f4ed6d3295c228cd83/tidy3d/components/source.py#L143C1-L163C25>
-	"""
-	twidth = 1.0 / (2 * jnp.pi * self.fwidth)
-	omega0 = 2 * jnp.pi * self.freq0
-	time_shifted = time - self.offset * twidth
-
-	offset = jnp.exp(1j * self.phase)
-	oscillation = jnp.exp(-1j * omega0 * time)
-	amp = jnp.exp(-(time_shifted**2) / 2 / twidth**2) * self.amplitude
-
-	pulse_amp = offset * oscillation * amp
-
-	# subtract out DC component
-	if self.remove_dc_component:
-		pulse_amp = pulse_amp * (1j + time_shifted / twidth**2 / omega0)
-	else:
-		# 1j to make it agree in large omega0 limit
-		pulse_amp = pulse_amp * 1j
-
-	return pulse_amp
 
 
 class PulseTemporalShapeNode(base.MaxwellSimNode):
@@ -145,7 +112,7 @@ class PulseTemporalShapeNode(base.MaxwellSimNode):
 	)
 	def compute_time_to_efield_lazy(self, output_sockets) -> td.GaussianPulse:
 		temporal_shape = output_sockets['Temporal Shape']
-		jax_amp_time = functools.partial(_manual_amp_time, temporal_shape)
+		jax_amp_time = functools.partial(ct.manual_amp_time, temporal_shape)
 
 		## TODO: Don't just partial() it up, do it property in the ParamsFlow!
 		## -> Right now it's recompiled every time.

@@ -1,75 +1,156 @@
+"""Implements the `WaveTemporalShapeNode`."""
+
+import functools
+import typing as typ
+
+import bpy
+import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from .... import contracts, sockets
+from blender_maxwell.utils import extra_sympy_units as spux
+
+from .... import contracts as ct
+from .... import managed_objs, sockets
 from ... import base, events
 
 
-class ContinuousWaveTemporalShapeNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.ContinuousWaveTemporalShape
-
+class WaveTemporalShapeNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.WaveTemporalShape
 	bl_label = 'Continuous Wave Temporal Shape'
-	# bl_icon = ...
 
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
-		# "amplitude": sockets.RealNumberSocketDef(
-		# label="Temporal Shape",
-		# ),  ## Should have a unit of some kind...
-		'phase': sockets.PhysicalAngleSocketDef(
-			label='Phase',
+	input_sockets: typ.ClassVar = {
+		'max E': sockets.ExprSocketDef(
+			mathtype=spux.MathType.Complex,
+			physical_type=spux.PhysicalType.EField,
+			default_value=1 + 0j,
 		),
-		'freq_center': sockets.PhysicalFreqSocketDef(
-			label='Freq Center',
+		'μ Freq': sockets.ExprSocketDef(
+			physical_type=spux.PhysicalType.Freq,
+			default_unit=spux.THz,
+			default_value=500,
 		),
-		'freq_std': sockets.PhysicalFreqSocketDef(
-			label='Freq STD',
+		'σ Freq': sockets.ExprSocketDef(
+			physical_type=spux.PhysicalType.Freq,
+			default_unit=spux.THz,
+			default_value=200,
 		),
-		'time_delay_rel_ang_freq': sockets.RealNumberSocketDef(
-			label='Time Delay rel. Ang. Freq',
-			default_value=5.0,
-		),
+		'Offset Time': sockets.ExprSocketDef(default_value=5, abs_min=2.5),
 	}
-	output_sockets = {
-		'temporal_shape': sockets.MaxwellTemporalShapeSocketDef(
-			label='Temporal Shape',
-		),
+	output_sockets: typ.ClassVar = {
+		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
+		'E(t)': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+	}
+
+	managed_obj_types: typ.ClassVar = {
+		'plot': managed_objs.ManagedBLImage,
 	}
 
 	####################
-	# - Output Socket Computation
+	# - UI
 	####################
-	@events.computes_output_socket('temporal_shape')
-	def compute_source(self: contracts.NodeTypeProtocol) -> td.PointDipole:
-		_phase = self.compute_input('phase')
-		_freq_center = self.compute_input('freq_center')
-		_freq_std = self.compute_input('freq_std')
-		time_delay_rel_ang_freq = self.compute_input('time_delay_rel_ang_freq')
+	def draw_info(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		box = layout.box()
+		row = box.row()
+		row.alignment = 'CENTER'
+		row.label(text='Parameter Scale')
 
-		cheating_amplitude = 1.0
-		phase = spu.convert_to(_phase, spu.radian) / spu.radian
-		freq_center = spu.convert_to(_freq_center, spu.hertz) / spu.hertz
-		freq_std = spu.convert_to(_freq_std, spu.hertz) / spu.hertz
+		# Split
+		split = box.split(factor=0.3, align=False)
 
+		## LHS: Parameter Names
+		col = split.column()
+		col.alignment = 'RIGHT'
+		col.label(text='Off t:')
+
+		## RHS: Parameter Units
+		col = split.column()
+		col.label(text='1 / 2π·σ(𝑓)')
+
+	####################
+	# - FlowKind: Value
+	####################
+	@events.computes_output_socket(
+		'Temporal Shape',
+		input_sockets={
+			'max E',
+			'μ Freq',
+			'σ Freq',
+			'Offset Time',
+		},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'max E': 'Tidy3DUnits',
+			'μ Freq': 'Tidy3DUnits',
+			'σ Freq': 'Tidy3DUnits',
+		},
+	)
+	def compute_temporal_shape(self, input_sockets, unit_systems) -> td.GaussianPulse:
 		return td.ContinuousWave(
-			amplitude=cheating_amplitude,
-			phase=phase,
-			freq0=freq_center,
-			fwidth=freq_std,
-			offset=time_delay_rel_ang_freq,
+			amplitude=sp.re(input_sockets['max E']),
+			phase=sp.im(input_sockets['max E']),
+			freq0=input_sockets['μ Freq'],
+			fwidth=input_sockets['σ Freq'],
+			offset=input_sockets['Offset Time'],
 		)
+
+	####################
+	# - FlowKind: LazyValueFunc / Info / Params
+	####################
+	@events.computes_output_socket(
+		'E(t)',
+		kind=ct.FlowKind.LazyValueFunc,
+		output_sockets={'Temporal Shape'},
+	)
+	def compute_time_to_efield_lazy(self, output_sockets) -> td.GaussianPulse:
+		temporal_shape = output_sockets['Temporal Shape']
+		jax_amp_time = functools.partial(ct.manual_amp_time, temporal_shape)
+
+		## TODO: Don't just partial() it up, do it property in the ParamsFlow!
+		## -> Right now it's recompiled every time.
+
+		return ct.LazyValueFuncFlow(
+			func=jax_amp_time,
+			func_args=[spux.PhysicalType.Time],
+			supports_jax=True,
+		)
+
+	@events.computes_output_socket(
+		'E(t)',
+		kind=ct.FlowKind.Info,
+	)
+	def compute_time_to_efield_info(self) -> td.GaussianPulse:
+		return ct.InfoFlow(
+			dim_names=['t'],
+			dim_idx={
+				't': ct.LazyArrayRangeFlow(
+					start=sp.S(0), stop=sp.oo, steps=0, unit=spu.second
+				)
+			},
+			output_name='E',
+			output_shape=None,
+			output_mathtype=spux.MathType.Complex,
+			output_unit=spu.volt / spu.um,
+		)
+
+	@events.computes_output_socket(
+		'E(t)',
+		kind=ct.FlowKind.Params,
+	)
+	def compute_time_to_efield_params(self) -> td.GaussianPulse:
+		sym_time = sp.Symbol('t', real=True, nonnegative=True)
+		return ct.ParamsFlow(func_args=[sym_time], symbols={sym_time})
 
 
 ####################
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	ContinuousWaveTemporalShapeNode,
+	WaveTemporalShapeNode,
 ]
 BL_NODES = {
-	contracts.NodeType.ContinuousWaveTemporalShape: (
-		contracts.NodeCategory.MAXWELLSIM_SOURCES_TEMPORALSHAPES
-	)
+	ct.NodeType.WaveTemporalShape: (ct.NodeCategory.MAXWELLSIM_SOURCES_TEMPORALSHAPES)
 }

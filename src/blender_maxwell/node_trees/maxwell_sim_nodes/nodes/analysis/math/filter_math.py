@@ -110,10 +110,10 @@ class FilterMathNode(base.MaxwellSimNode):
 	bl_label = 'Filter Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 
 	####################
@@ -187,14 +187,13 @@ class FilterMathNode(base.MaxwellSimNode):
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['operation'], text='')
 
-		if self.active_socket_set == 'Dimensions':
-			if self.operation in [FilterOperation.PinLen1, FilterOperation.Pin]:
-				layout.prop(self, self.blfields['dim_0'], text='')
+		if self.operation in [FilterOperation.PinLen1, FilterOperation.Pin]:
+			layout.prop(self, self.blfields['dim_0'], text='')
 
-			if self.operation == FilterOperation.Swap:
-				row = layout.row(align=True)
-				row.prop(self, self.blfields['dim_0'], text='')
-				row.prop(self, self.blfields['dim_1'], text='')
+		if self.operation == FilterOperation.Swap:
+			row = layout.row(align=True)
+			row.prop(self, self.blfields['dim_0'], text='')
+			row.prop(self, self.blfields['dim_1'], text='')
 
 	####################
 	# - Events
@@ -292,7 +291,7 @@ class FilterMathNode(base.MaxwellSimNode):
 
 			return lazy_value_func.compose_within(
 				operation.jax_func(axis_0, axis_1),
-				enclosing_func_args=[int] if operation == 'PIN' else [],
+				enclosing_func_args=[int] if operation == FilterOperation.Pin else [],
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending
@@ -383,7 +382,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			pinned_value = input_sockets['Value']
 			has_pinned_value = not ct.FlowSignal.check(pinned_value)
 
-			if props['operation'] == 'PIN' and has_pinned_value:
+			if props['operation'] == FilterOperation.Pin and has_pinned_value:
 				nearest_idx_to_value = info.dim_idx[dim_0].nearest_idx_of(
 					pinned_value, require_sorted=True
 				)

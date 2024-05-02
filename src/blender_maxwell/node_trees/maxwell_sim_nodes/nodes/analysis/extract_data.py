@@ -45,7 +45,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	}
 	output_socket_sets: typ.ClassVar = {
 		'Sim Data': {'Monitor Data': sockets.MaxwellMonitorDataSocketDef()},
-		'Monitor Data': {'Expr': sockets.ExprSocketDef()},
+		'Monitor Data': {'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array)},
 	}
 
 	####################
@@ -409,7 +409,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		# Trigger
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Info,
 		# Loaded
 		props={'monitor_data_type', 'extract_filter'},
