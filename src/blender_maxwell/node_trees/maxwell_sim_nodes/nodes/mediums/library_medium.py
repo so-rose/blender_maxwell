@@ -1,17 +1,89 @@
+import enum
+import typing as typ
 
 import bpy
-import scipy as sc
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
+from tidy3d.material_library.material_library import MaterialItem as Tidy3DMediumItem
+from tidy3d.material_library.material_library import VariantItem as Tidy3DMediumVariant
 
-from blender_maxwell.utils import extra_sympy_units as spuex
+from blender_maxwell.utils import bl_cache, sci_constants
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
 
-VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
+_mat_lib_iter = iter(td.material_library)
+_mat_key = ''
+
+
+class VendoredMedium(enum.StrEnum):
+	# Declare StrEnum of All Tidy3D Mediums
+	## -> This is a 'for ... in ...', which uses globals as loop variables.
+	## -> It's a bit of a hack, but very effective.
+	while True:
+		try:
+			globals()['_mat_key'] = next(_mat_lib_iter)
+		except StopIteration:
+			break
+
+		## -> Exclude graphene. Graphene is special.
+		if _mat_key != 'graphene':
+			locals()[_mat_key] = _mat_key
+
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		return td.material_library[v].name
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		return ''
+
+	####################
+	# - Medium Properties
+	####################
+	@property
+	def tidy3d_medium_item(self) -> Tidy3DMediumItem:
+		"""Extracts the Tidy3D "Medium Item", which encapsulates all the provided experimental variants."""
+		return td.material_library[self]
+
+	####################
+	# - Medium Variant Properties
+	####################
+	@property
+	def medium_variants(self) -> set[Tidy3DMediumVariant]:
+		"""Extracts the list of medium variants, each corresponding to a particular experiment in the literature."""
+		return self.tidy3d_medium_item.variants
+
+	@property
+	def default_medium_variant(self) -> Tidy3DMediumVariant:
+		"""Extracts the "default" medium variant, as selected by Tidy3D."""
+		return self.medium_variants[self.tidy3d_medium_item.default]
+
+	####################
+	# - Enum Helper
+	####################
+	@property
+	def variants_as_bl_enum_elements(self) -> list[ct.BLEnumElement]:
+		"""Computes a list of variants in a format suitable for use in a dynamic `EnumProperty`.
+
+		Notes:
+			This `EnumProperty` will only return a string `variant_name`.
+
+			To reconstruct the actual `Tidy3DMediumVariant` object, one must therefore access it via the `vendored_medium.medium_variants[variant_name]`.
+		"""
+		return [
+			(
+				variant_name,
+				variant_name,
+				' | '.join([ref.journal for ref in variant.reference]),
+				'',
+				i,
+			)
+			for i, (variant_name, variant) in enumerate(self.medium_variants.items())
+		]
 
 
 class LibraryMediumNode(base.MaxwellSimNode):
@@ -21,124 +93,226 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets = {}
-	output_sockets = {
+	input_sockets: typ.ClassVar = {
+		'Generated Steps': sockets.ExprSocketDef(
+			mathtype=spux.MathType.Integer, default_value=2, abs_min=2
+		)
+	}
+	output_sockets: typ.ClassVar = {
 		'Medium': sockets.MaxwellMediumSocketDef(),
+		'Valid Freqs': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.LazyArrayRange,
+			physical_type=spux.PhysicalType.Freq,
+		),
+		'Valid WLs': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.LazyArrayRange,
+			physical_type=spux.PhysicalType.Length,
+		),
 	}
 
-	managed_obj_types = {
-		'nk_plot': managed_objs.ManagedBLImage,
+	managed_obj_types: typ.ClassVar = {
+		'plot': managed_objs.ManagedBLImage,
 	}
 
 	####################
 	# - Properties
 	####################
-	material: bpy.props.EnumProperty(
-		name='',
-		description='',
-		# icon="NODE_MATERIAL",
-		items=[
-			(
-				mat_key,
-				td.material_library[mat_key].name,
-				', '.join(
-					[
-						ref.journal
-						for ref in td.material_library[mat_key]
-						.variants[td.material_library[mat_key].default]
-						.reference
-					]
-				),
-			)
-			for mat_key in td.material_library
-			if mat_key != 'graphene'  ## For some reason, it's unique...
-		],
-		default='Au',
-		update=(lambda self, context: self.on_prop_changed('material', context)),
+	vendored_medium: VendoredMedium = bl_cache.BLField(VendoredMedium.Au, prop_ui=True)
+	variant_name: enum.Enum = bl_cache.BLField(
+		prop_ui=True, enum_cb=lambda self, _: self.search_variants()
 	)
 
+	def search_variants(self) -> list[ct.BLEnumElement]:
+		"""Search for all valid variant of the current `self.vendored_medium`."""
+		return self.vendored_medium.variants_as_bl_enum_elements
+
+	####################
+	# - Computed
+	####################
 	@property
-	def freq_range_str(self) -> tuple[sp.Expr, sp.Expr]:
-		## TODO: Cache (node instances don't seem able to keep data outside of properties, not even cached_property)
-		mat = td.material_library[self.material]
-		freq_range = [
-			spu.convert_to(
-				val * spu.hertz,
-				spuex.terahertz,
-			)
-			/ spuex.terahertz
-			for val in mat.medium.frequency_range
-		]
-		return sp.pretty([freq_range[0].n(4), freq_range[1].n(4)], use_unicode=True)
+	def variant(self) -> Tidy3DMediumVariant:
+		"""Deduce the actual medium variant from `self.vendored_medium` and `self.variant_name`."""
+		return self.vendored_medium.medium_variants[self.variant_name]
 
 	@property
-	def nm_range_str(self) -> str:
-		## TODO: Cache (node instances don't seem able to keep data outside of properties, not even cached_property)
-		mat = td.material_library[self.material]
-		nm_range = [
-			spu.convert_to(
-				VAC_SPEED_OF_LIGHT / (val * spu.hertz),
-				spu.nanometer,
-			)
-			/ spu.nanometer
-			for val in reversed(mat.medium.frequency_range)
-		]
-		return sp.pretty([nm_range[0].n(4), nm_range[1].n(4)], use_unicode=True)
+	def medium(self) -> td.PoleResidue:
+		"""Deduce the actual currently selected `PoleResidue` medium from `self.variant`."""
+		return self.variant.medium
+
+	@property
+	def data_url(self) -> str | None:
+		"""Deduce the URL associated with the currently selected medium from `self.variant`."""
+		return self.variant.data_url
+
+	@property
+	def references(self) -> td.PoleResidue:
+		"""Deduce the references associated with the currently selected `PoleResidue` medium from `self.variant`."""
+		return self.variant.reference
+
+	@property
+	def freq_range(self) -> spux.SympyExpr:
+		"""Deduce the frequency range as a unit-aware (THz, for convenience) column vector.
+
+		A rational approximation to each frequency bound is computed with `sp.nsimplify`, in order to **guarantee** lack of precision-loss as computations are performed on the frequency.
+
+		"""
+		return spu.convert_to(
+			sp.Matrix([sp.nsimplify(el) for el in self.medium.frequency_range])
+			* spu.hertz,
+			spux.terahertz,
+		)
+
+	@property
+	def wl_range(self) -> spux.SympyExpr:
+		"""Deduce the vacuum wavelength range as a unit-aware (nanometer, for convenience) column vector."""
+		return sp.Matrix(
+			self.freq_range.applyfunc(
+				lambda el: spu.convert_to(
+					sci_constants.vac_speed_of_light / el, spu.nanometer
+				)
+			)[::-1]
+		)
+
+	####################
+	# - Cached UI Properties
+	####################
+	@staticmethod
+	def _ui_range_format(sp_number: spux.SympyExpr, e_not_limit: int = 6):
+		if sp_number.is_infinite:
+			return sp.pretty(sp_number, use_unicode=True)
+
+		number = float(sp_number.subs({spux.THz: 1, spu.nm: 1}))
+		formatted_str = f'{number:.2f}'
+		if len(formatted_str) > e_not_limit:
+			formatted_str = f'{number:.2e}'
+		return formatted_str
+
+	@bl_cache.cached_bl_property()
+	def ui_freq_range(self) -> tuple[str, str]:
+		"""Cached mirror of `self.wl_range` which contains UI-ready strings."""
+		return tuple([self._ui_range_format(el) for el in self.freq_range])
+
+	@bl_cache.cached_bl_property()
+	def ui_wl_range(self) -> tuple[str, str]:
+		"""Cached mirror of `self.wl_range` which contains UI-ready strings."""
+		return tuple([self._ui_range_format(el) for el in self.wl_range])
 
 	####################
 	# - UI
 	####################
-	def draw_props(self, context, layout):
-		layout.prop(self, 'material', text='')
+	def draw_label(self) -> str:
+		return f'Medium: {self.vendored_medium}'
 
-	def draw_info(self, context, col):
-		# UI Drawing
-		split = col.split(factor=0.23, align=True)
+	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		layout.prop(self, self.blfields['vendored_medium'], text='')
+		layout.prop(self, self.blfields['variant_name'], text='')
 
-		_col = split.column(align=True)
-		_col.alignment = 'LEFT'
-		_col.label(text='nm')
-		_col.label(text='THz')
+	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		box = col.box()
 
-		_col = split.column(align=True)
-		_col.alignment = 'RIGHT'
-		_col.label(text=self.nm_range_str)
-		_col.label(text=self.freq_range_str)
+		row = box.row(align=True)
+		row.alignment = 'CENTER'
+		row.label(text='min|max')
+
+		grid = box.grid_flow(row_major=True, columns=2, align=True)
+		grid.label(text='λ Range')
+		grid.label(text='𝑓 Range')
+
+		grid.label(text=self.ui_wl_range[0])
+		grid.label(text=self.ui_freq_range[0])
+		grid.label(text=self.ui_wl_range[1])
+		grid.label(text=self.ui_freq_range[1])
+
+		# URL Link
+		if self.data_url is not None:
+			box.operator('wm.url_open', text='Link to Data').url = self.data_url
 
 	####################
-	# - Output Sockets
+	# - Events
 	####################
-	@events.computes_output_socket('Medium')
-	def compute_vac_wl(self) -> sp.Expr:
-		return td.material_library[self.material].medium
+	@events.on_value_changed(
+		prop_name={'vendored_medium', 'variant_name'},
+		run_on_init=True,
+		props={'vendored_medium'},
+	)
+	def on_medium_changed(self, props):
+		if self.variant_name not in props['vendored_medium'].medium_variants:
+			self.variant_name = bl_cache.Signal.ResetEnumItems
+
+		self.ui_freq_range = bl_cache.Signal.InvalidateCache
+		self.ui_wl_range = bl_cache.Signal.InvalidateCache
 
 	####################
-	# - Event Callbacks
+	# - Output
+	####################
+	@events.computes_output_socket(
+		'Medium',
+		props={'medium'},
+	)
+	def compute_medium(self, props) -> sp.Expr:
+		return props['medium']
+
+	@events.computes_output_socket(
+		'Valid Freqs',
+		props={'freq_range'},
+	)
+	def compute_valid_freqs(self, props) -> sp.Expr:
+		return props['freq_range']
+
+	@events.computes_output_socket(
+		'Valid Freqs',
+		kind=ct.FlowKind.LazyArrayRange,
+		props={'freq_range'},
+		input_sockets={'Generated Steps'},
+	)
+	def compute_valid_freqs_lazy(self, props, input_sockets) -> sp.Expr:
+		return ct.LazyArrayRangeFlow(
+			start=props['freq_range'][0] / spux.THz,
+			stop=props['freq_range'][1] / spux.THz,
+			steps=input_sockets['Generated Steps'],
+			scaling='lin',
+			unit=spux.THz,
+		)
+
+	@events.computes_output_socket(
+		'Valid WLs',
+		props={'wl_range'},
+	)
+	def compute_valid_wls(self, props) -> sp.Expr:
+		return props['wl_range']
+
+	@events.computes_output_socket(
+		'Valid WLs',
+		kind=ct.FlowKind.LazyArrayRange,
+		props={'wl_range'},
+		input_sockets={'Generated Steps'},
+	)
+	def compute_valid_wls_lazy(self, props, input_sockets) -> sp.Expr:
+		return ct.LazyArrayRangeFlow(
+			start=props['wl_range'][0] / spu.nm,
+			stop=props['wl_range'][0] / spu.nm,
+			steps=input_sockets['Generated Steps'],
+			scaling='lin',
+			unit=spu.nm,
+		)
+
+	####################
+	# - Preview
 	####################
 	@events.on_show_plot(
-		managed_objs={'nk_plot'},
+		managed_objs={'plot'},
 		props={'material'},
-		stop_propagation=True,  ## Plot only the first plottable node
+		stop_propagation=True,
 	)
 	def on_show_plot(
 		self,
 		managed_objs: dict,
-		props: dict,
 	):
-		medium = td.material_library[props['material']].medium
-		freq_range = [
-			spu.convert_to(
-				val * spu.hertz,
-				spuex.terahertz,
-			)
-			/ spu.hertz
-			for val in medium.frequency_range
-		]
-
-		managed_objs['nk_plot'].mpl_plot_to_image(
-			lambda ax: medium.plot(medium.frequency_range, ax=ax),
+		managed_objs['plot'].mpl_plot_to_image(
+			lambda ax: self.medium.plot(self.medium.frequency_range, ax=ax),
 			bl_select=True,
 		)
+		## TODO: Plot based on Wl, not freq.
 
 
 ####################

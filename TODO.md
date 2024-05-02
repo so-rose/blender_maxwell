@@ -7,14 +7,21 @@
 	- [ ] TFSF Source
 	- [ ] Gaussian Beam Source
 	- [ ] Astig. Gauss Beam
-- Material Data Fitting
-	- [ ] Data File Import
-	- [ ] DataFit Medium
 - Monitors
 	- [x] EH Field
 	- [x] Power Flux
 	- [ ] Permittivity
 	- [ ] Diffraction
+- Tidy3D / Integration
+	- [ ] Exporter
+	- [ ] Combine
+	- [ ] Importer
+- Sim Grid
+	- [ ] Sim Grid
+	- [ ] Auto
+	- [ ] Manual
+	- [ ] Uniform
+	- [ ] Data
 - Structures
 	- [ ] Cylinder
 	- [ ] Cylinder Array
@@ -23,22 +30,22 @@
 	- [ ] FCC Lattice
 	- [ ] BCC Lattice
 	- [ ] Monkey
-- Sim Grid
-	- [ ] Sim Grid
-	- [ ] Auto
-	- [ ] Manual
-	- [ ] Uniform
-	- [ ] Data
+- Expr Socket
+	- [ ] Array Mode
+- Math Nodes
+	- [ ] Reduce Math
+	- [ ] Transform Math - reindex freq->wl
+- Material Data Fitting
+	- [ ] Data File Import
+	- [ ] DataFit Medium
 - Mediums
+	- [ ] Non-Linearities
 	- [ ] PEC Medium
 	- [ ] Isotropic Medium
 	- [ ] Sellmeier Medium
 	- [ ] Drude Medium
 	- [ ] Debye Medium
 	- [ ] Anisotropic Medium
-- Tidy3D
-	- [ ] Exporter
-	- [ ] Importer
 - Integration
 	- [ ] Simulation and Analysis of Maxim's Cavity
 - Constants
@@ -62,15 +69,15 @@
 		- [ ] Pol SocketType: 2D elliptical visualization of Jones vectors.
 		- [ ] Pol SocketType: 3D Poincare sphere visualization of Stokes vectors.
 
+- [x] Math / Operate Math
+	- [ ] Remove two-layered dropdown; directly filter operations and use categories to seperate them.
+	- [ ] Implement Expr socket advancements to make a better experience operating between random expression-like sockets.
 - [x] Math / Map Math
 	- [x] Remove "By x" socket set let socket sets only be "Function"/"Expr"; then add a dynamic enum underneath to select "By x" based on data support.
 	- [ ] Filter the operations based on data support, ex. use positive-definiteness to guide cholesky.
 	- [ ] Implement support for additional symbols via `Expr`.
 - [x] Math / Filter Math
 - [ ] Math / Reduce Math
-- [x] Math / Operate Math
-	- [ ] Remove two-layered dropdown; directly filter operations and use categories to seperate them.
-	- [ ] Implement Expr socket advancements to make a better experience operating between random expression-like sockets.
 
 ## Inputs
 - [x] Wave Constant
@@ -156,8 +163,7 @@
 
 ## Mediums
 - [x] Library Medium
-	- [ ] Implement frequency range output (listy), perhaps in the `InfoFlow` lane?
-	- [ ] Implement dynamic label.
+	- [ ] Implement wavelength-based plot, as opposed to merely the frequency plot.
 - [ ] DataFit Medium
 	- [ ] Implement by migrating the material data fitting logic from the `Tidy3D File Importer`, except now only accept a `Data` input socket, and rely on the `Data File Importer` to do the parsing into an acceptable `Data` socket format.
 	- [ ] Save the result in the node, specifically in a property (serialized!) and lock the input graph while saved.
