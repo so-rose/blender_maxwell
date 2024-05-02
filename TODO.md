@@ -57,6 +57,11 @@
 
 
 
+# VALIDATE
+- [ ] Does the imaginary part of a complex phasor scale with the real part? Ex. when doing `V/m -> V/um` conversion, does the phase also scale by 1 million?
+
+
+
 
 # Nodes
 ## Analysis
@@ -144,8 +149,8 @@
 ## Sources
 - [x] Temporal Shapes / Gaussian Pulse Temporal Shape
 - [x] Temporal Shapes / Continuous Wave Temporal Shape
-- [ ] Temporal Shapes / Symbolic Temporal Shape
-	- [ ] Specify a Sympy function to generate appropriate array based on
+- [ ] Temporal Shapes / Expr Temporal Shape
+	- [ ] Specify a Sympy function / data to generate appropriate array based on
 - [ ] Temporal Shapes / Data Temporal Shape
 
 - [x] Point Dipole Source
@@ -585,4 +590,11 @@ Unreported:
 
 - [ ] Shader visualizations approximated from medium `nk` into a shader node graph, aka. a generic BSDF.
 
-- [ ] Web importer that gets material data from refractiveindex.info.
+
+
+- [ ] Easy conversion of lazyarrayrange to mu/sigma frequency for easy computation of pulse fits from data.
+
+
+- [ ] IDEA: Hand-craft a faster `spu.convert_to`. <https://github.com/sympy/sympy/blob/a44299273eeb4838beaee9af3b688f2f44d7702f/sympy/physics/units/util.py#L51-L129>
+
+- [ ] We should probably communicate with the `sympy` upstream about our deep usage of unit systems. They might be interested in the various workarounds :)

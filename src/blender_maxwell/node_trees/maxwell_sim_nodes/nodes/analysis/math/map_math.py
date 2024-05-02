@@ -4,7 +4,6 @@ import enum
 import typing as typ
 
 import bpy
-import jax
 import jax.numpy as jnp
 import sympy as sp
 
@@ -138,6 +137,9 @@ class MapOperation(enum.StrEnum):
 	@staticmethod
 	def by_element_shape(shape: tuple[int, ...] | None) -> list[typ.Self]:
 		MO = MapOperation
+		if shape == 'noshape':
+			return []
+
 		# By Number
 		if shape is None:
 			return [
@@ -259,7 +261,7 @@ class MapOperation(enum.StrEnum):
 			),
 			## TODO: Matrix -> Vec
 			## TODO: Matrix -> Matrices
-		}.get(self, info)
+		}.get(self, info)()
 
 
 class MapMathNode(base.MaxwellSimNode):
@@ -346,10 +348,10 @@ class MapMathNode(base.MaxwellSimNode):
 	bl_label = 'Map Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
 	}
 
 	####################
@@ -366,12 +368,12 @@ class MapMathNode(base.MaxwellSimNode):
 		if has_info:
 			return info.output_shape
 
-		return None
+		return 'noshape'
 
 	output_shape: tuple[int, ...] | None = bl_cache.BLField(None)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
-		if self.expr_output_shape is not None:
+		if self.expr_output_shape != 'noshape':
 			return [
 				operation.bl_enum_element(i)
 				for i, operation in enumerate(
@@ -401,8 +403,8 @@ class MapMathNode(base.MaxwellSimNode):
 		run_on_init=True,
 	)
 	def on_input_changed(self):
-		# if self.operation not in MapOperation.by_element_shape(self.expr_output_shape):
-		self.operation = bl_cache.Signal.ResetEnumItems
+		if self.operation not in MapOperation.by_element_shape(self.expr_output_shape):
+			self.operation = bl_cache.Signal.ResetEnumItems
 
 	@events.on_value_changed(
 		# Trigger
@@ -449,7 +451,7 @@ class MapMathNode(base.MaxwellSimNode):
 		mapper = input_sockets['Mapper']
 
 		has_expr = not ct.FlowSignal.check(expr)
-		has_mapper = not ct.FlowSignal.check(expr)
+		has_mapper = not ct.FlowSignal.check(mapper)
 
 		if has_expr and operation is not None:
 			if not has_mapper:
@@ -494,11 +496,11 @@ class MapMathNode(base.MaxwellSimNode):
 	# - Compute Auxiliary: Info / Params
 	####################
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Info,
 		props={'active_socket_set', 'operation'},
-		input_sockets={'Data'},
-		input_socket_kinds={'Data': ct.FlowKind.Info},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
 	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
 		operation = props['operation']
@@ -512,13 +514,13 @@ class MapMathNode(base.MaxwellSimNode):
 		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Params,
-		input_sockets={'Data'},
-		input_socket_kinds={'Data': ct.FlowKind.Params},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Params},
 	)
 	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
-		return input_sockets['Data']
+		return input_sockets['Expr']
 
 
 ####################

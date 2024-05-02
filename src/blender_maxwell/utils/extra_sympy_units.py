@@ -98,6 +98,12 @@ class MathType(enum.StrEnum):
 		if sp_obj.is_complex:
 			return MathType.Complex
 
+		# Infinities
+		if sp_obj in [sp.oo, -sp.oo]:
+			return MathType.Real  ## TODO: Strictly, could be ex. integer...
+		if sp_obj in [sp.zoo, -sp.zoo]:
+			return MathType.Complex
+
 		msg = f"Can't determine MathType from sympy object: {sp_obj}"
 		raise ValueError(msg)
 
@@ -755,13 +761,11 @@ def scaling_factor(unit_from: spu.Quantity, unit_to: spu.Quantity) -> Number:
 	raise ValueError(msg)
 
 
-_UNIT_STR_MAP = {sym.name: unit for sym, unit in UNIT_BY_SYMBOL.items()}
-
-
 @functools.cache
 def unit_str_to_unit(unit_str: str) -> Unit | None:
-	if unit_str in _UNIT_STR_MAP:
-		return _UNIT_STR_MAP[unit_str]
+	expr = sp.sympify(unit_str).subs(UNIT_BY_SYMBOL)
+	if expr.has(spu.Quantity):
+		return expr
 
 	msg = f'No valid unit for unit string {unit_str}'
 	raise ValueError(msg)
@@ -812,7 +816,6 @@ class PhysicalType(enum.StrEnum):
 	# Luminal
 	LumIntensity = enum.auto()
 	LumFlux = enum.auto()
-	Luminance = enum.auto()
 	Illuminance = enum.auto()
 	# Optics
 	OrdinaryWaveVector = enum.auto()
@@ -866,7 +869,7 @@ class PhysicalType(enum.StrEnum):
 			PT.OrdinaryWaveVector: Dims.frequency,
 			PT.AngularWaveVector: Dims.angle * Dims.frequency,
 			PT.PoyntingVector: Dims.power / Dims.length**2,
-		}
+		}[self]
 
 	@property
 	def default_unit(self) -> list[Unit]:
@@ -1072,7 +1075,7 @@ class PhysicalType(enum.StrEnum):
 
 	@staticmethod
 	def from_unit(unit: Unit) -> list[Unit]:
-		for physical_type in list[PhysicalType]:
+		for physical_type in list(PhysicalType):
 			if unit in physical_type.valid_units:
 				return physical_type
 
@@ -1161,7 +1164,7 @@ class PhysicalType(enum.StrEnum):
 
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
-		return sp_to_str(value.unit_dim)
+		return PhysicalType(value).name
 
 	@staticmethod
 	def to_icon(value: typ.Self) -> str:
@@ -1208,6 +1211,7 @@ UNITS_SI: UnitSystem = {
 	# Electrodynamics
 	_PT.Current: spu.ampere,
 	_PT.CurrentDensity: spu.ampere / spu.meter**2,
+	_PT.Voltage: spu.volt,
 	_PT.Capacitance: spu.farad,
 	_PT.Impedance: spu.ohm,
 	_PT.Conductance: spu.siemens,
@@ -1278,13 +1282,12 @@ def sympy_to_python(
 ####################
 # - Convert to Unit System
 ####################
-def _flat_unit_system_units(unit_system: UnitSystem) -> SympyExpr:
-	return list(unit_system.values())
-
-
 def convert_to_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
 	"""Convert an expression to the units of a given unit system, with appropriate scaling."""
-	return spu.convert_to(sp_obj, _flat_unit_system_units(unit_system))
+	return spu.convert_to(
+		sp_obj,
+		{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
+	)
 
 
 def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:

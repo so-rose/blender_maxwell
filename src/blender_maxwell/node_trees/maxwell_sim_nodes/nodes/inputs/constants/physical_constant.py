@@ -66,6 +66,8 @@ class PhysicalConstantNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _, col: bpy.types.UILayout) -> None:
+		col.prop(self, self.blfields['physical_type'], text='')
+
 		row = col.row(align=True)
 		row.prop(self, self.blfields['mathtype'], text='')
 		row.prop(self, self.blfields['size'], text='')
@@ -74,25 +76,34 @@ class PhysicalConstantNode(base.MaxwellSimNode):
 	# - Events
 	####################
 	@events.on_value_changed(
-		prop_name={'physical_type', 'mathtype', 'size'},
+		# Trigger
+		prop_name={'physical_type'},
 		run_on_init=True,
-		props={'physical_type', 'mathtype', 'size'},
+		# Loaded
+		props={'physical_type'},
 	)
-	def on_mathtype_or_size_changed(self, props) -> None:
+	def on_physical_type_changed(self, props) -> None:
 		"""Change the input/output expression sockets to match the mathtype and size declared in the node."""
-		shape = props['size'].shape
-
 		# Set Input Socket Physical Type
 		if self.inputs['Value'].physical_type != props['physical_type']:
 			self.inputs['Value'].physical_type = props['physical_type']
-			self.search_mathtypes = bl_cache.Signal.ResetEnumItems
-			self.search_sizes = bl_cache.Signal.ResetEnumItems
+			self.mathtype = bl_cache.Signal.ResetEnumItems
+			self.size = bl_cache.Signal.ResetEnumItems
 
+	@events.on_value_changed(
+		# Trigger
+		prop_name={'mathtype', 'size'},
+		run_on_init=True,
+		# Loaded
+		props={'physical_type', 'mathtype', 'size'},
+	)
+	def on_mathtype_or_size_changed(self, props) -> None:
 		# Set Input Socket Math Type
 		if self.inputs['Value'].mathtype != props['mathtype']:
 			self.inputs['Value'].mathtype = props['mathtype']
 
 		# Set Input Socket Shape
+		shape = props['size'].shape
 		if self.inputs['Value'].shape != shape:
 			self.inputs['Value'].shape = shape
 

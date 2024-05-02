@@ -217,9 +217,14 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
 		self.display_shape = (
-			'SQUARE' if self.active_kind == ct.FlowKind.LazyArrayRange else 'CIRCLE'
-		)  # + ('_DOT' if self.use_units else '')
-		## TODO: Valid Active Kinds should be a subset/subenum(?) of FlowKind
+			'SQUARE'
+			if self.active_kind == ct.FlowKind.LazyArrayRange
+			else ('DIAMOND' if self.active_kind == ct.FlowKind.Array else 'CIRCLE')
+		) + (
+			'_DOT'
+			if hasattr(self, 'physical_type') and self.physical_type is not None
+			else ''
+		)
 
 	def on_socket_prop_changed(self, prop_name: str) -> None:
 		"""Called when a property has been updated.
@@ -811,6 +816,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			{
 				ct.FlowKind.Value: self.draw_value,
 				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
+				ct.FlowKind.Array: self.draw_array,
 			}[self.active_kind](col)
 
 		# Info Drawing
@@ -925,6 +931,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 		Notes:
 			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyArrayRange`.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+
+	def draw_array(self, col: bpy.types.UILayout) -> None:
+		"""Draws the socket array UI on its own line.
+
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.Array`.
 
 		Parameters:
 			col: Target for defining UI elements.

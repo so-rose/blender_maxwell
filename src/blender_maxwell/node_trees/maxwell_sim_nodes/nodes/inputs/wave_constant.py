@@ -147,7 +147,9 @@ class WaveConstantNode(base.MaxwellSimNode):
 		if has_freq:
 			return input_sockets['Freq']
 
-		return sci_constants.vac_speed_of_light / input_sockets['WL']
+		return spu.convert_to(
+			sci_constants.vac_speed_of_light / input_sockets['WL'], spux.THz
+		)
 
 	@events.computes_output_socket(
 		'WL',

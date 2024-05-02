@@ -485,13 +485,13 @@ class LazyArrayRangeFlow:
 		if isinstance(self.start, spux.SympyType):
 			start_mathtype = spux.MathType.from_expr(self.start)
 		else:
-			start_mathtype = spux.MathType.from_pytype(self.start)
+			start_mathtype = spux.MathType.from_pytype(type(self.start))
 
 		# Get Stop Mathtype
 		if isinstance(self.stop, spux.SympyType):
 			stop_mathtype = spux.MathType.from_expr(self.stop)
 		else:
-			stop_mathtype = spux.MathType.from_pytype(self.stop)
+			stop_mathtype = spux.MathType.from_pytype(type(self.stop))
 
 		# Check Equal
 		if start_mathtype != stop_mathtype:
@@ -739,6 +739,10 @@ class LazyArrayRangeFlow:
 		msg = f'Invalid kind: {kind}'
 		raise TypeError(msg)
 
+	@functools.cached_property
+	def realize_array(self) -> ArrayFlow:
+		return self.realize()
+
 
 ####################
 # - Params
@@ -748,21 +752,52 @@ class ParamsFlow:
 	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
 	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
 
+	symbols: frozenset[spux.Symbol] = frozenset()
+
+	@functools.cached_property
+	def sorted_symbols(self) -> list[sp.Symbol]:
+		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
+		return sorted(self.symbols, key=lambda sym: sym.name)
+
 	####################
 	# - Scaled Func Args
 	####################
-	def scaled_func_args(self, unit_system: spux.UnitSystem):
+	def scaled_func_args(
+		self,
+		unit_system: spux.UnitSystem,
+		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
+	):
 		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
+		if not all(sym in self.symbols for sym in symbol_values):
+			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
+			raise ValueError(msg)
+
 		return [
-			spux.convert_to_unit_system(func_arg, unit_system, use_jax_array=True)
-			for func_arg in self.func_args
+			spux.convert_to_unit_system(arg, unit_system, use_jax_array=True)
+			if arg not in symbol_values
+			else symbol_values[arg]
+			for arg in self.func_args
 		]
 
-	def scaled_func_kwargs(self, unit_system: spux.UnitSystem):
+	def scaled_func_kwargs(
+		self,
+		unit_system: spux.UnitSystem,
+		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
+	):
 		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
+		if not all(sym in self.symbols for sym in symbol_values):
+			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
+			raise ValueError(msg)
+
 		return {
 			arg_name: spux.convert_to_unit_system(arg, unit_system, use_jax_array=True)
-			for arg_name, arg in self.func_args
+			if arg not in symbol_values
+			else symbol_values[arg]
+			for arg_name, arg in self.func_kwargs.items()
 		}
 
 	####################
@@ -780,16 +815,19 @@ class ParamsFlow:
 		return ParamsFlow(
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
+			symbols=self.symbols | other.symbols,
 		)
 
 	def compose_within(
 		self,
 		enclosing_func_args: list[spux.SympyExpr] = (),
 		enclosing_func_kwargs: dict[str, spux.SympyExpr] = MappingProxyType({}),
+		enclosing_symbols: frozenset[spux.Symbol] = frozenset(),
 	) -> typ.Self:
 		return ParamsFlow(
 			func_args=self.func_args + list(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
+			symbols=self.symbols | enclosing_symbols,
 		)
 
 
@@ -804,8 +842,6 @@ class InfoFlow:
 		default_factory=dict
 	)  ## TODO: Rename to dim_idxs
 
-	## TODO: Add PhysicalType
-
 	@functools.cached_property
 	def dim_lens(self) -> dict[str, int]:
 		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
@@ -819,6 +855,13 @@ class InfoFlow:
 	@functools.cached_property
 	def dim_units(self) -> dict[str, spux.Unit]:
 		return {dim_name: dim_idx.unit for dim_name, dim_idx in self.dim_idx.items()}
+
+	@functools.cached_property
+	def dim_physical_types(self) -> dict[str, spux.PhysicalType]:
+		return {
+			dim_name: spux.PhysicalType.from_unit(dim_idx.unit)
+			for dim_name, dim_idx in self.dim_idx.items()
+		}
 
 	@functools.cached_property
 	def dim_idx_arrays(self) -> list[jax.Array]:
@@ -850,6 +893,21 @@ class InfoFlow:
 	####################
 	# - Methods
 	####################
+	def rescale_dim_idxs(self, new_dim_idxs: dict[str, LazyArrayRangeFlow]) -> typ.Self:
+		return InfoFlow(
+			# Dimensions
+			dim_names=self.dim_names,
+			dim_idx={
+				_dim_name: new_dim_idxs.get(_dim_name, dim_idx)
+				for _dim_name, dim_idx in self.dim_idx.items()
+			},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)
+
 	def delete_dimension(self, dim_name: str) -> typ.Self:
 		"""Delete a dimension."""
 		return InfoFlow(

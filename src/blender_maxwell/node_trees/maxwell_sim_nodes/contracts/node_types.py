@@ -43,10 +43,9 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 
 	# Sources
 	## Sources / Temporal Shapes
-	GaussianPulseTemporalShape = enum.auto()
-	ContinuousWaveTemporalShape = enum.auto()
-	SymbolicTemporalShape = enum.auto()
-	DataTemporalShape = enum.auto()
+	PulseTemporalShape = enum.auto()
+	WaveTemporalShape = enum.auto()
+	ExprTemporalShape = enum.auto()
 	## Sources /
 	PointDipoleSource = enum.auto()
 	PlaneWaveSource = enum.auto()

@@ -2,8 +2,6 @@ import enum
 import typing as typ
 
 import bpy
-import jax
-import jax.numpy as jnp
 import jaxtyping as jtyp
 import matplotlib.axis as mpl_ax
 import sympy as sp
@@ -196,6 +194,7 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.Array,
 			symbols={_x := sp.Symbol('x', real=True)},
 			default_value=2 * _x,
 		),
@@ -284,15 +283,56 @@ class VizNode(base.MaxwellSimNode):
 		socket_name='Expr',
 		input_sockets={'Expr'},
 		run_on_init=True,
-		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		input_socket_kinds={'Expr': {ct.FlowKind.Info, ct.FlowKind.Params}},
 		input_sockets_optional={'Expr': True},
 	)
 	def on_any_changed(self, input_sockets: dict):
-		if not ct.FlowSignal.check_single(
-			input_sockets['Expr'], ct.FlowSignal.FlowPending
-		):
+		info = input_sockets['Expr'][ct.FlowKind.Info]
+		params = input_sockets['Expr'][ct.FlowKind.Params]
+
+		has_info = not ct.FlowSignal.check(info)
+		has_params = not ct.FlowSignal.check(params)
+
+		# Reset Viz Mode/Target
+		has_nonpending_info = not ct.FlowSignal.check_single(
+			info, ct.FlowSignal.FlowPending
+		)
+		if has_nonpending_info:
 			self.viz_mode = bl_cache.Signal.ResetEnumItems
 			self.viz_target = bl_cache.Signal.ResetEnumItems
+
+		# Provide Sockets for Symbol Realization
+		## -> This happens if Params contains not-yet-realized symbols.
+		if has_info and has_params and params.symbols:
+			if set(self.loose_input_sockets) != {
+				sym.name for sym in params.symbols if sym.name in info.dim_names
+			}:
+				self.loose_input_sockets = {
+					sym.name: sockets.ExprSocketDef(
+						active_kind=ct.FlowKind.LazyArrayRange,
+						shape=None,
+						mathtype=info.dim_mathtypes[sym.name],
+						physical_type=info.dim_physical_types[sym.name],
+						default_min=(
+							info.dim_idx[sym.name].start
+							if not sp.S(info.dim_idx[sym.name].start).is_infinite
+							else sp.S(0)
+						),
+						default_max=(
+							info.dim_idx[sym.name].start
+							if not sp.S(info.dim_idx[sym.name].stop).is_infinite
+							else sp.S(1)
+						),
+						default_steps=50,
+					)
+					for sym in sorted(
+						params.symbols, key=lambda el: info.dim_names.index(el.name)
+					)
+					if sym.name in info.dim_names
+				}
+
+		elif self.loose_input_sockets:
+			self.loose_input_sockets = {}
 
 	@events.on_value_changed(
 		prop_name='viz_mode',
@@ -309,39 +349,62 @@ class VizNode(base.MaxwellSimNode):
 		props={'viz_mode', 'viz_target', 'colormap'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': {ct.FlowKind.Array, ct.FlowKind.LazyValueFunc, ct.FlowKind.Info}
+			'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info, ct.FlowKind.Params}
 		},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		all_loose_input_sockets=True,
 		stop_propagation=True,
 	)
 	def on_show_plot(
-		self,
-		managed_objs: dict,
-		input_sockets: dict,
-		props: dict,
+		self, managed_objs, props, input_sockets, loose_input_sockets, unit_systems
 	):
 		# Retrieve Inputs
-		array_flow = input_sockets['Expr'][ct.FlowKind.Array]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
+		params = input_sockets['Expr'][ct.FlowKind.Params]
 
-		# Check Flow
+		has_info = not ct.FlowSignal.check(info)
+		has_params = not ct.FlowSignal.check(params)
+
 		if (
-			any(ct.FlowSignal.check(inp) for inp in [array_flow, info])
+			not has_info
+			or not has_params
 			or props['viz_mode'] is None
 			or props['viz_target'] is None
 		):
 			return
 
-		# Viz Target
+		# Compute Data
+		lazy_value_func = input_sockets['Expr'][ct.FlowKind.LazyValueFunc]
+		symbol_values = (
+			loose_input_sockets
+			if not params.symbols
+			else {
+				sym: loose_input_sockets[sym.name]
+				.realize_array.rescale_to_unit(info.dim_units[sym.name])
+				.values
+				for sym in params.sorted_symbols
+			}
+		)
+		data = lazy_value_func.func_jax(
+			*params.scaled_func_args(
+				unit_systems['BlenderUnits'], symbol_values=symbol_values
+			),
+			**params.scaled_func_kwargs(
+				unit_systems['BlenderUnits'], symbol_values=symbol_values
+			),
+		)
+		if params.symbols:
+			info = info.rescale_dim_idxs(loose_input_sockets)
+
+		# Visualize by-Target
 		if props['viz_target'] == VizTarget.Plot2D:
 			managed_objs['plot'].mpl_plot_to_image(
-				lambda ax: VizMode.to_plotter(props['viz_mode'])(
-					array_flow.values, info, ax
-				),
+				lambda ax: VizMode.to_plotter(props['viz_mode'])(data, info, ax),
 				bl_select=True,
 			)
 		if props['viz_target'] == VizTarget.Pixels:
 			managed_objs['plot'].map_2d_to_image(
-				array_flow.values,
+				data,
 				colormap=props['colormap'],
 				bl_select=True,
 			)
