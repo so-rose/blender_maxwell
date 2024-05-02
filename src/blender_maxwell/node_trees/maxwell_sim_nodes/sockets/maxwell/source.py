@@ -1,4 +1,3 @@
-
 from ... import contracts as ct
 from .. import base
 
@@ -15,6 +14,8 @@ class MaxwellSourceSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellSource
 
 	is_list: bool = False
+
+	## TODO: capabilities() to require source sockets
 
 	def init(self, bl_socket: MaxwellSourceBLSocket) -> None:
 		if self.is_list:

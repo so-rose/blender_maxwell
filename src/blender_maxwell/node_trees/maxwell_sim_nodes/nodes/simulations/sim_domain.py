@@ -35,27 +35,8 @@ class SimDomainNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Event Methods
+	# - Events
 	####################
-	@events.computes_output_socket(
-		'Domain',
-		input_sockets={'Duration', 'Center', 'Size', 'Grid', 'Ambient Medium'},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Duration': 'Tidy3DUnits',
-			'Center': 'Tidy3DUnits',
-			'Size': 'Tidy3DUnits',
-		},
-	)
-	def compute_domain(self, input_sockets: dict, unit_systems) -> sp.Expr:
-		return {
-			'run_time': input_sockets['Duration'],
-			'center': input_sockets['Center'],
-			'size': input_sockets['Size'],
-			'grid_spec': input_sockets['Grid'],
-			'medium': input_sockets['Ambient Medium'],
-		}
-
 	@events.on_value_changed(
 		socket_name={'Center', 'Size'},
 		prop_name='preview_active',
@@ -90,6 +71,28 @@ class SimDomainNode(base.MaxwellSimNode):
 		# Push Preview State
 		if props['preview_active']:
 			managed_objs['mesh'].show_preview()
+
+	####################
+	# - Outputs
+	####################
+	@events.computes_output_socket(
+		'Domain',
+		input_sockets={'Duration', 'Center', 'Size', 'Grid', 'Ambient Medium'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Duration': 'Tidy3DUnits',
+			'Center': 'Tidy3DUnits',
+			'Size': 'Tidy3DUnits',
+		},
+	)
+	def compute_domain(self, input_sockets, unit_systems) -> sp.Expr:
+		return {
+			'run_time': input_sockets['Duration'],
+			'center': input_sockets['Center'],
+			'size': input_sockets['Size'],
+			'grid_spec': input_sockets['Grid'],
+			'medium': input_sockets['Ambient Medium'],
+		}
 
 
 ####################

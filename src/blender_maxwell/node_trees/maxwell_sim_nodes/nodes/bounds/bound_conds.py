@@ -13,6 +13,9 @@ from .. import base, events
 log = logger.get(__name__)
 
 
+SSA = ct.SimSpaceAxis
+
+
 class BoundCondsNode(base.MaxwellSimNode):
 	"""Provides a hub for joining custom simulation domain boundary conditions by-axis."""
 
@@ -24,49 +27,49 @@ class BoundCondsNode(base.MaxwellSimNode):
 	####################
 	input_socket_sets: typ.ClassVar = {
 		'XYZ': {
-			'X': sockets.MaxwellBoundCondSocketDef(),
-			'Y': sockets.MaxwellBoundCondSocketDef(),
-			'Z': sockets.MaxwellBoundCondSocketDef(),
+			'X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'±X | YZ': {
-			'+X': sockets.MaxwellBoundCondSocketDef(),
-			'-X': sockets.MaxwellBoundCondSocketDef(),
-			'Y': sockets.MaxwellBoundCondSocketDef(),
-			'Z': sockets.MaxwellBoundCondSocketDef(),
+			'+X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'-X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'X | ±Y | Z': {
-			'X': sockets.MaxwellBoundCondSocketDef(),
-			'+Y': sockets.MaxwellBoundCondSocketDef(),
-			'-Y': sockets.MaxwellBoundCondSocketDef(),
-			'Z': sockets.MaxwellBoundCondSocketDef(),
+			'X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'+Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'-Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'XY | ±Z': {
-			'X': sockets.MaxwellBoundCondSocketDef(),
-			'Y': sockets.MaxwellBoundCondSocketDef(),
-			'+Z': sockets.MaxwellBoundCondSocketDef(),
-			'-Z': sockets.MaxwellBoundCondSocketDef(),
+			'X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'+Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
+			'-Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'±XY | Z': {
-			'+X': sockets.MaxwellBoundCondSocketDef(),
-			'-X': sockets.MaxwellBoundCondSocketDef(),
-			'+Y': sockets.MaxwellBoundCondSocketDef(),
-			'-Y': sockets.MaxwellBoundCondSocketDef(),
-			'Z': sockets.MaxwellBoundCondSocketDef(),
+			'+X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'-X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'+Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'-Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'X | ±YZ': {
-			'X': sockets.MaxwellBoundCondSocketDef(),
-			'+Y': sockets.MaxwellBoundCondSocketDef(),
-			'-Y': sockets.MaxwellBoundCondSocketDef(),
-			'+Z': sockets.MaxwellBoundCondSocketDef(),
-			'-Z': sockets.MaxwellBoundCondSocketDef(),
+			'X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'+Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'-Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'+Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
+			'-Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 		'±XYZ': {
-			'+X': sockets.MaxwellBoundCondSocketDef(),
-			'-X': sockets.MaxwellBoundCondSocketDef(),
-			'+Y': sockets.MaxwellBoundCondSocketDef(),
-			'-Y': sockets.MaxwellBoundCondSocketDef(),
-			'+Z': sockets.MaxwellBoundCondSocketDef(),
-			'-Z': sockets.MaxwellBoundCondSocketDef(),
+			'+X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'-X': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.X}),
+			'+Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'-Y': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Y}),
+			'+Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
+			'-Z': sockets.MaxwellBoundCondSocketDef(allow_axes={SSA.Z}),
 		},
 	}
 	output_sockets: typ.ClassVar = {

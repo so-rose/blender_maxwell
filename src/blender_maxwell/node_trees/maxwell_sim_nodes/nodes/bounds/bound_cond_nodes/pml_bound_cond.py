@@ -187,4 +187,4 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	PMLBoundCondNode,
 ]
-BL_NODES = {ct.NodeType.PMLBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS_BOUNDCONDS)}
+BL_NODES = {ct.NodeType.PMLBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)}

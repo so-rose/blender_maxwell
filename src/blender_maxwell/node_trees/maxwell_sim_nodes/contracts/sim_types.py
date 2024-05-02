@@ -6,6 +6,55 @@ import typing as typ
 import tidy3d as td
 
 
+## TODO: Sim Domain type, w/pydantic checks!
+
+class SimSpaceAxis(enum.StrEnum):
+	"""The axis labels of the global simulation coordinate system."""
+
+	X = enum.auto()
+	Y = enum.auto()
+	Z = enum.auto()
+
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		"""Convert the enum value to a human-friendly name.
+
+		Notes:
+			Used to print names in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		SSA = SimSpaceAxis
+		return {
+			SSA.X: 'x',
+			SSA.Y: 'y',
+			SSA.Z: 'z',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		"""Convert the enum value to a Blender icon.
+
+		Notes:
+			Used to print icons in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		return ''
+
+	@property
+	def axis(self) -> int:
+		"""Deduce the integer index of the axis.
+
+		Returns:
+			The integer index of the axis.
+		"""
+		SSA = SimSpaceAxis
+		return {SSA.X: 0, SSA.Y: 1, SSA.Z: 2}[self]
+
+
 class BoundCondType(enum.StrEnum):
 	r"""A type of boundary condition, applied to a half-axis of a simulation domain.
 

@@ -1,12 +1,5 @@
 # Working TODO
 - [x] Wave Constant
-- Bounds
-	- [x] Boundary Conds
-	- [x] PML
-	- [x] PEC
-	- [x] PMC
-	- [ ] Bloch
-	- [ ] Absorbing
 - Sources
 	- [ ] Temporal Shapes / Continuous Wave Temporal Shape
 	- [ ] Temporal Shapes / Symbolic Temporal Shape
@@ -200,9 +193,11 @@
 - [x] Boundary Conds
 - [x] Boundary Cond / PML Bound Cond
 	- [ ] 1D plot visualizing the effect of parameters on a 1D wave function
-- [ ] Boundary Cond / Bloch Bound Cond
-	- [ ] Implement "simple" mode aka "periodic" mode in Tidy3D
-- [ ] Boundary Cond / Absorbing Bound Cond
+- [x] Boundary Cond / Bloch Bound Cond
+	- [x] Implement "simple" mode aka "periodic" mode in Tidy3D
+	- [ ] 1D plot visualizing the effect of parameters on a 1D wave function
+- [x] Boundary Cond / Absorbing Bound Cond
+	- [ ] 1D plot visualizing the effect of parameters on a 1D wave function
 
 ## Monitors
 - [x] EH Field Monitor

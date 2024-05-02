@@ -373,6 +373,32 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		self.trigger_event(ct.FlowEvent.LinkChanged)
 
+	def remove_invalidated_links(self) -> None:
+		"""Reevaluates the capabilities of all socket links, and removes any that no longer match.
+
+		Links are removed with a simple `node_tree.links.remove()`, which directly emulates a user trying to remove the node link.
+		**Note** that all of the usual consent-semantics apply just the same as if the user had manually tried to remove the link.
+
+		Notes:
+			Called by nodes directly on their sockets, after altering any property that might influence the capabilities of that socket.
+
+			This prevents invalid use when the user alters a property, which **would** disallow adding a _new_ link identical to one that already exists.
+			In such a case, the existing (non-capability-respecting) link should be removed, as it has become invalid.
+		"""
+		node_tree = self.id_data
+		for link in self.links:
+			if not link.from_socket.capabilities.is_compatible_with(
+				link.to_socket.capabilities
+			):
+				log.error(
+					'Deleted link between "%s" (%s) and "%s" (%s) due to invalidated capabilities',
+					link.from_socket.bl_label,
+					link.from_socket.capabilities,
+					link.to_socket.bl_label,
+					link.to_socket.capabilities,
+				)
+				node_tree.links.remove(link)
+
 	####################
 	# - Event Chain
 	####################

@@ -145,5 +145,5 @@ BL_REGISTER = [
 	AdiabAbsorbBoundCondNode,
 ]
 BL_NODES = {
-	ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS_BOUNDCONDS)
+	ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)
 }
