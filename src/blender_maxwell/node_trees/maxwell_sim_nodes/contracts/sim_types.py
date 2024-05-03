@@ -1,12 +1,18 @@
 """Declares various simulation types for use by nodes and sockets."""
 
+import dataclasses
 import enum
 import typing as typ
 
 import jax.numpy as jnp
 import tidy3d as td
 
+from blender_maxwell.services import tdcloud
 
+
+####################
+# - JAX-Helpers
+####################
 def manual_amp_time(self, time: float) -> complex:
 	"""Copied implementation of `pulse.amp_time` for `tidy3d` temporal shapes, which replaces use of `numpy` with `jax.numpy` for `jit`-ability.
 
@@ -42,6 +48,9 @@ def manual_amp_time(self, time: float) -> complex:
 ## TODO: Sim Domain type, w/pydantic checks!
 
 
+####################
+# - Global Simulation Coordinate System
+####################
 class SimSpaceAxis(enum.StrEnum):
 	"""The axis labels of the global simulation coordinate system."""
 
@@ -89,6 +98,9 @@ class SimSpaceAxis(enum.StrEnum):
 		return {SSA.X: 0, SSA.Y: 1, SSA.Z: 2}[self]
 
 
+####################
+# - Boundary Condition Type
+####################
 class BoundCondType(enum.StrEnum):
 	r"""A type of boundary condition, applied to a half-axis of a simulation domain.
 
@@ -151,3 +163,14 @@ class BoundCondType(enum.StrEnum):
 			BCT.Pmc: td.PMCBoundary(),
 			BCT.NaiveBloch: td.Periodic(),
 		}[self]
+
+
+####################
+# - Cloud Task
+####################
+@dataclasses.dataclass(kw_only=True, frozen=True)
+class NewSimCloudTask:
+	"""Not-yet-existing simulation-oriented cloud task."""
+
+	task_name: tdcloud.CloudTaskName
+	cloud_folder: tdcloud.CloudFolder

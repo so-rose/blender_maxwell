@@ -26,8 +26,8 @@ class OperatorType(enum.StrEnum):
 	NodeLoadCloudSim = enum.auto()
 
 	# Node: Tidy3DWebExporter
+	NodeRecomputeSimInfo = enum.auto()
 	NodeUploadSimulation = enum.auto()
+	NodeReleaseUploadedTask = enum.auto()
 	NodeRunSimulation = enum.auto()
 	NodeReloadTrackedTask = enum.auto()
-	NodeEstCostTrackedTask = enum.auto()
-	ReleaseTrackedTask = enum.auto()

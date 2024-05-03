@@ -32,7 +32,9 @@ class ReloadFolderList(bpy.types.Operator):
 
 		tdcloud.TidyCloudFolders.update_folders()
 		tdcloud.TidyCloudTasks.update_tasks(bl_socket.existing_folder_id)
-		bl_socket.on_cloud_updated()
+
+		bl_socket.existing_folder_id = bl_cache.Signal.ResetEnumItems
+		bl_socket.existing_task_id = bl_cache.Signal.ResetEnumItems
 
 		return {'FINISHED'}
 
@@ -57,7 +59,9 @@ class Authenticate(bpy.types.Operator):
 		if not tdcloud.check_authentication():
 			tdcloud.authenticate_with_api_key(bl_socket.api_key)
 			bl_socket.api_key = ''
-			bl_socket.on_cloud_updated()
+
+			bl_socket.existing_folder_id = bl_cache.Signal.ResetEnumItems
+			bl_socket.existing_task_id = bl_cache.Signal.ResetEnumItems
 
 		return {'FINISHED'}
 
@@ -97,20 +101,6 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	new_task_name: str = bl_cache.BLField('', prop_ui=True)
 
 	####################
-	# - Property Changes
-	####################
-	def on_socket_prop_changed(self, prop_name: str) -> None:
-		if prop_name in [
-			'api_key',
-			'existing_folder_id',
-			'existing_task_id',
-			'new_task_name',
-			'should_exist',
-		]:
-			self.existing_folder_id = bl_cache.Signal.ResetEnumItems
-			self.existing_task_id = bl_cache.Signal.ResetEnumItems
-
-	####################
 	# - FlowKinds
 	####################
 	@property
@@ -124,33 +114,30 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	@property
 	def value(
 		self,
-	) -> tuple[tdcloud.CloudTaskName, tdcloud.CloudFolder] | tdcloud.CloudTask | None:
+	) -> ct.NewSimCloudTask | tdcloud.CloudTask | ct.FlowSignal:
 		if tdcloud.IS_AUTHENTICATED:
 			# Retrieve Folder
 			cloud_folder = tdcloud.TidyCloudFolders.folders().get(
 				self.existing_folder_id
 			)
 			if cloud_folder is None:
-				msg = f"Selected folder {cloud_folder} doesn't exist (it was probably deleted elsewhere)"
-				raise RuntimeError(msg)
+				return ct.FlowSignal.NoFlow  ## Folder deleted somewhere else
 
-			# Doesn't Exist: Return Construction Information
+			# Case: New Task
 			if not self.should_exist:
-				return (self.new_task_name, cloud_folder)
+				return ct.NewSimCloudTask(
+					task_name=self.new_task_name, cloud_folder=cloud_folder
+				)
 
-			# No Task Selected: Return None
-			if self.existing_task_id is None:
-				return None
+			# Case: Existing Task
+			if self.existing_task_id is not None:
+				cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
+					self.existing_task_id
+				)
+				if cloud_folder is None:
+					return ct.FlowSignal.NoFlow  ## Task deleted somewhere else
 
-			# Retrieve Cloud Task
-			cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
-				self.existing_task_id
-			)
-			if cloud_task is None:
-				msg = f"Selected task {cloud_task} doesn't exist (it was probably deleted elsewhere)"
-				raise RuntimeError(msg)
-
-			return cloud_task
+				return cloud_task
 
 		return ct.FlowSignal.FlowPending
 
@@ -226,17 +213,6 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 				)
 			)
 		]
-
-	####################
-	# - Node-Initiated Updates
-	####################
-	def on_new_task_created(self, cloud_task: tdcloud.CloudTask) -> None:
-		self.existing_folder_id = cloud_task.folder_id
-		self.existing_task_id = cloud_task.task_id
-		self.should_exist = True
-
-	def on_prepare_new_task(self):
-		self.should_exist = False
 
 	####################
 	# - UI

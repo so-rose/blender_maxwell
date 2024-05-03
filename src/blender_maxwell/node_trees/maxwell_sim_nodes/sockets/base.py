@@ -262,9 +262,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		"""
 		## TODO: Evaluate this properly
 		if self.initializing:
-			return
-
-		if hasattr(self, prop_name):
+			log.debug(
+				'%s: Rejected on_prop_changed("%s") while initializing',
+				self.bl_label,
+				prop_name,
+			)
+		elif hasattr(self, prop_name):
 			# Invalidate UI BLField Caches
 			if prop_name in self.ui_blfields:
 				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)

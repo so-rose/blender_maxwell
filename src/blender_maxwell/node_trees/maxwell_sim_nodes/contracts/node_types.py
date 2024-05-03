@@ -38,6 +38,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	Viewer = enum.auto()
 	## Outputs / File Exporters
 	Tidy3DWebExporter = enum.auto()
+	Tidy3DWebRunner = enum.auto()
 	## Outputs / Web Exporters
 	JSONFileExporter = enum.auto()
 

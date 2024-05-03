@@ -8,6 +8,7 @@ import datetime as dt
 import functools
 import tempfile
 import typing as typ
+import urllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,11 +47,27 @@ def set_offline():
 	IS_ONLINE = False
 
 
+def check_online() -> bool:
+	global IS_ONLINE  # noqa: PLW0603
+	try:
+		urllib.request.urlopen(
+			'https://docs.flexcompute.com/projects/tidy3d/en/latest/index.html',
+			timeout=2,
+		)
+	except:
+		IS_ONLINE = False
+		return False
+	else:
+		IS_ONLINE = True
+		return True
+
+
 ####################
 # - Cloud Authentication
 ####################
 def check_authentication() -> bool:
 	global IS_AUTHENTICATED  # noqa: PLW0603
+	log.critical('Checking Authentication')
 
 	# Check Previous Authentication
 	## If we authenticated once, we presume that it'll work again.
@@ -76,6 +93,14 @@ def check_authentication() -> bool:
 def authenticate_with_api_key(api_key: str) -> bool:
 	td_web.configure(api_key)
 	return check_authentication()
+
+
+TD_CONFIG = Path(td_web.cli.constants.CONFIG_FILE)
+
+## TODO: Robustness is key - internet might be down.
+## -> I'm not a huge fan of the max 2sec startup time burden
+if TD_CONFIG.is_file() and check_online():
+	check_authentication()
 
 
 ####################
@@ -145,11 +170,12 @@ class TidyCloudFolders:
 ####################
 @dataclass
 class CloudTaskInfo:
-	"""Toned-down, simplified `dataclass` variant of TaskInfo.
+	"""Toned-down `dataclass` variant of `tidy3d`'s TaskInfo.
 
 	See TaskInfo for more: <https://github.com/flexcompute/tidy3d/blob/453055e89dcff6d619597120b47817e996f1c198/tidy3d/web/core/task_info.py>)
 	"""
 
+	task_id: str
 	task_name: str
 	status: str
 	created_at: dt.datetime
@@ -167,6 +193,15 @@ class CloudTaskInfo:
 	task_type: str | None = None  ## solverVersion
 	version_solver: str | None = None  ## solverVersion
 	callback_url: str | None = None  ## callbackUrl
+
+	def disk_cache_path(self, addon_cache: Path) -> Path:
+		"""Compute an appropriate location for caching simulations downloaded from the internet, unique to each task ID.
+
+		Arguments:
+			task_id: The ID of the Tidy3D cloud task.
+		"""
+		(addon_cache / self.task_id).mkdir(exist_ok=True)
+		return addon_cache / self.task_id / 'sim_data.hdf5'
 
 
 class TidyCloudTasks:
@@ -232,6 +267,7 @@ class TidyCloudTasks:
 		## Task Info Cache
 		for task_id, cloud_task in cloud_tasks.items():
 			cls.cache_task_info[task_id] = CloudTaskInfo(
+				task_id=task_id,
 				task_name=cloud_task.taskName,
 				status=cloud_task.status,
 				created_at=cloud_task.created_at,
@@ -346,6 +382,7 @@ class TidyCloudTasks:
 
 		## Task Info Cache
 		cls.cache_task_info[cloud_task.task_id] = CloudTaskInfo(
+			task_id=cloud_task.task_id,
 			task_name=cloud_task.taskName,
 			status=cloud_task.status,
 			created_at=cloud_task.created_at,

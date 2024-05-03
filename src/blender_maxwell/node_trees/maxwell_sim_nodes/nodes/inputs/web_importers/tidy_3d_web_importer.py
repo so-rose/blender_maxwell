@@ -35,7 +35,7 @@ class LoadCloudSim(bpy.types.Operator):
 		node = context.node
 
 		# Try Loading Simulation Data
-		#node.sim_data = bl_cache.Signal.InvalidateCache
+		# node.sim_data = bl_cache.Signal.InvalidateCache
 		sim_data = node.sim_data
 		if sim_data is None:
 			self.report(
@@ -46,16 +46,6 @@ class LoadCloudSim(bpy.types.Operator):
 			self.report({'INFO'}, 'Sim Data loaded.')
 
 		return {'FINISHED'}
-
-
-def _sim_data_cache_path(task_id: str) -> Path:
-	"""Compute an appropriate location for caching simulations downloaded from the internet, unique to each task ID.
-
-	Arguments:
-		task_id: The ID of the Tidy3D cloud task.
-	"""
-	(ct.addon.ADDON_CACHE / task_id).mkdir(exist_ok=True)
-	return ct.addon.ADDON_CACHE / task_id / 'sim_data.hdf5'
 
 
 ####################
