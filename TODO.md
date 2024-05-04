@@ -510,7 +510,7 @@ Header color style can't be done, unfortunately. Body color feels unclean, so no
 
 ## BLCache
 - [ ] Replace every raw property with `BLField`.
-- [ ] Add matrix property support: https://developer.blender.org/docs/release_notes/3.0/python_api/#other-additions
+- [x] Add matrix property support: https://developer.blender.org/docs/release_notes/3.0/python_api/#other-additions
 - [ ] Fix many problems by persisting `_enum_cb_cache` and `_str_cb_cache`.
 - [ ] Docstring parser for descriptions.
 - [ ] Method of dynamically setting property options after creation, using `idproperty_ui_data`
@@ -524,6 +524,10 @@ We're trying to do our part by reporting bugs we find!
 This is where we keep track of them for now, if they're not covered by the above listings.
 
 ## Blender Maxwell Bugs
+See Issues.
+
+## Testing
+- [ ] `pytest` integration exhibits a bootstrapping problem when using https://github.com/mondeja/pytest-blender
 
 ## Blender Bugs
 Reported:
@@ -545,6 +549,7 @@ Unreported:
 ## Tidy3D bugs
 Unreported:
 - Directly running `SimulationTask.get()` is missing fields - it doesn't return some fields, including `created_at`. Listing tasks by folder is not broken.
+- Frequency ranges don't check for repeated elements.
 
 
 

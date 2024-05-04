@@ -8,10 +8,13 @@ import jaxtyping as jtyp
 import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from .array import ArrayFlow
 from .flow_kinds import FlowKind
 from .lazy_value_func import LazyValueFuncFlow
+
+log = logger.get(__name__)
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -84,6 +87,16 @@ class LazyArrayRangeFlow:
 
 	@functools.cached_property
 	def mathtype(self) -> spux.MathType:
+		"""Conservatively compute the most stringent `spux.MathType` that can represent both `self.start` and `self.stop`.
+
+		Notes:
+			The mathtype is determined from start/stop either using `sympy` assumptions, or as Python types.
+
+			For precise information on how start/stop are "combined", see `spux.MathType.combine()`.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
 		# Get Start Mathtype
 		if isinstance(self.start, spux.SympyType):
 			start_mathtype = spux.MathType.from_expr(self.start)
@@ -97,12 +110,22 @@ class LazyArrayRangeFlow:
 			stop_mathtype = spux.MathType.from_pytype(type(self.stop))
 
 		# Check Equal
-		if start_mathtype != stop_mathtype:
-			return spux.MathType.combine(start_mathtype, stop_mathtype)
-
-		return start_mathtype
+		combined_mathtype = spux.MathType.combine(start_mathtype, stop_mathtype)
+		log.debug(
+			'%s: Computed MathType as %s (start_mathtype=%s, stop_mathtype=%s)',
+			self,
+			combined_mathtype,
+			start_mathtype,
+			stop_mathtype,
+		)
+		return combined_mathtype
 
 	def __len__(self):
+		"""Compute the length of the array to be realized.
+
+		Returns:
+			The number of steps.
+		"""
 		return self.steps
 
 	####################
@@ -121,6 +144,11 @@ class LazyArrayRangeFlow:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
 		"""
 		if self.unit is not None:
+			log.debug(
+				'%s: Corrected unit to %s',
+				self,
+				corrected_unit,
+			)
 			return LazyArrayRangeFlow(
 				start=self.start,
 				stop=self.stop,
@@ -146,6 +174,11 @@ class LazyArrayRangeFlow:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
 		"""
 		if self.unit is not None:
+			log.debug(
+				'%s: Scaled to unit %s',
+				self,
+				unit,
+			)
 			return LazyArrayRangeFlow(
 				start=spux.scale_to_unit(self.start * self.unit, unit),
 				stop=spux.scale_to_unit(self.stop * self.unit, unit),
@@ -171,13 +204,18 @@ class LazyArrayRangeFlow:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
 		"""
 		if self.unit is not None:
+			log.debug(
+				'%s: Scaled to unit system: %s',
+				self,
+				str(unit_system),
+			)
 			return LazyArrayRangeFlow(
 				start=spux.strip_unit_system(
 					spux.convert_to_unit_system(self.start * self.unit, unit_system),
 					unit_system,
 				),
 				stop=spux.strip_unit_system(
-					spux.convert_to_unit_system(self.start * self.unit, unit_system),
+					spux.convert_to_unit_system(self.stop * self.unit, unit_system),
 					unit_system,
 				),
 				steps=self.steps,

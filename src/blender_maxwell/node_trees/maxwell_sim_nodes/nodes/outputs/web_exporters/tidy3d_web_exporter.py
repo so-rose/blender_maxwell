@@ -320,7 +320,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	def on_sim_changed(self, props) -> None:
 		# Sim Linked | First Value Change
 		if self.inputs['Sim'].is_linked and not props['sim_info_available']:
-			log.critical('First Change: Mark Sim Info Available')
+			log.debug('%s: First Change; Mark Sim Info Available', self.sim_node_name)
 			self.sim = bl_cache.Signal.InvalidateCache
 			self.total_monitor_data = bl_cache.Signal.InvalidateCache
 			self.is_sim_uploadable = bl_cache.Signal.InvalidateCache
@@ -332,7 +332,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			and props['sim_info_available']
 			and not props['sim_info_invalidated']
 		):
-			log.critical('Second Change: Mark Sim Info Invalided')
+			log.debug('%s: Second Change; Mark Sim Info Invalided', self.sim_node_name)
 			self.sim_info_invalidated = True
 
 		# Sim Linked | Nth Time
@@ -346,7 +346,9 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		## -> Luckily, since we know there's no sim, invalidation is cheap.
 		## -> Ends up being a "circuit breaker" for sim_info_invalidated.
 		elif not self.inputs['Sim'].is_linked:
-			log.critical('Unlinked: Short Circuit Zap Cache')
+			log.debug(
+				'%s: Unlinked; Short Circuit the Sim Info Cache', self.sim_node_name
+			)
 			self.sim = bl_cache.Signal.InvalidateCache
 			self.total_monitor_data = bl_cache.Signal.InvalidateCache
 			self.is_sim_uploadable = bl_cache.Signal.InvalidateCache
@@ -368,7 +370,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		props={'uploaded_task_id'},
 	)
 	def on_uploaded_task_changed(self, props):
-		log.critical('Uploaded Task Changed')
+		log.debug('Uploaded Task Changed')
 		self.is_sim_uploadable = bl_cache.Signal.InvalidateCache
 
 		if props['uploaded_task_id'] != '':

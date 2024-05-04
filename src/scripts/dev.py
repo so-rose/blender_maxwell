@@ -83,7 +83,6 @@ if __name__ == '__main__':
 
 	# Run Addon
 	print(f'Blender: Running "{info.ADDON_NAME}"...')
-	subprocess.run
 	return_code, output = run_blender(
 		None, headless=False, load_devfile=True, monitor=True
 	)

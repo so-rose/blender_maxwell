@@ -49,15 +49,19 @@ def set_offline():
 
 def check_online() -> bool:
 	global IS_ONLINE  # noqa: PLW0603
+	log.info('Checking Internet Connection...')
+
 	try:
 		urllib.request.urlopen(
 			'https://docs.flexcompute.com/projects/tidy3d/en/latest/index.html',
 			timeout=2,
 		)
-	except:
+	except:  # noqa: E722
+		log.info('Internet is currently offline')
 		IS_ONLINE = False
 		return False
 	else:
+		log.info('Internet connection is working')
 		IS_ONLINE = True
 		return True
 
@@ -67,26 +71,25 @@ def check_online() -> bool:
 ####################
 def check_authentication() -> bool:
 	global IS_AUTHENTICATED  # noqa: PLW0603
-	log.critical('Checking Authentication')
-
-	# Check Previous Authentication
-	## If we authenticated once, we presume that it'll work again.
-	## TODO: API keys can change... It would just look like "offline" for now.
-	if IS_AUTHENTICATED:
-		return True
+	log.info('Checking Tidy3D Authentication...')
 
 	api_key = td_web.core.http_util.api_key()
 	if api_key is not None:
+		log.info('Found stored Tidy3D API key')
 		try:
 			td_web.test()
-			set_online()
 		except td.exceptions.WebError:
 			set_offline()
+			log.info('Authenticated to Tidy3D cloud')
 			return False
+		else:
+			set_online()
+			log.info('Authenticated to Tidy3D cloud')
 
 		IS_AUTHENTICATED = True
 		return True
 
+	log.info('Tidy3D API key is missing')
 	return False
 
 
@@ -99,6 +102,7 @@ TD_CONFIG = Path(td_web.cli.constants.CONFIG_FILE)
 
 ## TODO: Robustness is key - internet might be down.
 ## -> I'm not a huge fan of the max 2sec startup time burden
+## -> I also don't love "calling" Tidy3D on startup, privacy-wise
 if TD_CONFIG.is_file() and check_online():
 	check_authentication()
 

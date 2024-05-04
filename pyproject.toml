@@ -39,7 +39,8 @@ managed = true
 virtual = true
 dev-dependencies = [
     "ruff>=0.3.2",
-    "fake-bpy-module-4-0>=20231118",  ## TODO: Update to Blender 4.1.0
+    "fake-bpy-module-4-0>=20231118",
+    ## TODO: Update to Blender 4.1.0
 ]
 
 [tool.rye.scripts]
@@ -143,3 +144,9 @@ max-args = 6
 quote-style = "single"
 indent-style = "tab"
 docstring-code-format = false
+
+####################
+# - Tooling: Pytest
+####################
+#[tool.pytest.ini_options]
+

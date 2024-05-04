@@ -50,19 +50,21 @@ class FlowKind(enum.StrEnum):
 	def scale_to_unit_system(
 		cls,
 		kind: typ.Self,
-		value,
+		flow_obj,
 		unit_system: spux.UnitSystem,
 	):
-		if kind == cls.Value:
+		log.debug('%s: Scaling "%s" to Unit System', kind, str(flow_obj))
+		if kind == FlowKind.Value:
 			return spux.scale_to_unit_system(
-				value,
+				flow_obj,
 				unit_system,
 			)
-		if kind == cls.LazyArrayRange:
-			return value.rescale_to_unit_system(unit_system)
+		if kind == FlowKind.LazyArrayRange:
+			log.debug([kind, flow_obj, unit_system])
+			return flow_obj.rescale_to_unit_system(unit_system)
 
-		if kind == cls.Params:
-			return value.rescale_to_unit_system(unit_system)
+		if kind == FlowKind.Params:
+			return flow_obj.rescale_to_unit_system(unit_system)
 
 		msg = 'Tried to scale unknown kind'
 		raise ValueError(msg)

@@ -1,17 +1,19 @@
 from .array import ArrayFlow
-from .capabiltiies import CapabilitiesFlow
+from .capabilities import CapabilitiesFlow
 from .flow_kinds import FlowKind
-from .lazy_array_range import LazyArrayRange
-from .lazy_value_func import LazyValueFunc
-from .params import Params
+from .info import InfoFlow
+from .lazy_array_range import LazyArrayRangeFlow
+from .lazy_value_func import LazyValueFuncFlow
+from .params import ParamsFlow
 from .value import ValueFlow
 
 __all__ = [
 	'ArrayFlow',
 	'CapabilitiesFlow',
 	'FlowKind',
-	'LazyArrayRange',
-	'LazyValueFunc',
-	'Params',
+	'InfoFlow',
+	'LazyArrayRangeFlow',
+	'LazyValueFuncFlow',
+	'ParamsFlow',
 	'ValueFlow',
 ]
