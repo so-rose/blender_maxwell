@@ -1,6 +1,6 @@
 [project]
 name = "blender_maxwell"
-version = "0.0.1"
+version = "0.1.0"
 description = "Real-time design and visualization of Maxwell simulations in Blender 3D, with deep Tidy3D integration. "
 authors = [
     { name = "Sofus Albert Høgsbro Rose", email = "blender-maxwell@sofusrose.com" }
