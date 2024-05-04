@@ -45,6 +45,7 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
 		bl_socket.initializing = False
+		bl_socket.on_active_kind_changed()
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
@@ -221,21 +222,18 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 	####################
 	# - Property Event: On Update
 	####################
-	def _on_active_kind_changed(self) -> None:
+	def on_active_kind_changed(self) -> None:
 		"""Matches the display shape to the active `FlowKind`.
 
 		Notes:
 			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
-		self.display_shape = (
-			'SQUARE'
-			if self.active_kind == ct.FlowKind.LazyArrayRange
-			else ('DIAMOND' if self.active_kind == ct.FlowKind.Array else 'CIRCLE')
-		) + (
-			'_DOT'
-			if hasattr(self, 'physical_type') and self.physical_type is not None
-			else ''
-		)
+		self.display_shape = {
+			ct.FlowKind.Value: 'CIRCLE',
+			ct.FlowKind.Array: 'SQUARE',
+			ct.FlowKind.LazyArrayRange: 'SQUARE',
+			ct.FlowKind.LazyValueFunc: 'DIAMOND',
+		}[self.active_kind]
 
 	def on_socket_prop_changed(self, prop_name: str) -> None:
 		"""Called when a property has been updated.
@@ -243,8 +241,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Notes:
 			Can be overridden if a socket needs to respond to a property change.
 
-			**Always prefer using node events when possible**.
-			Think very carefully before using this, and use it with the greatest of care.
+			**Always prefer using node events instead of overriding this in a socket**.
+			Think **very carefully** before using this, and use it with the greatest of care.
 
 		Attributes:
 			prop_name: The name of the property that was changed.
@@ -274,7 +272,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 
 			# Property Callbacks: Active Kind
 			if prop_name == 'active_kind':
-				self._on_active_kind_changed()
+				self.on_active_kind_changed()
 
 			# Property Callbacks: Per-Socket
 			self.on_socket_prop_changed(prop_name)
