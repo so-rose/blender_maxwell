@@ -7,7 +7,7 @@ authors = [
 ]
 dependencies = [
     "tidy3d>=2.6.3",
-    "pydantic==2.6.*",
+    "pydantic>=2.7.1",
     "sympy==1.12",
     "scipy==1.12.*",
     "trimesh==4.2.*",
@@ -21,12 +21,16 @@ dependencies = [
     # Pin Blender 4.1.0-Compatible Versions
     ## The dependency resolver will report if anything is wonky.
     "urllib3==1.26.8",
-    "requests==2.27.1",
+	#"requests==2.27.1",  ## Conflict with dev-dep commitizen
     "numpy==1.24.3",
     "idna==3.3",
-    "charset-normalizer==2.0.10",
+	#"charset-normalizer==2.0.10",  ## Conflict with dev-dep commitizen
     "certifi==2021.10.8",
 ]
+## When it comes to dev-dep conflicts:
+## -> It's okay to leave Blender-pinned deps out of prod; Blender still has them.
+## -> In edge cases, other deps might grab newer versions and Blender will complain.
+## -> Let's wait and see if this is more than a theoretical issue.
 readme = "README.md"
 requires-python = "~= 3.11"
 license = { text = "AGPL-3.0-or-later" }
@@ -38,9 +42,16 @@ license = { text = "AGPL-3.0-or-later" }
 managed = true
 virtual = true
 dev-dependencies = [
-    "ruff>=0.3.2",
+    "ruff>=0.4.3",
     "fake-bpy-module-4-0>=20231118",
-    ## TODO: Update to Blender 4.1.0
+    ## TODO: Blender 4.1 (when available)
+    "pre-commit>=3.7.0",
+	"commitizen>=3.25.0",
+    ## Requires charset-normalizer>=2.1.0
+    # Required by Commitizen
+    ## -> It's okay to have different dev/prod versions in our use case.
+	"charset-normalizer==2.1.*",
+    ## Manually scanned CHANGELOG; seems compatible.
 ]
 
 [tool.rye.scripts]
@@ -146,7 +157,19 @@ indent-style = "tab"
 docstring-code-format = false
 
 ####################
-# - Tooling: Pytest
+# - Tooling: Commits
 ####################
-#[tool.pytest.ini_options]
+[tool.commitizen]
+# Specification
+name = "cz_conventional_commits"
+version_scheme = "semver2"
+version_provider = "pep621"
+tag_format = "v$version"
 
+# Version Bumping
+major_version_zero = true
+update_changelog_on_bump = true
+
+# Annotations / Signature
+gpg_sign = true
+annotated_tag = true

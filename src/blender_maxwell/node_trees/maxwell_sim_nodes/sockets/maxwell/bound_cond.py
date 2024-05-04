@@ -1,5 +1,3 @@
-import typing as typ
-
 import bpy
 import tidy3d as td
 

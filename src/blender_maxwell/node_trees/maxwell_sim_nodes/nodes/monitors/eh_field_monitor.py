@@ -40,8 +40,6 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			mathtype=spux.MathType.Integer,
 			default_value=sp.Matrix([10, 10, 10]),
 		),
-		## TODO: Pass a grid instead of size and resolution
-		## TODO: 1D (line), 2D (plane), 3D modes
 	}
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {

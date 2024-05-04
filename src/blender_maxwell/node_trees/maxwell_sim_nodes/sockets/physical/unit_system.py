@@ -1,7 +1,6 @@
 import bpy
 
-#from blender_maxwell.utils.pydantic_sympy import SympyExpr
-
+# from blender_maxwell.utils.pydantic_sympy import SympyExpr
 from ... import contracts as ct
 from .. import base
 
@@ -137,14 +136,18 @@ class PhysicalUnitSystemBLSocket(base.MaxwellSimSocket):
 		description='Unit of acceleration',
 		items=contract_units_to_items(ST.PhysicalAccelScalar),
 		default=default_unit_key_for(ST.PhysicalAccelScalar),
-		update=(lambda self, context: self.on_prop_changed('unit_accel_scalar', context)),
+		update=(
+			lambda self, context: self.on_prop_changed('unit_accel_scalar', context)
+		),
 	)
 	unit_force_scalar: bpy.props.EnumProperty(
 		name='Force Scalar Unit',
 		description='Unit of scalar force',
 		items=contract_units_to_items(ST.PhysicalForceScalar),
 		default=default_unit_key_for(ST.PhysicalForceScalar),
-		update=(lambda self, context: self.on_prop_changed('unit_force_scalar', context)),
+		update=(
+			lambda self, context: self.on_prop_changed('unit_force_scalar', context)
+		),
 	)
 	unit_accel_3d: bpy.props.EnumProperty(
 		name='Accel3D Unit',

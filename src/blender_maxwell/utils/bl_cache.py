@@ -323,7 +323,7 @@ class CachedBLProperty:
 				"Can't Get CachedBLProperty: Instance ID not (yet) defined on BLInstance %s",
 				str(bl_instance),
 			)
-			return
+			return None
 
 		# Create Non-Persistent Cache Entry
 		## Prefer explicit cache management to 'defaultdict'

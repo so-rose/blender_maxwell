@@ -5,11 +5,8 @@ Attributes:
 	BL_SOCKET_4D_TYPE_PREFIXES: Blender socket prefixes which indicate that the Blender socket has four values.
 """
 
-import typing as typ
-
 import bpy
 
-from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger as _logger
 
 from . import contracts as ct

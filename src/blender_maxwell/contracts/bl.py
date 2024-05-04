@@ -139,7 +139,7 @@ BLOperatorStatus: typ.TypeAlias = set[
 ####################
 # - Addon Types
 ####################
-KeymapItemDef: typ.TypeAlias = typ.Any  ## TODO: Better Type
+KeymapItemDef: typ.TypeAlias = typ.Any
 ManagedObjName = str
 
 ####################

@@ -1,7 +1,6 @@
 import enum
 import typing as typ
 
-
 _FLOW_SIGNAL_SET: set | None = None
 
 

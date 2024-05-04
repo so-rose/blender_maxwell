@@ -57,6 +57,3 @@ class StringSocketDef(base.SocketDef):
 BL_REGISTER = [
 	StringBLSocket,
 ]
-
-
-

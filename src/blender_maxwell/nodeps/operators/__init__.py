@@ -1,4 +1,4 @@
-from . import install_deps, uninstall_deps, manage_pydeps
+from . import install_deps, manage_pydeps, uninstall_deps
 
 BL_REGISTER = [
 	*install_deps.BL_REGISTER,

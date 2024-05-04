@@ -144,6 +144,4 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	AdiabAbsorbBoundCondNode,
 ]
-BL_NODES = {
-	ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)
-}
+BL_NODES = {ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)}

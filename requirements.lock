@@ -96,9 +96,9 @@ partd==1.4.1
     # via dask
 pillow==10.2.0
     # via matplotlib
-pydantic==2.6.0
+pydantic==2.7.1
     # via tidy3d
-pydantic-core==2.16.1
+pydantic-core==2.18.2
     # via pydantic
 pygments==2.17.2
     # via rich

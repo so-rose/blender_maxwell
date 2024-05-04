@@ -1,4 +1,3 @@
-import enum
 import typing as typ
 
 import bpy

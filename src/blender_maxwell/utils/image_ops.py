@@ -126,7 +126,7 @@ def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 	ax = fig.add_subplot()
 
 	# The Customer is Always Right (in Matters of Taste)
-	#fig.tight_layout(pad=0)
+	# fig.tight_layout(pad=0)
 	return (fig, canvas, ax)
 
 
@@ -250,7 +250,7 @@ def plot_heatmap_2d(
 	y_unit = info.dim_units[y_name]
 
 	heatmap = ax.imshow(data, aspect='auto', interpolation='none')
-	#ax.figure.colorbar(heatmap, ax=ax)
+	# ax.figure.colorbar(heatmap, ax=ax)
 	ax.set_title('Heatmap')
 	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
 	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))

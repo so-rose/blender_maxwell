@@ -11,10 +11,10 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	ExtractData = enum.auto()
 	Viz = enum.auto()
 	## Analysis / Math
+	OperateMath = enum.auto()
 	MapMath = enum.auto()
 	FilterMath = enum.auto()
 	ReduceMath = enum.auto()
-	OperateMath = enum.auto()
 	TransformMath = enum.auto()
 
 	# Inputs
@@ -22,9 +22,8 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	Scene = enum.auto()
 	## Inputs / Constants
 	ExprConstant = enum.auto()
-	PhysicalConstant = enum.auto()
 	NumberConstant = enum.auto()
-	VectorConstant = enum.auto()
+	PhysicalConstant = enum.auto()
 	ScientificConstant = enum.auto()
 	UnitSystemConstant = enum.auto()
 	BlenderConstant = enum.auto()
@@ -104,8 +103,9 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	KSpaceNearFieldProjectionMonitor = enum.auto()
 
 	# Sims
-	FDTDSim = enum.auto()
+	Combine = enum.auto()
 	SimDomain = enum.auto()
+	FDTDSim = enum.auto()
 	SimGrid = enum.auto()
 	## Sims / Sim Grid Axis
 	AutomaticSimGridAxis = enum.auto()
@@ -114,5 +114,4 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	ArraySimGridAxis = enum.auto()
 
 	# Utilities
-	Combine = enum.auto()
 	Separate = enum.auto()

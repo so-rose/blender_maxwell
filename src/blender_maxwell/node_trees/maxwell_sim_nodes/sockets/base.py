@@ -831,8 +831,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			col = row.column(align=True)
 			{
 				ct.FlowKind.Value: self.draw_value,
-				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
 				ct.FlowKind.Array: self.draw_array,
+				ct.FlowKind.LazyArrayRange: self.draw_lazy_array_range,
+				ct.FlowKind.LazyValueFunc: self.draw_lazy_value_func,
 			}[self.active_kind](col)
 
 		# Info Drawing

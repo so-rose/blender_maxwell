@@ -1,7 +1,6 @@
 """Tools for fearless managemenet of addon-specific Python dependencies."""
 
 import contextlib
-import functools
 import importlib.metadata
 import os
 import sys

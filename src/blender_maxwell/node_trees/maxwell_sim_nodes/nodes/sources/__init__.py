@@ -4,8 +4,6 @@ from . import (
 	# plane_wave_source,
 	point_dipole_source,
 	temporal_shapes,
-	# tfsf_source,
-	# uniform_current_source,
 )
 
 BL_REGISTER = [

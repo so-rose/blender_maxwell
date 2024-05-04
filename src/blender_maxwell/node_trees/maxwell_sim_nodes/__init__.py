@@ -1,4 +1,3 @@
-
 from . import categories, node_tree, nodes, sockets
 
 BL_REGISTER = [

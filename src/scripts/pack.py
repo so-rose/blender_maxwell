@@ -38,7 +38,7 @@ def zipped_addon(  # noqa: PLR0913
 		path_addon_pkg: Path to the folder containing __init__.py of the Blender addon.
 		path_addon_zip: Path to the Addon ZIP to generate.
 		path_pyproject_toml: Path to the `pyproject.toml` of the project.
-			This is made available to the addon, to de-duplicate definition of name, 
+			This is made available to the addon, to de-duplicate definition of name,
 	The .zip file is deleted afterwards, unless `remove_after_close` is specified.
 	"""
 	# Delete Existing ZIP (maybe)

@@ -13,7 +13,6 @@ from . import base
 
 ## TODO: This is a big node, and there's a lot to get right.
 ## - Dynamically adjust socket color in response to, especially, the unit dimension.
-## - Iron out the meaning of display shapes.
 ## - Generally pay attention to validity checking; it's make or break.
 ## - For array generation, it may pay to have both a symbolic expression (producing output according to `shape` as usual) denoting how to actually make values, and how many. Enables ex. easy symbolic plots.
 

@@ -1,6 +1,6 @@
 """Declares `ManagedBLImage`."""
 
-#import time
+# import time
 import typing as typ
 
 import bpy

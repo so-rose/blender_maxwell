@@ -1,4 +1,3 @@
-
 import bpy
 
 from blender_maxwell.utils import logger

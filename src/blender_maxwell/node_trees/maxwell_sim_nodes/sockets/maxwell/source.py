@@ -15,8 +15,6 @@ class MaxwellSourceSocketDef(base.SocketDef):
 
 	is_list: bool = False
 
-	## TODO: capabilities() to require source sockets
-
 	def init(self, bl_socket: MaxwellSourceBLSocket) -> None:
 		if self.is_list:
 			bl_socket.active_kind = ct.FlowKind.Array

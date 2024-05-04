@@ -81,11 +81,9 @@ BL_NODE_CATEGORIES = mk_node_categories(
 	ct.NodeCategory.get_tree()['MAXWELLSIM'],
 	syllable_prefix=['MAXWELLSIM'],
 )
-## TODO: refactor, this has a big code smell
 BL_REGISTER = [*DYNAMIC_SUBMENU_REGISTRATIONS]  ## Must be run after, right now.
 
 
-## TEST - TODO this is a big code smell
 def menu_draw(self, context):
 	if context.space_data.tree_type == ct.TreeType.MaxwellSim.value:
 		for nodeitem_or_submenu in BL_NODE_CATEGORIES:

@@ -1,6 +1,6 @@
 # from . import sim_grid
 # from . import sim_grid_axes
-from . import fdtd_sim, sim_domain, combine
+from . import combine, fdtd_sim, sim_domain
 
 BL_REGISTER = [
 	*combine.BL_REGISTER,

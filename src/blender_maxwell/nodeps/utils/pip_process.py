@@ -2,7 +2,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from . import pydeps, simple_logger
@@ -73,7 +72,7 @@ def returncode() -> bool:
 
 
 def kill() -> None:
-	global PROCESS  # noqa: PLW0603
+	global PROCESS
 
 	if not is_running():
 		msg = "Can't kill process that isn't running"
