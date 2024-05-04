@@ -116,7 +116,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
 			interval_space=(1, 1, 1),
-			freqs=input_sockets['Freqs'].realize().values,
+			freqs=input_sockets['Freqs'].realize_array,
 			normal_dir='+' if input_sockets['Direction'] else '-',
 		)
 
@@ -142,11 +142,11 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'Size'},
+		socket_name={'Center', 'Size', 'Direction'},
 		run_on_init=True,
 		# Loaded
 		managed_objs={'mesh', 'modifier'},
-		input_sockets={'Center', 'Size'},
+		input_sockets={'Center', 'Size', 'Direction'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
@@ -167,6 +167,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],
+					'Direction': input_sockets['Direction'],
 				},
 			},
 		)
