@@ -14,11 +14,11 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import tidy_3d_web_runner
+from . import tidy3d_web_runner
 
 BL_REGISTER = [
-	*tidy_3d_web_runner.BL_REGISTER,
+	*tidy3d_web_runner.BL_REGISTER,
 ]
 BL_NODES = {
-	**tidy_3d_web_runner.BL_NODES,
+	**tidy3d_web_runner.BL_NODES,
 }
