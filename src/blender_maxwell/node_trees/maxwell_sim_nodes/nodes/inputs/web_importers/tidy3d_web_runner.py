@@ -56,8 +56,6 @@ class RunSimulation(bpy.types.Operator):
 		node = context.node
 		node.cloud_task.submit()
 
-		## TODO: Start modal timer that checks progress in a subprocess.
-
 		return {'FINISHED'}
 
 
@@ -174,7 +172,6 @@ class Tidy3DWebRunnerNode(base.MaxwellSimNode):
 		"""Checks whether all conditions are satisfied to be able to actually run a simulation."""
 		if self.task_info is not None:
 			return self.task_info.status == 'draft'
-			## TODO: Rely on Visible Cost Estimate
 		return False
 
 	####################
@@ -282,5 +279,5 @@ BL_REGISTER = [
 	Tidy3DWebRunnerNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DWebRunner: (ct.NodeCategory.MAXWELLSIM_OUTPUTS_WEBEXPORTERS)
+	ct.NodeType.Tidy3DWebRunner: (ct.NodeCategory.MAXWELLSIM_INPUTS_WEBIMPORTERS)
 }

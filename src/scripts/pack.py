@@ -14,8 +14,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# noqa: INP001
-
 import contextlib
 import logging
 import tempfile
@@ -131,7 +129,6 @@ def main():
 		replace_if_exists=True,
 		remove_after_close=False,
 	):
-		# TODO: GPG signature for distribution
 		pass
 
 

@@ -29,7 +29,7 @@ def prefix_values_with(prefix: str) -> type[enum.Enum]:
 	Returns:
 		A new StrEnum class with altered member values.
 	"""
-	## TODO: DO NOT USE FOR ENUMS WITH METHODS
+	## DO NOT USE FOR ENUMS WITH METHODS
 
 	def _decorator(cls: enum.StrEnum):
 		new_members = {
@@ -49,7 +49,6 @@ def prefix_values_with(prefix: str) -> type[enum.Enum]:
 ####################
 # - BlenderTypeEnum
 ####################
-## TODO: Migrate everyone to simple StrEnums
 class BlenderTypeEnum(str, enum.Enum):
 	"""Homegrown `str` enum for Blender types."""
 
@@ -84,7 +83,7 @@ def wrap_values_in_MT(cls) -> type[enum.Enum]:
 	new_cls = enum.Enum(cls.__name__, new_members, type=BlenderTypeEnum)
 	new_cls.__doc__ = cls.__doc__
 	new_cls.__module__ = cls.__module__
-	new_cls.get_tree = cls.get_tree  ## TODO: This is wildly specific...
+	new_cls.get_tree = cls.get_tree
 
 	# Return New (Replacing) Enum Class
 	return new_cls

@@ -101,9 +101,8 @@ class ArrayFlow:
 			return ArrayFlow(
 				values=float(spux.scaling_factor(self.unit, unit)) * self.values,
 				unit=unit,
-				is_sorted=self.is_sorted,  ## TODO: Can we really say that?
+				is_sorted=self.is_sorted,
 			)
-			## TODO: Is this scaling numerically stable?
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
 		raise ValueError(msg)

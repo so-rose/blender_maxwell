@@ -108,8 +108,6 @@ class UninstallPyDeps(bpy.types.Operator):
 		# Brutally Delete / Remake PyDeps Folder
 		## The point isn't to protect against dedicated stupididy.
 		## Just to nudge away a few of the obvious "bad ideas" users might have.
-		## TODO: Handle rmtree.avoids_symlink_attacks
-		## TODO: Handle audit events
 		log.warning(
 			'Deleting and Creating Folder at "%s": %s',
 			'pydeps_path',

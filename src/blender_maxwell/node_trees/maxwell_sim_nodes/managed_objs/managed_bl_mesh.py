@@ -227,8 +227,6 @@ class ManagedBLMesh(base.ManagedObj):
 
 	@property
 	def mesh_as_arrays(self) -> dict:
-		## TODO: Cached
-
 		# Ensure Updated Geometry
 		log.debug('Updating View Layer')
 		bpy.context.view_layer.update()

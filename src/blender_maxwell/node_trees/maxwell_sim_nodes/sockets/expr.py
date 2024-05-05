@@ -27,11 +27,6 @@ from blender_maxwell.utils import extra_sympy_units as spux
 from .. import contracts as ct
 from . import base
 
-## TODO: This is a big node, and there's a lot to get right.
-## - Dynamically adjust socket color in response to, especially, the unit dimension.
-## - Generally pay attention to validity checking; it's make or break.
-## - For array generation, it may pay to have both a symbolic expression (producing output according to `shape` as usual) denoting how to actually make values, and how many. Enables ex. easy symbolic plots.
-
 log = logger.get(__name__)
 
 Int2: typ.TypeAlias = tuple[int, int]
@@ -77,6 +72,15 @@ class InfoDisplayCol(enum.StrEnum):
 
 
 class ExprBLSocket(base.MaxwellSimSocket):
+	"""The `Expr` ("Expression") socket is an accessible approach to specifying any expression.
+
+	- **Shape**: There is an intuitive UI for scalar, 2D, and 3D, but the `Expr` socket also supports parsing mathematical expressions of any shape (including matrices).
+	- **Math Type**: Support integer, rational, real, and complex mathematical types, for which there is an intuitive UI for scalar, 2D, and 3D cases.
+	- **Physical Type**: Supports the declaration of a physical unit dimension, for which a UI exists for the user to switch between long lists of valid units for that dimension, with automatic conversion of the value. This causes the expression to become unit-aware, which will be respected when using it for math.
+	- **Symbols**: Supports the use of variables (each w/predefined `MathType`) to define arbitrary mathematical expressions, which can be used as part of a function composition chain and/or as a parameter realized at `Viz` / when generating batched simulations / when performing gradient-based optimization.
+	- **Information UX**: All information encoded by the expression is presented using an intuitive UI, including filterable access to the shape of any data passing through a linked socket.
+	"""
+
 	socket_type = ct.SocketType.Expr
 	bl_label = 'Expr'
 	use_info_draw = True
@@ -556,12 +560,11 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	@property
 	def info(self) -> ct.ArrayFlow:
 		return ct.InfoFlow(
-			output_name='_',  ## TODO: Something else
+			output_name='_',
 			output_shape=self.shape,
 			output_mathtype=self.mathtype,
 			output_unit=self.unit,
 		)
-		## TODO: When expression can be used w/arrays, then allow directly outputting a LazyArrayRange pumped through the given expression. Or something like that.
 
 	####################
 	# - FlowKind: Capabilities
@@ -572,8 +575,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
 		)
-		## TODO: Prevent all invalid linkage between sockets used as expressions, but don't be too brutal :)
-		## - This really is a killer feature. But we want to get it right. So we leave it as todo until we know exactly how to tailor CapabilitiesFlow to these needs.
 
 	####################
 	# - UI
@@ -774,7 +775,6 @@ class ExprSocketDef(base.SocketDef):
 	] = ct.FlowKind.Value
 
 	# Socket Interface
-	## TODO: __hash__ like socket method based on these?
 	shape: tuple[int, ...] | None = None
 	mathtype: spux.MathType = spux.MathType.Real
 	physical_type: spux.PhysicalType | None = None
@@ -785,16 +785,13 @@ class ExprSocketDef(base.SocketDef):
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = sp.S(0)
-	abs_min: spux.SympyExpr | None = None  ## TODO: Not used (yet)
-	abs_max: spux.SympyExpr | None = None  ## TODO: Not used (yet)
-	## TODO: Idea is to use this scalar uniformly for all shape elements
-	## TODO: -> But we may want to **allow** using same-shape for diff. bounds.
+	abs_min: spux.SympyExpr | None = None
+	abs_max: spux.SympyExpr | None = None
 
 	# FlowKind: LazyArrayRange
 	default_min: spux.SympyExpr = sp.S(0)
 	default_max: spux.SympyExpr = sp.S(1)
 	default_steps: int = 2
-	## TODO: Configure lin/log/... scaling (w/enumprop in UI)
 
 	# UI
 	show_info_columns: bool = False

@@ -40,7 +40,6 @@ def install_and_enable_addon(addon_name: str, addon_zip: Path) -> None:
 			),
 		]
 	):
-		## TODO: Check if addon file path exists?
 		in_pref_addons = addon_name in bpy.context.preferences.addons
 		existing_files_found = {
 			addon_path: (Path(addon_path) / addon_name).exists()

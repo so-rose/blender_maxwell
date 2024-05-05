@@ -125,9 +125,6 @@ class WaveTemporalShapeNode(base.MaxwellSimNode):
 		temporal_shape = output_sockets['Temporal Shape']
 		jax_amp_time = functools.partial(ct.manual_amp_time, temporal_shape)
 
-		## TODO: Don't just partial() it up, do it property in the ParamsFlow!
-		## -> Right now it's recompiled every time.
-
 		return ct.LazyValueFuncFlow(
 			func=jax_amp_time,
 			func_args=[spux.PhysicalType.Time],

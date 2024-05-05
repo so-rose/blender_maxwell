@@ -35,12 +35,10 @@ from ..nodeps.utils.simple_logger import (
 
 OUTPUT_CONSOLE = rich.console.Console(
 	color_system='truecolor',
-	## TODO: color_system should be 'auto'; bl_run.py hijinks are interfering
 )
 ERROR_CONSOLE = rich.console.Console(
 	color_system='truecolor',
 	stderr=True,
-	## TODO: color_system should be 'auto'; bl_run.py hijinks are interfering
 )
 rich.traceback.install(show_locals=True, console=ERROR_CONSOLE)
 

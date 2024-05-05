@@ -44,7 +44,6 @@ virtual = true
 dev-dependencies = [
     "ruff>=0.4.3",
     "fake-bpy-module-4-0>=20231118",
-    ## TODO: Blender 4.1 (when available)
     "pre-commit>=3.7.0",
 	"commitizen>=3.25.0",
     ## Requires charset-normalizer>=2.1.0
@@ -167,6 +166,7 @@ version_provider = "pep621"
 tag_format = "v$version"
 
 # Version Bumping
+retry_after_failure = true
 major_version_zero = true
 update_changelog_on_bump = true
 
