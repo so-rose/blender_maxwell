@@ -215,6 +215,10 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	bl_label = 'Maxwell Sim Editor'
 	bl_icon = ct.Icon.SimNodeEditor
 
+	is_active: bpy.props.BoolProperty(
+		default=True,
+	)
+
 	####################
 	# - Lock Methods
 	####################
