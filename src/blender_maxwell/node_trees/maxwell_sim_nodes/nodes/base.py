@@ -261,17 +261,24 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	@events.on_value_changed(
 		prop_name='sim_node_name',
+		props={'sim_node_name'},
 		stop_propagation=True,
 	)
-	def _on_sim_node_name_changed(self):
+	def _on_sim_node_name_changed(self, props):
 		log.info(
 			'Changed Sim Node Name of a "%s" to "%s" (self=%s)',
 			self.bl_idname,
-			self.sim_node_name,
+			props['sim_node_name'],
 			str(self),
 		)
 
 		# Set Name of Managed Objects
+		for mobj in self.managed_objs.values():
+			mobj.name = props['sim_node_name']
+
+		## Invalidate Cache
+		## -> Persistance doesn't happen if we simply mutate.
+		## -> This ensures that the name change is picked up.
 		self.managed_objs = bl_cache.Signal.InvalidateCache
 
 	@events.on_value_changed(prop_name='active_socket_set')

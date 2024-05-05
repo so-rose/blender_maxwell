@@ -68,12 +68,18 @@ def install_and_enable_addon(addon_name: str, addon_zip: Path) -> None:
 	bpy.ops.wm.save_userpref()
 
 
-def setup_for_development(addon_name: str, path_addon_dev_deps: Path) -> None:
+def setup_for_development(
+	addon_name: str,
+	path_addon_dev_deps: Path,
+	path_addon_cache_path: Path | None = None,
+) -> None:
 	addon_prefs = bpy.context.preferences.addons[addon_name].preferences
 
 	# PyDeps Path
 	addon_prefs.use_default_pydeps_path = False
 	addon_prefs.pydeps_path = path_addon_dev_deps
+	if path_addon_cache_path is not None:
+		addon_prefs.addon_cache_path = path_addon_cache_path
 
 	# Save User Preferences
 	bpy.ops.wm.save_userpref()
@@ -92,7 +98,9 @@ if __name__ == '__main__':
 	) as path_zipped:
 		install_and_enable_addon(info.ADDON_NAME, path_zipped)
 
-	setup_for_development(info.ADDON_NAME, info.PATH_ADDON_DEV_DEPS)
+	setup_for_development(
+		info.ADDON_NAME, info.PATH_ADDON_DEV_DEPS, info.PATH_ADDON_DEV_CACHE
+	)
 
 	bpy.ops.wm.quit_blender()
 	sys.exit(info.STATUS_INSTALLED_ADDON)

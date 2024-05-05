@@ -46,6 +46,23 @@ class BLMaxwellAddonPrefs(bpy.types.AddonPreferences):
 	####################
 	# - Properties
 	####################
+	# Addon Cache Path
+	bl__addon_cache_path: bpy.props.StringProperty(
+		name='Addon Cache Path',
+		description='Path to Addon Cache',
+		subtype='FILE_PATH',
+		default=str(ct.addon.DEFAULT_ADDON_CACHE),
+		update=lambda self, _: self.on_addon_pydeps_changed(),
+	)
+
+	@property
+	def addon_cache_path(self) -> Path:
+		return Path(bpy.path.abspath(self.bl__addon_cache_path))
+
+	@addon_cache_path.setter
+	def addon_cache_path(self, path: Path) -> None:
+		self.bl__addon_cache_path = str(path.resolve())
+
 	# PyDeps Default Path
 	use_default_pydeps_path: bpy.props.BoolProperty(
 		name='Use Default PyDeps Path',

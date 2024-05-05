@@ -979,6 +979,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			col: Target for defining UI elements.
 		"""
 
+	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
+		"""Draws the socket lazy value function UI on its own line.
+
+		Notes:
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValueFunc`.
+
+		Parameters:
+			col: Target for defining UI elements.
+		"""
+
 	####################
 	# - UI Methods: Auxilliary
 	####################

@@ -80,7 +80,6 @@ class ReloadTrackedTask(bpy.types.Operator):
 	def execute(self, context):
 		node = context.node
 		tdcloud.TidyCloudTasks.update_task(node.cloud_task)
-		node.sim_data = bl_cache.Signal.InvalidateCache
 
 		return {'FINISHED'}
 
@@ -137,7 +136,7 @@ class Tidy3DWebRunnerNode(base.MaxwellSimNode):
 
 		return task_info
 
-	@bl_cache.cached_bl_property(persist=False)
+	@property
 	def sim_data(self) -> td.Simulation | None:
 		"""Retrieve the simulation data of the current cloud task from the input socket.
 
@@ -155,7 +154,7 @@ class Tidy3DWebRunnerNode(base.MaxwellSimNode):
 				self.cloud_task,
 				tdcloud.TidyCloudTasks.task_info(
 					self.cloud_task.task_id
-				).disk_cache_path(ct.addon.ADDON_CACHE),
+				).disk_cache_path(ct.addon.prefs().addon_cache_path),
 			)
 			if sim_data is None:
 				return None
@@ -250,12 +249,6 @@ class Tidy3DWebRunnerNode(base.MaxwellSimNode):
 	####################
 	# - Output Methods
 	####################
-	@events.on_value_changed(
-		socket_name='Cloud Task',
-	)
-	def compute_cloud_task(self) -> None:
-		self.sim_data = bl_cache.Signal.InvalidateCache
-
 	@events.computes_output_socket(
 		'Sim Data',
 		props={'sim_data'},

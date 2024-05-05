@@ -110,9 +110,15 @@ def write_modifier_geonodes(
 
 	for socket_name in modifier_attrs['inputs']:
 		iface_id = socket_infos[socket_name].bl_isocket_identifier
-		bl_modifier[iface_id] = spux.scale_to_unit_system(
-			modifier_attrs['inputs'][socket_name], modifier_attrs['unit_system']
-		)
+		input_value = modifier_attrs['inputs'][socket_name]
+
+		if isinstance(input_value, spux.SympyType):
+			bl_modifier[iface_id] = spux.scale_to_unit_system(
+				input_value, modifier_attrs['unit_system']
+			)
+		else:
+			bl_modifier[iface_id] = input_value
+
 	modifier_altered = True
 	## TODO: More fine-grained alterations
 

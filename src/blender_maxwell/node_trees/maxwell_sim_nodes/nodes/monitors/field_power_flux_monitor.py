@@ -132,7 +132,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
 			interval_space=(1, 1, 1),
-			freqs=input_sockets['Freqs'].realize_array,
+			freqs=input_sockets['Freqs'].realize_array.values,
 			normal_dir='+' if input_sockets['Direction'] else '-',
 		)
 

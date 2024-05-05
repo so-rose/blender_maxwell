@@ -225,7 +225,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 			# Workaround: Manually Jiggle FlowKind Invalidation
 			self.value = self.value
-			self.lazy_value_range = self.lazy_value_range
+			self.lazy_array_range = self.lazy_array_range
 
 	####################
 	# - Property Callback

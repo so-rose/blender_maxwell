@@ -77,4 +77,5 @@ BOOTSTRAP_LOG_LEVEL_FILENAME = '.bootstrap_log_level'
 PATH_ADDON_DEV_BLEND = PATH_DEV / 'demo.blend'
 
 PATH_ADDON_DEV_DEPS = PATH_DEV / '.cached-dev-dependencies'
+PATH_ADDON_DEV_CACHE = PATH_DEV / '.dev-addon-cache'
 PATH_ADDON_DEV_DEPS.mkdir(exist_ok=True)

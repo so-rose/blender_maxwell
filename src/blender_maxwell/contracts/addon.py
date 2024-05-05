@@ -48,10 +48,10 @@ ORIGINAL_SYS_PATH = sys.path.copy()
 ####################
 # - Local Addon Cache
 ####################
-ADDON_CACHE = PATH_ADDON_ROOT / '.addon_cache'
-ADDON_CACHE.mkdir(exist_ok=True)
+DEFAULT_ADDON_CACHE = PATH_ADDON_ROOT / '.addon_cache'
+DEFAULT_ADDON_CACHE.mkdir(exist_ok=True)
 
-PIP_INSTALL_LOG = ADDON_CACHE / 'pip_install.log'
+PIP_INSTALL_LOG = DEFAULT_ADDON_CACHE / 'pip_install.log'
 
 
 ####################

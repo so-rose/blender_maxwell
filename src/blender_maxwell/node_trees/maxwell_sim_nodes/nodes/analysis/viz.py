@@ -164,7 +164,6 @@ class VizTarget(enum.StrEnum):
 	@staticmethod
 	def valid_targets_for(viz_mode: VizMode) -> list[typ.Self] | None:
 		return {
-			None: [],
 			VizMode.Hist1D: [VizTarget.Plot2D],
 			VizMode.BoxPlot1D: [VizTarget.Plot2D],
 			VizMode.Curve2D: [VizTarget.Plot2D],
@@ -227,7 +226,7 @@ class VizNode(base.MaxwellSimNode):
 	## - Properties
 	#####################
 	viz_mode: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_modes()
+		prop_ui=True, enum_cb=lambda self, _: self.search_viz_modes()
 	)
 	viz_target: enum.Enum = bl_cache.BLField(
 		prop_ui=True, enum_cb=lambda self, _: self.search_targets()
@@ -249,8 +248,8 @@ class VizNode(base.MaxwellSimNode):
 
 		return None
 
-	def search_modes(self) -> list[ct.BLEnumElement]:
-		if not ct.FlowSignal.check(self.data_info):
+	def search_viz_modes(self) -> list[ct.BLEnumElement]:
+		if self.data_info is not None:
 			return [
 				(
 					viz_mode,

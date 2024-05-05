@@ -352,6 +352,22 @@ class LazyArrayRangeFlow:
 	####################
 	# - Realization
 	####################
+	def realize_start(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> ArrayFlow | LazyValueFuncFlow:
+		return spux.sympy_to_python(
+			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
+
+	def realize_stop(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> ArrayFlow | LazyValueFuncFlow:
+		return spux.sympy_to_python(
+			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
+
 	def realize(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
@@ -377,12 +393,8 @@ class LazyArrayRangeFlow:
 			raise ValueError(msg)
 
 		# Realize Symbols
-		realized_start = spux.sympy_to_python(
-			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
-		)
-		realized_stop = spux.sympy_to_python(
-			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
-		)
+		realized_start = self.realize_start(symbol_values)
+		realized_stop = self.realize_stop(symbol_values)
 
 		# Return Linspace / Logspace
 		def gen_array() -> jtyp.Inexact[jtyp.Array, ' steps']:

@@ -133,7 +133,7 @@ class BLSocketType(enum.StrEnum):
 		return {
 			# Blender
 			# Basic
-			BLST.Bool: ST.String,
+			BLST.Bool: ST.Bool,
 			# Float
 			# Array-Like
 			BLST.Color: ST.Color,

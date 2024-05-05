@@ -69,7 +69,8 @@ class FlowKind(enum.StrEnum):
 		flow_obj,
 		unit_system: spux.UnitSystem,
 	):
-		log.debug('%s: Scaling "%s" to Unit System', kind, str(flow_obj))
+		# log.debug('%s: Scaling "%s" to Unit System', kind, str(flow_obj))
+		## TODO: Use a hot-path logger.
 		if kind == FlowKind.Value:
 			return spux.scale_to_unit_system(
 				flow_obj,

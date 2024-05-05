@@ -135,6 +135,48 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			freqs=input_sockets['Freqs'].realize().values,
 		)
 
+	@events.computes_output_socket(
+		'Time Monitor',
+		props={'sim_node_name'},
+		input_sockets={
+			'Center',
+			'Size',
+			'Spatial Subdivs',
+			'Time Range',
+			'Temporal Subdivs',
+		},
+		input_socket_kinds={
+			'Time Range': ct.FlowKind.LazyArrayRange,
+		},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Size': 'Tidy3DUnits',
+			'Time Range': 'Tidy3DUnits',
+		},
+	)
+	def compute_time_monitor(
+		self,
+		input_sockets: dict,
+		props: dict,
+		unit_systems: dict,
+	) -> td.FieldMonitor:
+		log.info(
+			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
+			props['sim_node_name'],
+			input_sockets['Center'],
+			input_sockets['Size'],
+		)
+		return td.FieldTimeMonitor(
+			center=input_sockets['Center'],
+			size=input_sockets['Size'],
+			name=props['sim_node_name'],
+			interval_space=tuple(input_sockets['Spatial Subdivs']),
+			start=input_sockets['Time Range'].realize_start(),
+			stop=input_sockets['Time Range'].realize_stop(),
+			interval=input_sockets['Temporal Subdivs'],
+		)
+
 	####################
 	# - Preview
 	####################
