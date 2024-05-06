@@ -114,6 +114,61 @@ class SimSpaceAxis(enum.StrEnum):
 		return {SSA.X: 0, SSA.Y: 1, SSA.Z: 2}[self]
 
 
+class SimAxisDir(enum.StrEnum):
+	"""Positive or negative direction along an injection axis."""
+
+	Plus = enum.auto()
+	Minus = enum.auto()
+
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		"""Convert the enum value to a human-friendly name.
+
+		Notes:
+			Used to print names in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		SAD = SimAxisDir
+		return {
+			SAD.Plus: '+',
+			SAD.Minus: '-',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		"""Convert the enum value to a Blender icon.
+
+		Notes:
+			Used to print icons in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		return ''
+
+	@property
+	def plus_or_minus(self) -> int:
+		"""Get '+' or '-' literal corresponding to the direction.
+
+		Returns:
+			The appropriate literal.
+		"""
+		SAD = SimAxisDir
+		return {SAD.Plus: '+', SAD.Minus: '-'}[self]
+
+	@property
+	def true_or_false(self) -> bool:
+		"""Get 'True' or 'False' bool corresponding to the direction.
+
+		Returns:
+			The appropriate bool.
+		"""
+		SAD = SimAxisDir
+		return {SAD.Plus: True, SAD.Minus: False}[self]
+
+
 ####################
 # - Boundary Condition Type
 ####################

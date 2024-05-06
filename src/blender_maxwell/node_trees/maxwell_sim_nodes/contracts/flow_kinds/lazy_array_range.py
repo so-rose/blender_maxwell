@@ -221,9 +221,9 @@ class LazyArrayRangeFlow:
 		"""
 		if self.unit is not None:
 			log.debug(
-				'%s: Scaled to unit system: %s',
+				'%s: Scaled to new unit system (new unit = %s)',
 				self,
-				str(unit_system),
+				unit_system[spux.PhysicalType.from_unit(self.unit)],
 			)
 			return LazyArrayRangeFlow(
 				start=spux.strip_unit_system(

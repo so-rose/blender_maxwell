@@ -14,152 +14,156 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import math
 import typing as typ
 
+import bpy
 import sympy as sp
 import tidy3d as td
+
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
 
 
-def convert_vector_to_spherical(
-	v: sp.MatrixBase,
-) -> tuple[str, str, sp.Expr, sp.Expr]:
-	"""Converts a vector (maybe normalized) to spherical coordinates from an arbitrary choice of injection axis.
-
-	Injection axis is chosen to minimize `theta`
-	"""
-	x, y, z = v
-
-	injection_axis = max(
-		('x', abs(x)), ('y', abs(y)), ('z', abs(z)), key=lambda item: item[1]
-	)[0]
-	## Select injection axis that minimizes 'theta'
-
-	if injection_axis == 'x':
-		direction = '+' if x >= 0 else '-'
-		theta = sp.acos(x / sp.sqrt(x**2 + y**2 + z**2))
-		phi = sp.atan2(z, y)
-	elif injection_axis == 'y':
-		direction = '+' if y >= 0 else '-'
-		theta = sp.acos(y / sp.sqrt(x**2 + y**2 + z**2))
-		phi = sp.atan2(x, z)
-	else:
-		direction = '+' if z >= 0 else '-'
-		theta = sp.acos(z / sp.sqrt(x**2 + y**2 + z**2))
-		phi = sp.atan2(y, x)
-
-	return injection_axis, direction, theta, phi
-
-
 class PlaneWaveSourceNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.PlaneWaveSource
 	bl_label = 'Plane Wave Source'
+	use_sim_node_name = True
 
 	####################
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
-		'Center': sockets.PhysicalPoint3DSocketDef(),
-		'Direction': sockets.Real3DVectorSocketDef(default_value=sp.Matrix([0, 0, -1])),
-		'Pol Angle': sockets.PhysicalAngleSocketDef(),
+		'Center': sockets.ExprSocketDef(
+			shape=(3,),
+			mathtype=spux.MathType.Real,
+			physical_type=spux.PhysicalType.Length,
+			default_value=sp.Matrix([0, 0, 0]),
+		),
+		'Spherical': sockets.ExprSocketDef(
+			shape=(2,),
+			mathtype=spux.MathType.Real,
+			physical_type=spux.PhysicalType.Angle,
+			default_value=sp.Matrix([0, 0]),
+		),
+		'Pol ∡': sockets.ExprSocketDef(
+			physical_type=spux.PhysicalType.Angle,
+			default_value=0,
+		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Source': sockets.MaxwellSourceSocketDef(),
+		'Angled Source': sockets.MaxwellSourceSocketDef(),
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'plane_wave_source': managed_objs.ManagedBLMesh,
+		'mesh': managed_objs.ManagedBLMesh,
+		'modifier': managed_objs.ManagedBLModifier,
 	}
+
+	####################
+	# - Properties
+	####################
+	injection_axis: ct.SimSpaceAxis = bl_cache.BLField(ct.SimSpaceAxis.X, prop_ui=True)
+	injection_direction: ct.SimAxisDir = bl_cache.BLField(
+		ct.SimAxisDir.Plus, prop_ui=True
+	)
+
+	####################
+	# - UI
+	####################
+	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
+		layout.prop(self, self.blfields['injection_axis'], expand=True)
+		layout.prop(self, self.blfields['injection_direction'], expand=True)
 
 	####################
 	# - Output Socket Computation
 	####################
 	@events.computes_output_socket(
-		'Source',
-		input_sockets={'Temporal Shape', 'Center', 'Direction', 'Pol Angle'},
+		'Angled Source',
+		props={'sim_node_name', 'injection_axis', 'injection_direction'},
+		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={
 			'Center': 'Tidy3DUnits',
+			'Spherical': 'Tidy3DUnits',
+			'Pol ∡': 'Tidy3DUnits',
 		},
 	)
-	def compute_source(self, input_sockets: dict):
-		direction = input_sockets['Direction']
-		pol_angle = input_sockets['Pol Angle']
-
-		injection_axis, dir_sgn, theta, phi = convert_vector_to_spherical(
-			input_sockets['Direction']
-		)
-
+	def compute_source(self, props, input_sockets, unit_systems):
 		size = {
-			'x': (0, math.inf, math.inf),
-			'y': (math.inf, 0, math.inf),
-			'z': (math.inf, math.inf, 0),
-		}[injection_axis]
+			ct.SimSpaceAxis.X: (0, td.inf, td.inf),
+			ct.SimSpaceAxis.Y: (td.inf, 0, td.inf),
+			ct.SimSpaceAxis.Z: (td.inf, td.inf, 0),
+		}[props['injection_axis']]
 
 		# Display the results
 		return td.PlaneWave(
+			name=props['sim_node_name'],
 			center=input_sockets['Center'],
-			source_time=input_sockets['Temporal Shape'],
 			size=size,
-			direction=dir_sgn,
-			angle_theta=theta,
-			angle_phi=phi,
-			pol_angle=pol_angle,
+			source_time=input_sockets['Temporal Shape'],
+			direction=props['injection_direction'].plus_or_minus,
+			angle_theta=input_sockets['Spherical'][0],
+			angle_phi=input_sockets['Spherical'][1],
+			pol_angle=input_sockets['Pol ∡'],
 		)
 
-	#####################
-	## - Preview
-	#####################
-	# @events.on_value_changed(
-	# socket_name={'Center', 'Direction'},
-	# input_sockets={'Center', 'Direction'},
-	# managed_objs={'plane_wave_source'},
-	# )
-	# def on_value_changed__center_direction(
-	# self,
-	# input_sockets: dict,
-	# managed_objs: dict[str, ct.schemas.ManagedObj],
-	# ):
-	# _center = input_sockets['Center']
-	# center = tuple([float(el) for el in spu.convert_to(_center, spu.um) / spu.um])
+	####################
+	# - Preview - Changes to Input Sockets
+	####################
+	@events.on_value_changed(
+		# Trigger
+		prop_name='preview_active',
+		# Loaded
+		managed_objs={'mesh'},
+		props={'preview_active'},
+	)
+	def on_preview_changed(self, managed_objs, props):
+		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
+		mesh = managed_objs['mesh']
 
-	# _direction = input_sockets['Direction']
-	# direction = tuple([float(el) for el in _direction])
-	# ## TODO: Preview unit system?? Presume um for now
+		# Push Preview State to Managed Mesh
+		if props['preview_active']:
+			mesh.show_preview()
+		else:
+			mesh.hide_preview()
 
-	# # Retrieve Hard-Coded GeoNodes and Analyze Input
-	# geo_nodes = bpy.data.node_groups[GEONODES_PLANE_WAVE]
-	# geonodes_interface = analyze_geonodes.interface(geo_nodes, direc='INPUT')
-
-	# # Sync Modifier Inputs
-	# managed_objs['plane_wave_source'].sync_geonodes_modifier(
-	# geonodes_node_group=geo_nodes,
-	# geonodes_identifier_to_value={
-	# geonodes_interface['Direction'].identifier: direction,
-	# ## TODO: Use 'bl_socket_map.value_to_bl`!
-	# ## - This accounts for auto-conversion, unit systems, etc. .
-	# ## - We could keep it in the node base class...
-	# ## - ...But it needs aligning with Blender, too. Hmm.
-	# },
-	# )
-
-	# # Sync Object Position
-	# managed_objs['plane_wave_source'].bl_object('MESH').location = center
-
-	# @events.on_show_preview(
-	# managed_objs={'plane_wave_source'},
-	# )
-	# def on_show_preview(
-	# self,
-	# managed_objs: dict[str, ct.schemas.ManagedObj],
-	# ):
-	# managed_objs['plane_wave_source'].show_preview('MESH')
-	# self.on_value_changed__center_direction()
+	@events.on_value_changed(
+		# Trigger
+		socket_name={'Center', 'Spherical', 'Pol ∡'},
+		prop_name={'injection_axis', 'injection_direction'},
+		run_on_init=True,
+		# Loaded
+		managed_objs={'mesh', 'modifier'},
+		props={'injection_axis', 'injection_direction'},
+		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'BlenderUnits',
+		},
+	)
+	def on_inputs_changed(self, managed_objs, props, input_sockets, unit_systems):
+		# Push Input Values to GeoNodes Modifier
+		managed_objs['modifier'].bl_modifier(
+			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.SourcePlaneWave),
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Inj Axis': props['injection_axis'].axis,
+					'Direction': props['injection_direction'].true_or_false,
+					'theta': input_sockets['Spherical'][0],
+					'phi': input_sockets['Spherical'][1],
+					'Pol Angle': input_sockets['Pol ∡'],
+				},
+			},
+		)
 
 
 ####################

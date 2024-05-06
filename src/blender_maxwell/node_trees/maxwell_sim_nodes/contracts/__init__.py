@@ -56,7 +56,13 @@ from .flow_signals import FlowSignal
 from .icons import Icon
 from .mobj_types import ManagedObjType
 from .node_types import NodeType
-from .sim_types import BoundCondType, NewSimCloudTask, SimSpaceAxis, manual_amp_time
+from .sim_types import (
+	BoundCondType,
+	NewSimCloudTask,
+	SimAxisDir,
+	SimSpaceAxis,
+	manual_amp_time,
+)
 from .socket_colors import SOCKET_COLORS
 from .socket_types import SocketType
 from .tree_types import TreeType
@@ -96,6 +102,7 @@ __all__ = [
 	'NodeType',
 	'BoundCondType',
 	'NewSimCloudTask',
+	'SimAxisDir',
 	'SimSpaceAxis',
 	'manual_amp_time',
 	'NodeCategory',

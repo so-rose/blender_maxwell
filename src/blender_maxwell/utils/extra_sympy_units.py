@@ -779,7 +779,14 @@ def scaling_factor(unit_from: spu.Quantity, unit_to: spu.Quantity) -> Number:
 
 @functools.cache
 def unit_str_to_unit(unit_str: str) -> Unit | None:
-	expr = sp.sympify(unit_str).subs(UNIT_BY_SYMBOL)
+	# Edge Case: Manually Parse Degrees
+	## -> sp.sympify('degree') actually produces the sp.degree() function.
+	## -> Therefore, we must special case this particular unit.
+	if unit_str == 'degree':
+		expr = spu.degree
+	else:
+		expr = sp.sympify(unit_str).subs(UNIT_BY_SYMBOL)
+
 	if expr.has(spu.Quantity):
 		return expr
 
