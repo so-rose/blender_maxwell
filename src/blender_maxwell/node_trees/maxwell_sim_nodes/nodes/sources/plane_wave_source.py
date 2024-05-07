@@ -30,6 +30,18 @@ from .. import base, events
 
 
 class PlaneWaveSourceNode(base.MaxwellSimNode):
+	"""An infinite-extent angled source simulating an plane wave with linear polarization.
+
+	The amplitude envelope is a gaussian function, and the complex electric field is a well-defined frequency-dependent phasor with very few shape parameters.
+
+	The only critical shape parameter is the **waist**: At a chosen "focus" distance, the width of the beam has a chosen radius.
+	These properties are called "waist distance" and "waist radius".
+	At all other points, the width of the beam has a well-defined hyperbolic relationship to the waist, when given the IOR-dependent Rayleigh length.
+
+	- Tidy3D Documentation: <https://docs.flexcompute.com/projects/tidy3d/en/latest/api/_autosummary/tidy3d.GaussianBeam.html#tidy3d.GaussianBeam>
+	- Mathematical Formalism: <https://en.wikipedia.org/wiki/Gaussian_beam>
+	"""
+
 	node_type = ct.NodeType.PlaneWaveSource
 	bl_label = 'Plane Wave Source'
 	use_sim_node_name = True

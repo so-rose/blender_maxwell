@@ -128,6 +128,7 @@ class ManagedBLMesh(base.ManagedObj):
 		"""
 		bl_object = bpy.data.objects.get(self.name)
 		if bl_object is None:
+			log.info('Created previewable ManagedBLMesh "%s"', bl_object.name)
 			bl_object = self.bl_object()
 
 		if bl_object.name not in preview_collection().objects:
