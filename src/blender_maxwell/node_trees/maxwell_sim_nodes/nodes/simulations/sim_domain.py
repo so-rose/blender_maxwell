@@ -43,14 +43,14 @@ class SimDomainNode(base.MaxwellSimNode):
 			abs_min=0,
 		),
 		'Center': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_unit=spu.micrometer,
 			default_value=sp.Matrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_unit=spu.micrometer,

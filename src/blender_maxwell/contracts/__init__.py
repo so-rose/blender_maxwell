@@ -36,6 +36,7 @@ from .bl import (
 	PresetName,
 	SocketName,
 )
+from .bl_types import BLEnumStrEnum
 from .operator_types import (
 	OperatorType,
 )
@@ -64,6 +65,9 @@ __all__ = [
 	'ManagedObjName',
 	'PresetName',
 	'SocketName',
+	'BLEnumStrEnum',
+	'BLInstance',
+	'InstanceID',
 	'OperatorType',
 	'PanelType',
 ]

@@ -64,7 +64,7 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Layers': sockets.ExprSocketDef(
-			shape=None,
+			size=spux.NumberSize1D.Scalar,
 			mathtype=spux.MathType.Integer,
 			abs_min=1,
 			default_value=12,
@@ -74,37 +74,37 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 		'Simple': {},
 		'Full': {
 			'σ Order': sockets.ExprSocketDef(
-				shape=None,
+				size=spux.NumberSize1D.Scalar,
 				mathtype=spux.MathType.Integer,
 				abs_min=1,
 				default_value=3,
 			),
 			'σ Range': sockets.ExprSocketDef(
-				shape=(2,),
+				size=spux.NumberSize1D.Vec2,
 				mathtype=spux.MathType.Real,
 				default_value=sp.Matrix([0, 1.5]),
 				abs_min=0,
 			),
 			'κ Order': sockets.ExprSocketDef(
-				shape=None,
+				size=spux.NumberSize1D.Scalar,
 				mathtype=spux.MathType.Integer,
 				abs_min=1,
 				default_value=3,
 			),
 			'κ Range': sockets.ExprSocketDef(
-				shape=(2,),
+				size=spux.NumberSize1D.Vec2,
 				mathtype=spux.MathType.Real,
 				default_value=sp.Matrix([0, 1.5]),
 				abs_min=0,
 			),
 			'α Order': sockets.ExprSocketDef(
-				shape=None,
+				size=spux.NumberSize1D.Scalar,
 				mathtype=spux.MathType.Integer,
 				abs_min=1,
 				default_value=3,
 			),
 			'α Range': sockets.ExprSocketDef(
-				shape=(2,),
+				size=spux.NumberSize1D.Vec2,
 				mathtype=spux.MathType.Real,
 				default_value=sp.Matrix([0, 1.5]),
 				abs_min=0,

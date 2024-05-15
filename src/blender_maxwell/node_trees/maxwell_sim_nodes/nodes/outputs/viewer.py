@@ -19,8 +19,8 @@ import typing as typ
 import bpy
 import sympy as sp
 
+from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger
 
 from ... import contracts as ct
 from ... import sockets
@@ -73,33 +73,15 @@ class ViewerNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	print_kind: bpy.props.EnumProperty(
-		name='Print Kind',
-		description='FlowKind of the input socket to print',
-		items=[(kind, kind.name, kind.name) for kind in list(ct.FlowKind)],
-		default=ct.FlowKind.Value,
-		update=lambda self, context: self.on_prop_changed('print_kind', context),
-	)
-
-	auto_plot: bpy.props.BoolProperty(
-		name='Auto-Plot',
-		description='Whether to auto-plot anything plugged into the viewer node',
-		default=False,
-		update=lambda self, context: self.on_prop_changed('auto_plot', context),
-	)
-
-	auto_3d_preview: bpy.props.BoolProperty(
-		name='Auto 3D Preview',
-		description="Whether to auto-preview anything 3D, that's plugged into the viewer node",
-		default=True,
-		update=lambda self, context: self.on_prop_changed('auto_3d_preview', context),
-	)
+	print_kind: ct.FlowKind = bl_cache.BLField(ct.FlowKind.Value)
+	auto_plot: bool = bl_cache.BLField(False)
+	auto_3d_preview: bool = bl_cache.BLField(True)
 
 	####################
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
-		layout.prop(self, 'print_kind', text='')
+		layout.prop(self, self.blfields['print_kind'], text='')
 
 	def draw_operators(self, _: bpy.types.Context, layout: bpy.types.UILayout):
 		split = layout.split(factor=0.4)
@@ -118,7 +100,7 @@ class ViewerNode(base.MaxwellSimNode):
 
 		## Plot Options
 		row = col.row(align=True)
-		row.prop(self, 'auto_plot', text='Plot', toggle=True)
+		row.prop(self, self.blfields['auto_plot'], text='Plot', toggle=True)
 		row.operator(
 			RefreshPlotViewOperator.bl_idname,
 			text='',
@@ -127,7 +109,7 @@ class ViewerNode(base.MaxwellSimNode):
 
 		## 3D Preview Options
 		row = col.row(align=True)
-		row.prop(self, 'auto_3d_preview', text='3D Preview', toggle=True)
+		row.prop(self, self.blfields['auto_3d_preview'], text='3D Preview', toggle=True)
 
 	####################
 	# - Methods

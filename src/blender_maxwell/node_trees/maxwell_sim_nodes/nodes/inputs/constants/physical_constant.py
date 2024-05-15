@@ -59,7 +59,6 @@ class PhysicalConstantNode(base.MaxwellSimNode):
 
 	size: spux.NumberSize1D = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_sizes(),
-		prop_ui=True,
 	)
 
 	####################
@@ -75,7 +74,7 @@ class PhysicalConstantNode(base.MaxwellSimNode):
 		return [
 			spux.NumberSize1D.from_shape(shape).bl_enum_element(i)
 			for i, shape in enumerate(self.physical_type.valid_shapes)
-			if spux.NumberSize1D.supports_shape(shape)
+			if spux.NumberSize1D.has_shape(shape)
 		]
 
 	####################

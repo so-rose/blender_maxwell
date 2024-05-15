@@ -109,11 +109,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Sockets
 	####################
-	input_sockets: typ.ClassVar = {
-		'Generated Steps': sockets.ExprSocketDef(
-			mathtype=spux.MathType.Integer, default_value=2, abs_min=2
-		)
-	}
+	input_sockets: typ.ClassVar = {}
 	output_sockets: typ.ClassVar = {
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Valid Freqs': sockets.ExprSocketDef(
@@ -133,9 +129,9 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	vendored_medium: VendoredMedium = bl_cache.BLField(VendoredMedium.Au, prop_ui=True)
-	variant_name: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_variants()
+	vendored_medium: VendoredMedium = bl_cache.BLField(VendoredMedium.Au)
+	variant_name: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_variants()
 	)
 
 	def search_variants(self) -> list[ct.BLEnumElement]:
@@ -145,28 +141,28 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Computed
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'vendored_medium', 'variant_name'})
 	def variant(self) -> Tidy3DMediumVariant:
 		"""Deduce the actual medium variant from `self.vendored_medium` and `self.variant_name`."""
 		return self.vendored_medium.medium_variants[self.variant_name]
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'variant'})
 	def medium(self) -> td.PoleResidue:
 		"""Deduce the actual currently selected `PoleResidue` medium from `self.variant`."""
 		return self.variant.medium
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'variant'})
 	def data_url(self) -> str | None:
 		"""Deduce the URL associated with the currently selected medium from `self.variant`."""
 		return self.variant.data_url
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'variant'})
 	def references(self) -> td.PoleResidue:
 		"""Deduce the references associated with the currently selected `PoleResidue` medium from `self.variant`."""
 		return self.variant.reference
 
-	@property
-	def freq_range(self) -> spux.SympyExpr:
+	@bl_cache.cached_bl_property(depends_on={'medium'})
+	def freq_range(self) -> sp.Expr:
 		"""Deduce the frequency range as a unit-aware (THz, for convenience) column vector.
 
 		A rational approximation to each frequency bound is computed with `sp.nsimplify`, in order to **guarantee** lack of precision-loss as computations are performed on the frequency.
@@ -178,8 +174,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			spux.terahertz,
 		)
 
-	@property
-	def wl_range(self) -> spux.SympyExpr:
+	@bl_cache.cached_bl_property(depends_on={'freq_range'})
+	def wl_range(self) -> sp.Expr:
 		"""Deduce the vacuum wavelength range as a unit-aware (nanometer, for convenience) column vector."""
 		return sp.Matrix(
 			self.freq_range.applyfunc(
@@ -203,12 +199,12 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			formatted_str = f'{number:.2e}'
 		return formatted_str
 
-	@bl_cache.cached_bl_property()
+	@bl_cache.cached_bl_property(depends_on={'freq_range'})
 	def ui_freq_range(self) -> tuple[str, str]:
 		"""Cached mirror of `self.wl_range` which contains UI-ready strings."""
 		return tuple([self._ui_range_format(el) for el in self.freq_range])
 
-	@bl_cache.cached_bl_property()
+	@bl_cache.cached_bl_property(depends_on={'wl_range'})
 	def ui_wl_range(self) -> tuple[str, str]:
 		"""Cached mirror of `self.wl_range` which contains UI-ready strings."""
 		return tuple([self._ui_range_format(el) for el in self.wl_range])
@@ -279,14 +275,13 @@ class LibraryMediumNode(base.MaxwellSimNode):
 		'Valid Freqs',
 		kind=ct.FlowKind.LazyArrayRange,
 		props={'freq_range'},
-		input_sockets={'Generated Steps'},
 	)
-	def compute_valid_freqs_lazy(self, props, input_sockets) -> sp.Expr:
+	def compute_valid_freqs_lazy(self, props) -> sp.Expr:
 		return ct.LazyArrayRangeFlow(
 			start=props['freq_range'][0] / spux.THz,
 			stop=props['freq_range'][1] / spux.THz,
-			steps=input_sockets['Generated Steps'],
-			scaling='lin',
+			steps=0,
+			scaling=ct.ScalingMode.Lin,
 			unit=spux.THz,
 		)
 
@@ -301,14 +296,13 @@ class LibraryMediumNode(base.MaxwellSimNode):
 		'Valid WLs',
 		kind=ct.FlowKind.LazyArrayRange,
 		props={'wl_range'},
-		input_sockets={'Generated Steps'},
 	)
-	def compute_valid_wls_lazy(self, props, input_sockets) -> sp.Expr:
+	def compute_valid_wls_lazy(self, props) -> sp.Expr:
 		return ct.LazyArrayRangeFlow(
 			start=props['wl_range'][0] / spu.nm,
 			stop=props['wl_range'][0] / spu.nm,
-			steps=input_sockets['Generated Steps'],
-			scaling='lin',
+			steps=0,
+			scaling=ct.ScalingMode.Lin,
 			unit=spu.nm,
 		)
 

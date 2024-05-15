@@ -42,7 +42,7 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Center': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_unit=spu.micrometer,

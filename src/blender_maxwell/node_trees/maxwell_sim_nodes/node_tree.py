@@ -430,17 +430,40 @@ class MaxwellSimTree(bpy.types.NodeTree):
 ####################
 # - Post-Load Handler
 ####################
-def initialize_sim_tree_node_link_cache(_: bpy.types.Scene):
+@bpy.app.handlers.persistent
+def initialize_sim_tree_node_link_cache(_):
 	"""Whenever a file is loaded, create/regenerate the NodeLinkCache in all trees."""
 	for node_tree in bpy.data.node_groups:
 		if node_tree.bl_idname == 'MaxwellSimTree':
 			node_tree.on_load()
 
 
+@bpy.app.handlers.persistent
+def populate_missing_persistence(_) -> None:
+	"""For all nodes and sockets with elements that don't have persistent elements computed, compute them.
+
+	This is used when new dynamic enum properties are added to nodes and sockets, which need to first be computed and persisted in a context where setting properties is allowed.
+	"""
+	# Iterate over MaxwellSim Trees
+	for node_tree in [
+		_node_tree
+		for _node_tree in bpy.data.node_groups
+		if _node_tree.bl_idname == ct.TreeType.MaxwellSim.value and _node_tree.is_active
+	]:
+		# Iterate over MaxwellSim Nodes
+		# -> Excludes ex. frame and reroute nodes.
+		for node in [_node for _node in node_tree.nodes if hasattr(_node, 'node_type')]:
+			node.regenerate_dynamic_field_persistance()
+			for bl_sockets in [node.inputs, node.outputs]:
+				for bl_socket in bl_sockets:
+					bl_socket.regenerate_dynamic_field_persistance()
+
+
 ####################
 # - Blender Registration
 ####################
 bpy.app.handlers.load_post.append(initialize_sim_tree_node_link_cache)
+bpy.app.handlers.load_post.append(populate_missing_persistence)
 ## TODO: Move to top-level registration.
 
 BL_REGISTER = [

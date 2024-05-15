@@ -14,28 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import typing as typ
 
-class staticproperty(property):  # noqa: N801
-	"""A read-only variant of `@property` that is entirely static, for use in specific situations.
 
-	The decorated method must take no arguments whatsoever, including `self`/`cls`.
+####################
+# - Blender Enum (w/EnumProperty support)
+####################
+class BLEnumStrEnum(typ.Protocol):
+	@staticmethod
+	def to_name(value: typ.Self) -> str: ...
 
-	Examples:
-		Exactly as you'd expect.
-		```python
-		class Spam:
-			@staticproperty
-			def eggs():
-				return 10
-
-		assert Spam.eggs == 10
-		```
-	"""
-
-	def __get__(self, *_):
-		"""Overridden getter that ignores instance and owner, and just returns the value of the evaluated (static) method.
-
-		Returns:
-			The evaluated value of the static method that was decorated.
-		"""
-		return self.fget()
+	@staticmethod
+	def to_icon(value: typ.Self) -> str: ...

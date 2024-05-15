@@ -209,7 +209,7 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.Array,
+			active_kind=ct.FlowKind.LazyValueFunc,
 			symbols={_x := sp.Symbol('x', real=True)},
 			default_value=2 * _x,
 		),
@@ -225,31 +225,33 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	## - Properties
 	#####################
-	viz_mode: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_viz_modes()
-	)
-	viz_target: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_targets()
-	)
-
-	# Mode-Dependent Properties
-	colormap: image_ops.Colormap = bl_cache.BLField(
-		image_ops.Colormap.Viridis, prop_ui=True
-	)
-
-	#####################
-	## - Mode Searcher
-	#####################
-	@property
-	def data_info(self) -> ct.InfoFlow | None:
+	@bl_cache.cached_bl_property()
+	def input_info(self) -> ct.InfoFlow | None:
 		info = self._compute_input('Expr', kind=ct.FlowKind.Info)
 		if not ct.FlowSignal.check(info):
 			return info
 
 		return None
 
+	viz_mode: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_viz_modes(),
+		cb_depends_on={'input_info'},
+	)
+	viz_target: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_targets(),
+		cb_depends_on={'viz_mode'},
+	)
+
+	# Mode-Dependent Properties
+	colormap: image_ops.Colormap = bl_cache.BLField(
+		image_ops.Colormap.Viridis,
+	)
+
+	#####################
+	## - Searchers
+	#####################
 	def search_viz_modes(self) -> list[ct.BLEnumElement]:
-		if self.data_info is not None:
+		if self.input_info is not None:
 			return [
 				(
 					viz_mode,
@@ -258,14 +260,11 @@ class VizNode(base.MaxwellSimNode):
 					VizMode.to_icon(viz_mode),
 					i,
 				)
-				for i, viz_mode in enumerate(VizMode.valid_modes_for(self.data_info))
+				for i, viz_mode in enumerate(VizMode.valid_modes_for(self.input_info))
 			]
 
 		return []
 
-	#####################
-	## - Target Searcher
-	#####################
 	def search_targets(self) -> list[ct.BLEnumElement]:
 		if self.viz_mode is not None:
 			return [
@@ -302,19 +301,13 @@ class VizNode(base.MaxwellSimNode):
 		input_sockets_optional={'Expr': True},
 	)
 	def on_any_changed(self, input_sockets: dict):
+		self.input_info = bl_cache.Signal.InvalidateCache
+
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
 
 		has_info = not ct.FlowSignal.check(info)
 		has_params = not ct.FlowSignal.check(params)
-
-		# Reset Viz Mode/Target
-		has_nonpending_info = not ct.FlowSignal.check_single(
-			info, ct.FlowSignal.FlowPending
-		)
-		if has_nonpending_info:
-			self.viz_mode = bl_cache.Signal.ResetEnumItems
-			self.viz_target = bl_cache.Signal.ResetEnumItems
 
 		# Provide Sockets for Symbol Realization
 		## -> This happens if Params contains not-yet-realized symbols.
@@ -325,7 +318,7 @@ class VizNode(base.MaxwellSimNode):
 				self.loose_input_sockets = {
 					sym.name: sockets.ExprSocketDef(
 						active_kind=ct.FlowKind.LazyArrayRange,
-						shape=None,
+						size=spux.NumberSize1D.Scalar,
 						mathtype=info.dim_mathtypes[sym.name],
 						physical_type=info.dim_physical_types[sym.name],
 						default_min=(
@@ -340,21 +333,12 @@ class VizNode(base.MaxwellSimNode):
 						),
 						default_steps=50,
 					)
-					for sym in sorted(
-						params.symbols, key=lambda el: info.dim_names.index(el.name)
-					)
+					for sym in params.sorted_symbols
 					if sym.name in info.dim_names
 				}
 
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
-
-	@events.on_value_changed(
-		prop_name='viz_mode',
-		run_on_init=True,
-	)
-	def on_viz_mode_changed(self):
-		self.viz_target = bl_cache.Signal.ResetEnumItems
 
 	#####################
 	## - Plotting
@@ -374,12 +358,15 @@ class VizNode(base.MaxwellSimNode):
 		self, managed_objs, props, input_sockets, loose_input_sockets, unit_systems
 	):
 		# Retrieve Inputs
+		lazy_value_func = input_sockets['Expr'][ct.FlowKind.LazyValueFunc]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
 
 		has_info = not ct.FlowSignal.check(info)
 		has_params = not ct.FlowSignal.check(params)
 
+		# Invalid Mode | Target
+		## -> To limit branching, return now if things aren't right.
 		if (
 			not has_info
 			or not has_params
@@ -388,18 +375,21 @@ class VizNode(base.MaxwellSimNode):
 		):
 			return
 
-		# Compute Data
-		lazy_value_func = input_sockets['Expr'][ct.FlowKind.LazyValueFunc]
-		symbol_values = (
-			loose_input_sockets
-			if not params.symbols
-			else {
-				sym: loose_input_sockets[sym.name]
+		# Compute LazyArrayRanges for Symbols from Loose Sockets
+		## -> These are the concrete values of the symbol for plotting.
+		## -> In a quite nice turn of events, all this is cached lookups.
+		## -> ...Unless something changed, in which case, well. It changed.
+		symbol_values = {
+			sym: (
+				loose_input_sockets[sym.name]
 				.realize_array.rescale_to_unit(info.dim_units[sym.name])
 				.values
-				for sym in params.sorted_symbols
-			}
-		)
+			)
+			for sym in params.sorted_symbols
+		}
+
+		# Realize LazyValueFunc w/Symbolic Values, Unit System
+		## -> This gives us the actual plot data!
 		data = lazy_value_func.func_jax(
 			*params.scaled_func_args(
 				unit_systems['BlenderUnits'], symbol_values=symbol_values
@@ -408,6 +398,9 @@ class VizNode(base.MaxwellSimNode):
 				unit_systems['BlenderUnits'], symbol_values=symbol_values
 			),
 		)
+
+		# Replace InfoFlow Indices w/Realized Symbolic Ranges
+		## -> This ensures correct axis scaling.
 		if params.symbols:
 			info = info.rescale_dim_idxs(loose_input_sockets)
 
@@ -417,6 +410,7 @@ class VizNode(base.MaxwellSimNode):
 				lambda ax: VizMode.to_plotter(props['viz_mode'])(data, info, ax),
 				bl_select=True,
 			)
+
 		if props['viz_target'] == VizTarget.Pixels:
 			managed_objs['plot'].map_2d_to_image(
 				data,

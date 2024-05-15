@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import dataclasses
+import enum
 import functools
 import typing as typ
 from types import MappingProxyType
@@ -31,6 +32,25 @@ from .flow_kinds import FlowKind
 from .lazy_value_func import LazyValueFuncFlow
 
 log = logger.get(__name__)
+
+
+class ScalingMode(enum.StrEnum):
+	Lin = enum.auto()
+	Geom = enum.auto()
+	Log = enum.auto()
+
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		SM = ScalingMode
+		return {
+			SM.Lin: 'Linear',
+			SM.Geom: 'Geometric',
+			SM.Log: 'Logarithmic',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		return ''
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -84,7 +104,7 @@ class LazyArrayRangeFlow:
 	start: spux.ScalarUnitlessComplexExpr
 	stop: spux.ScalarUnitlessComplexExpr
 	steps: int
-	scaling: typ.Literal['lin', 'geom', 'log'] = 'lin'
+	scaling: ScalingMode = ScalingMode.Lin
 
 	unit: spux.Unit | None = None
 
@@ -295,9 +315,9 @@ class LazyArrayRangeFlow:
 			A `jax` function that takes a valid `start`, `stop`, and `steps`, and returns a 1D `jax` array.
 		"""
 		jnp_nspace = {
-			'lin': jnp.linspace,
-			'geom': jnp.geomspace,
-			'log': jnp.logspace,
+			ScalingMode.Lin: jnp.linspace,
+			ScalingMode.Geom: jnp.geomspace,
+			ScalingMode.Log: jnp.logspace,
 		}.get(self.scaling)
 		if jnp_nspace is None:
 			msg = f'ArrayFlow scaling method {self.scaling} is unsupported'

@@ -42,7 +42,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
 		'Center': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_value=sp.Matrix([0, 0, 0]),

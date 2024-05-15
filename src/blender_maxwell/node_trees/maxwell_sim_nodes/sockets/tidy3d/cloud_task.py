@@ -99,18 +99,16 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	socket_type = ct.SocketType.Tidy3DCloudTask
 	bl_label = 'Tidy3D Cloud Task'
 
-	use_prelock = True
-
 	####################
 	# - Properties
 	####################
 	api_key: str = bl_cache.BLField('', prop_ui=True, str_secret=True)
 	should_exist: bool = bl_cache.BLField(False)
 
-	existing_folder_id: enum.Enum = bl_cache.BLField(
+	existing_folder_id: enum.StrEnum = bl_cache.BLField(
 		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_folders()
 	)
-	existing_task_id: enum.Enum = bl_cache.BLField(
+	existing_task_id: enum.StrEnum = bl_cache.BLField(
 		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_tasks()
 	)
 
@@ -299,6 +297,7 @@ class Tidy3DCloudTaskSocketDef(base.SocketDef):
 
 	def init(self, bl_socket: Tidy3DCloudTaskBLSocket) -> None:
 		bl_socket.should_exist = self.should_exist
+		bl_socket.use_prelock = True
 
 
 ####################

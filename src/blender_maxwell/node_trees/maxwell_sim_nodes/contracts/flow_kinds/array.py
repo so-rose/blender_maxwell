@@ -96,7 +96,8 @@ class ArrayFlow:
 		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
 		raise ValueError(msg)
 
-	def rescale_to_unit(self, unit: spu.Quantity) -> typ.Self:
+	def rescale_to_unit(self, unit: spu.Quantity | None) -> typ.Self:
+		## TODO: Cache by unit would be a very nice speedup for Viz node.
 		if self.unit is not None:
 			return ArrayFlow(
 				values=float(spux.scaling_factor(self.unit, unit)) * self.values,
@@ -104,8 +105,8 @@ class ArrayFlow:
 				is_sorted=self.is_sorted,
 			)
 
+		if unit is None:
+			return self
+
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
 		raise ValueError(msg)
-
-	def rescale_to_unit_system(self, unit: spu.Quantity) -> typ.Self:
-		raise NotImplementedError

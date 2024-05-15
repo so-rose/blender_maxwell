@@ -18,8 +18,12 @@ from pathlib import Path
 
 import bpy
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 ####################
@@ -32,30 +36,25 @@ class FilePathBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.StringProperty(
-		name='File Path',
-		description='Represents the path to a file',
-		subtype='FILE_PATH',
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: Path = bl_cache.BLField(Path(), path_type='file')
 
 	####################
 	# - Socket UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col_row = col.row(align=True)
-		col_row.prop(self, 'raw_value', text='')
+		# col_row = col.row(align=True)
+		col.prop(self, self.blfields['raw_value'], text='')
 
 	####################
-	# - Computation of Default Value
+	# - FlowKind: Value
 	####################
 	@property
 	def value(self) -> Path:
-		return Path(bpy.path.abspath(self.raw_value))
+		return self.raw_value
 
 	@value.setter
 	def value(self, value: Path) -> None:
-		self.raw_value = bpy.path.relpath(str(value))
+		self.raw_value = value
 
 
 ####################

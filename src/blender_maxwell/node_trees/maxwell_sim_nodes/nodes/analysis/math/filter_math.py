@@ -126,10 +126,10 @@ class FilterMathNode(base.MaxwellSimNode):
 	bl_label = 'Filter Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 
 	####################
@@ -141,12 +141,8 @@ class FilterMathNode(base.MaxwellSimNode):
 	)
 
 	# Dimension Selection
-	dim_0: enum.Enum = bl_cache.BLField(
-		None, prop_ui=True, enum_cb=lambda self, _: self.search_dims()
-	)
-	dim_1: enum.Enum = bl_cache.BLField(
-		None, prop_ui=True, enum_cb=lambda self, _: self.search_dims()
-	)
+	dim_0: enum.StrEnum = bl_cache.BLField(enum_cb=lambda self, _: self.search_dims())
+	dim_1: enum.StrEnum = bl_cache.BLField(enum_cb=lambda self, _: self.search_dims())
 
 	####################
 	# - Computed
@@ -259,14 +255,14 @@ class FilterMathNode(base.MaxwellSimNode):
 			# Determine Whether to Declare New Loose Input SOcket
 			if (
 				current_bl_socket is None
-				or current_bl_socket.shape is not None
+				or current_bl_socket.size is not spux.NumberSize1D.Scalar
 				or current_bl_socket.physical_type != pinned_physical_type
 				or current_bl_socket.mathtype != wanted_mathtype
 			):
 				self.loose_input_sockets = {
 					'Value': sockets.ExprSocketDef(
 						active_kind=ct.FlowKind.Value,
-						shape=None,
+						size=spux.NumberSize1D.Scalar,
 						physical_type=pinned_physical_type,
 						mathtype=wanted_mathtype,
 						default_unit=pinned_unit,

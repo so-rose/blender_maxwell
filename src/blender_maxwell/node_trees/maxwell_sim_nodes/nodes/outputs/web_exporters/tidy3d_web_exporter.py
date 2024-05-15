@@ -144,7 +144,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	####################
 	# - Computed - Sim
 	####################
-	@bl_cache.cached_bl_property(persist=False)
+	@bl_cache.cached_bl_property()
 	def sim(self) -> td.Simulation | None:
 		sim = self._compute_input('Sim')
 		has_sim = not ct.FlowSignal.check(sim)
@@ -153,7 +153,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			return sim
 		return None
 
-	@bl_cache.cached_bl_property(persist=False)
+	@bl_cache.cached_bl_property()
 	def total_monitor_data(self) -> float | None:
 		if self.sim is not None:
 			return sum(self.sim.monitors_data_size.values())
@@ -188,8 +188,9 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 		If one can't be loaded, return None.
 		"""
 		has_uploaded_task = self.uploaded_task_id != ''
+		has_new_cloud_task = self.new_cloud_task is not None
 
-		if has_uploaded_task:
+		if has_uploaded_task and has_new_cloud_task:
 			return tdcloud.TidyCloudTasks.tasks(self.new_cloud_task.cloud_folder).get(
 				self.uploaded_task_id
 			)
@@ -206,7 +207,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 			return tdcloud.TidyCloudTasks.task_info(self.uploaded_task_id)
 		return None
 
-	@bl_cache.cached_bl_property(persist=False)
+	@bl_cache.cached_bl_property()
 	def uploaded_est_cost(self) -> float | None:
 		task_info = self.uploaded_task_info
 		if task_info is not None:
@@ -219,7 +220,7 @@ class Tidy3DWebExporterNode(base.MaxwellSimNode):
 	####################
 	# - Computed - Combined
 	####################
-	@bl_cache.cached_bl_property(persist=False)
+	@bl_cache.cached_bl_property()
 	def is_sim_uploadable(self) -> bool:
 		if (
 			self.sim is not None

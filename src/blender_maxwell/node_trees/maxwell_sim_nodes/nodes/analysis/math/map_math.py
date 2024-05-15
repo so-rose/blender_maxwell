@@ -364,10 +364,10 @@ class MapMathNode(base.MaxwellSimNode):
 	bl_label = 'Map Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 
 	####################

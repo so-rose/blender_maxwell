@@ -43,16 +43,16 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Center': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			physical_type=spux.PhysicalType.Length,
 		),
 		'Size': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			physical_type=spux.PhysicalType.Length,
 			default_value=sp.Matrix([1, 1, 1]),
 		),
 		'Spatial Subdivs': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Integer,
 			default_value=sp.Matrix([10, 10, 10]),
 		),

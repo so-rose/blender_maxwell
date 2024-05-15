@@ -62,6 +62,9 @@ class FlowKind(enum.StrEnum):
 	Params = enum.auto()
 	Info = enum.auto()
 
+	####################
+	# - Class Methods
+	####################
 	@classmethod
 	def scale_to_unit_system(
 		cls,
@@ -85,3 +88,43 @@ class FlowKind(enum.StrEnum):
 
 		msg = 'Tried to scale unknown kind'
 		raise ValueError(msg)
+
+	####################
+	# - Computed
+	####################
+	@property
+	def flow_kind(self) -> str:
+		return {
+			FlowKind.Value: FlowKind.Value,
+			FlowKind.Array: FlowKind.Array,
+			FlowKind.LazyValueFunc: FlowKind.LazyValueFunc,
+			FlowKind.LazyArrayRange: FlowKind.LazyArrayRange,
+		}[self]
+
+	@property
+	def socket_shape(self) -> str:
+		return {
+			FlowKind.Value: 'CIRCLE',
+			FlowKind.Array: 'SQUARE',
+			FlowKind.LazyArrayRange: 'SQUARE',
+			FlowKind.LazyValueFunc: 'DIAMOND',
+		}[self]
+
+	####################
+	# - Blender Enum
+	####################
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		return {
+			FlowKind.Capabilities: 'Capabilities',
+			FlowKind.Value: 'Value',
+			FlowKind.Array: 'Array',
+			FlowKind.LazyArrayRange: 'Range',
+			FlowKind.LazyValueFunc: 'Lazy Value',
+			FlowKind.Params: 'Parameters',
+			FlowKind.Info: 'Information',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		return ''

@@ -20,17 +20,15 @@ Attributes:
 	MANDATORY_PROPS: Properties that must be defined on the `MaxwellSimNode`.
 """
 
-## TODO: Check whether input_socket_sets and output_socket_sets have the right shape? Or just use a type checker...
-
+import enum
 import typing as typ
-import uuid
 from collections import defaultdict
 from types import MappingProxyType
 
 import bpy
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, bl_instance, logger
 
 from .. import contracts as ct
 from .. import managed_objs as _managed_objs
@@ -40,10 +38,20 @@ from . import presets as _presets
 
 log = logger.get(__name__)
 
+####################
+# - Types
+####################
+Sockets: typ.TypeAlias = dict[str, sockets.base.SocketDef]
+Preset: typ.TypeAlias = dict[str, _presets.PresetDef]
+ManagedObjs: typ.TypeAlias = dict[ct.ManagedObjName, type[_managed_objs.ManagedObj]]
+
 MANDATORY_PROPS: set[str] = {'node_type', 'bl_label'}
 
 
-class MaxwellSimNode(bpy.types.Node):
+####################
+# - Node
+####################
+class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 	"""A specialized Blender node for Maxwell simulations.
 
 	Attributes:
@@ -58,100 +66,111 @@ class MaxwellSimNode(bpy.types.Node):
 		locked: Whether the node is currently 'locked' aka. non-editable.
 	"""
 
+	####################
+	# - Properties
+	####################
+	node_type: ct.NodeType
+	bl_label: str
+
+	# Features
 	use_sim_node_name: bool = False
-	## TODO: bl_description from first line of __doc__?
 
-	# Sockets
-	input_sockets: typ.ClassVar[dict[str, sockets.base.SocketDef]] = MappingProxyType(
-		{}
-	)
-	output_sockets: typ.ClassVar[dict[str, sockets.base.SocketDef]] = MappingProxyType(
-		{}
-	)
-	input_socket_sets: typ.ClassVar[dict[str, dict[str, sockets.base.SocketDef]]] = (
-		MappingProxyType({})
-	)
-	output_socket_sets: typ.ClassVar[dict[str, dict[str, sockets.base.SocketDef]]] = (
-		MappingProxyType({})
+	# Declarations
+	input_sockets: typ.ClassVar[Sockets] = MappingProxyType({})
+	output_sockets: typ.ClassVar[Sockets] = MappingProxyType({})
+
+	input_socket_sets: typ.ClassVar[dict[str, Sockets]] = MappingProxyType({})
+	output_socket_sets: typ.ClassVar[dict[str, Sockets]] = MappingProxyType({})
+
+	managed_obj_types: typ.ClassVar[ManagedObjs] = MappingProxyType({})
+	presets: typ.ClassVar[dict[str, Preset]] = MappingProxyType({})
+
+	## __init_subclass__ Computed
+	bl_idname: str
+
+	####################
+	# - Fields
+	####################
+	sim_node_name: str = bl_cache.BLField('')
+
+	# Loose Sockets
+	loose_input_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
+	loose_output_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
+
+	# UI Options
+	preview_active: bool = bl_cache.BLField(False)
+	locked: bool = bl_cache.BLField(False, use_prop_update=False)
+
+	# Active Socket Set
+	active_socket_set: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.socket_sets_bl_enum()
 	)
 
-	# Presets
-	presets: typ.ClassVar[dict[str, dict[str, _presets.PresetDef]]] = MappingProxyType(
-		{}
+	@classmethod
+	def socket_sets_bl_enum(cls) -> list[ct.BLEnumElement]:
+		return [
+			(socket_set_name, socket_set_name, socket_set_name, '', i)
+			for i, socket_set_name in enumerate(cls.socket_set_names())
+		]
+
+	# Active Preset
+	active_preset: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.presets_bl_enum()
 	)
 
-	# Managed Objects
-	managed_obj_types: typ.ClassVar[
-		dict[ct.ManagedObjName, type[_managed_objs.ManagedObj]]
-	] = MappingProxyType({})
+	@classmethod
+	def presets_bl_enum(cls) -> list[ct.BLEnumElement]:
+		return [
+			(
+				preset_name,
+				preset_def.label,
+				preset_def.description,
+				'',
+				i,
+			)
+			for i, (preset_name, preset_def) in enumerate(cls.presets.items())
+		]
 
-	def reset_instance_id(self) -> None:
-		self.instance_id = str(uuid.uuid4())
+	####################
+	# - Managed Objects
+	####################
+	@bl_cache.cached_bl_property(depends_on={'sim_node_name'})
+	def managed_objs(self) -> dict[str, _managed_objs.ManagedObj]:
+		"""Access the constructed managed objects defined in `self.managed_obj_types`.
 
-	# BLFields
-	blfields: typ.ClassVar[dict[str, str]] = MappingProxyType({})
-	ui_blfields: typ.ClassVar[set[str]] = frozenset()
+		Managed objects are special in that they **don't keep any non-reproducible state**.
+		In fact, all managed object state can generally be derived entirely from the managed object's `name` attribute.
+		As a result, **consistency in namespacing is of the utmost importance**, if reproducibility of managed objects is to be guaranteed.
+
+		This name must be in sync with the name of the managed "thing", which is where this computed property comes in.
+		The node's half of the responsibility is to push a new name whenever `self.sim_node_name` changes.
+		"""
+		if self.managed_obj_types:
+			return {
+				mobj_name: mobj_type(self.sim_node_name)
+				for mobj_name, mobj_type in self.managed_obj_types.items()
+			}
+
+		return {}
 
 	####################
 	# - Class Methods
 	####################
 	@classmethod
-	def _assert_attrs_valid(cls) -> None:
-		"""Asserts that all mandatory attributes are defined on the class.
-
-		The list of mandatory objects is sourced from `base.MANDATORY_PROPS`.
-
-		Raises:
-			ValueError: If a mandatory attribute defined in `base.MANDATORY_PROPS` is not defined on the class.
-		"""
-		for cls_attr in MANDATORY_PROPS:
-			if not hasattr(cls, cls_attr):
-				msg = f'Node class {cls} does not define mandatory attribute "{cls_attr}".'
-				raise ValueError(msg)
-
-	@classmethod
-	def declare_blfield(
-		cls, attr_name: str, bl_attr_name: str, prop_ui: bool = False
-	) -> None:
-		cls.blfields = cls.blfields | {attr_name: bl_attr_name}
-
-		if prop_ui:
-			cls.ui_blfields = cls.ui_blfields | {attr_name}
-
-	@classmethod
-	def set_prop(
-		cls,
-		prop_name: str,
-		prop: bpy.types.Property,
-		no_update: bool = False,
-		update_with_name: str | None = None,
-		**kwargs,
-	) -> None:
-		"""Adds a Blender property to a class via `__annotations__`, so it initializes with any subclass.
+	def socket_set_names(cls) -> list[str]:
+		"""Retrieve the names of socket sets, in an order-preserving way.
 
 		Notes:
-			- Blender properties can't be set within `__init_subclass__` simply by adding attributes to the class; they must be added as type annotations.
-			- Must be called **within** `__init_subclass__`.
+			Semantically similar to `list(set(...) | set(...))`.
 
-		Parameters:
-			name: The name of the property to set.
-			prop: The `bpy.types.Property` to instantiate and attach..
-			no_update: Don't attach a `self.on_prop_changed()` callback to the property's `update`.
+		Returns:
+			List of socket set names, without duplicates, in definition order.
 		"""
-		_update_with_name = prop_name if update_with_name is None else update_with_name
-		extra_kwargs = (
-			{
-				'update': lambda self, context: self.on_prop_changed(
-					_update_with_name, context
-				),
-			}
-			if not no_update
-			else {}
-		)
-		cls.__annotations__[prop_name] = prop(
-			**kwargs,
-			**extra_kwargs,
-		)
+		return (_input_socket_set_names := list(cls.input_socket_sets.keys())) + [
+			output_socket_set_name
+			for output_socket_set_name in cls.output_socket_sets
+			if output_socket_set_name not in _input_socket_set_names
+		]
 
 	@classmethod
 	def _gather_event_methods(cls) -> dict[str, typ.Callable[[], None]]:
@@ -169,28 +188,13 @@ class MaxwellSimNode(bpy.types.Node):
 			for attr_name in dir(cls)
 			if hasattr(method := getattr(cls, attr_name), 'event')
 			and method.event in set(ct.FlowEvent)
+			## Forbidding blfields prevents triggering __get__ on bl_property
 		]
 		event_methods_by_event = {event: [] for event in set(ct.FlowEvent)}
 		for method in event_methods:
 			event_methods_by_event[method.event].append(method)
 
 		return event_methods_by_event
-
-	@classmethod
-	def socket_set_names(cls) -> list[str]:
-		"""Retrieve the names of socket sets, in an order-preserving way.
-
-		Notes:
-			Semantically similar to `list(set(...) | set(...))`.
-
-		Returns:
-			List of socket set names, without duplicates, in definition order.
-		"""
-		return (_input_socket_set_names := list(cls.input_socket_sets.keys())) + [
-			output_socket_set_name
-			for output_socket_set_name in cls.output_socket_sets
-			if output_socket_set_name not in _input_socket_set_names
-		]
 
 	####################
 	# - Subclass Initialization
@@ -204,64 +208,20 @@ class MaxwellSimNode(bpy.types.Node):
 		"""
 		log.debug('Initializing Node: %s', cls.node_type)
 		super().__init_subclass__(**kwargs)
-		cls._assert_attrs_valid()
+
+		# Check Attribute Validity
+		cls.assert_attrs_valid(MANDATORY_PROPS)
 
 		# Node Properties
-		## Identifiers
 		cls.bl_idname: str = str(cls.node_type.value)
-		cls.set_prop('instance_id', bpy.props.StringProperty, no_update=True)
-		cls.set_prop('sim_node_name', bpy.props.StringProperty, default='')
-
-		## Special States
-		cls.set_prop('preview_active', bpy.props.BoolProperty, default=False)
-		cls.set_prop('locked', bpy.props.BoolProperty, no_update=True, default=False)
-
-		## Event Method Callbacks
 		cls.event_methods_by_event = cls._gather_event_methods()
 
-		## Active Socket Set
-		if len(cls.input_socket_sets) + len(cls.output_socket_sets) > 0:
-			socket_set_names = cls.socket_set_names()
-			cls.set_prop(
-				'active_socket_set',
-				bpy.props.EnumProperty,
-				name='Active Socket Set',
-				items=[
-					(socket_set_name, socket_set_name, socket_set_name)
-					for socket_set_name in socket_set_names
-				],
-				default=socket_set_names[0],
-			)
-		else:
-			cls.active_socket_set = None
-
-		## Active Preset
-		## TODO: Validate Presets
-		if cls.presets:
-			cls.set_prop(
-				'active_preset',
-				bpy.props.EnumProperty,
-				name='Active Preset',
-				description='The currently active preset',
-				items=[
-					(
-						preset_name,
-						preset_def.label,
-						preset_def.description,
-					)
-					for preset_name, preset_def in cls.presets.items()
-				],
-				default=next(cls.presets.keys()),
-			)
-		else:
-			cls.active_preset = None
-
 	####################
-	# - Events: Default
+	# - Events: Sim Node Name | Active Socket Set | Active Preset
 	####################
 	@events.on_value_changed(
 		prop_name='sim_node_name',
-		props={'sim_node_name'},
+		props={'sim_node_name', 'managed_objs'},
 		stop_propagation=True,
 	)
 	def _on_sim_node_name_changed(self, props):
@@ -273,7 +233,7 @@ class MaxwellSimNode(bpy.types.Node):
 		)
 
 		# Set Name of Managed Objects
-		for mobj in self.managed_objs.values():
+		for mobj in props['managed_objs'].values():
 			mobj.name = props['sim_node_name']
 
 		## Invalidate Cache
@@ -290,7 +250,10 @@ class MaxwellSimNode(bpy.types.Node):
 		self._sync_sockets()
 
 	@events.on_value_changed(
-		prop_name='active_preset', props=['presets', 'active_preset']
+		prop_name='active_preset',
+		run_on_init=True,
+		props={'presets', 'active_preset'},
+		stop_propagation=True,
 	)
 	def _on_active_preset_changed(self, props: dict):
 		if props['active_preset'] is not None:
@@ -313,6 +276,9 @@ class MaxwellSimNode(bpy.types.Node):
 				## TODO: Account for FlowKind
 				bl_socket.value = socket_value
 
+	####################
+	# - Events: Preview | Plot
+	####################
 	@events.on_show_plot(stop_propagation=False)
 	def _on_show_plot(self):
 		node_tree = self.id_data
@@ -339,6 +305,9 @@ class MaxwellSimNode(bpy.types.Node):
 			for mobj in self.managed_objs.values():
 				mobj.hide_preview()
 
+	####################
+	# - Events: Lock
+	####################
 	@events.on_enable_lock()
 	def _on_enabled_lock(self):
 		# Set Locked to Active
@@ -354,11 +323,8 @@ class MaxwellSimNode(bpy.types.Node):
 		self.locked = False
 
 	####################
-	# - Loose Sockets w/Events
+	# - Events: Loose Sockets
 	####################
-	loose_input_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
-	loose_output_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
-
 	@events.on_value_changed(prop_name={'loose_input_sockets', 'loose_output_sockets'})
 	def _on_loose_sockets_changed(self):
 		self._sync_sockets()
@@ -515,23 +481,6 @@ class MaxwellSimNode(bpy.types.Node):
 		"""
 		self._prune_inactive_sockets()
 		self._add_new_active_sockets()
-
-	####################
-	# - Managed Objects
-	####################
-	@bl_cache.cached_bl_property(persist=True)
-	def managed_objs(self) -> dict[str, _managed_objs.ManagedObj]:
-		"""Access the managed objects defined on this node.
-
-		Persistent cache ensures that the managed objects are only created on first access, even across file reloads.
-		"""
-		if self.managed_obj_types:
-			return {
-				mobj_name: mobj_type(self.sim_node_name)
-				for mobj_name, mobj_type in self.managed_obj_types.items()
-			}
-
-		return {}
 
 	####################
 	# - Event Methods
@@ -733,7 +682,7 @@ class MaxwellSimNode(bpy.types.Node):
 			)
 		)
 
-	@bl_cache.cached_bl_property(persist=False)
+	@bl_cache.cached_bl_property()
 	def _dependent_outputs(
 		self,
 	) -> dict[
@@ -904,7 +853,7 @@ class MaxwellSimNode(bpy.types.Node):
 	####################
 	# - Property Event: On Update
 	####################
-	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
+	def on_prop_changed(self, prop_name: str) -> None:
 		"""Report that a particular property has changed, which may cause certain caches to regenerate.
 
 		Notes:
@@ -916,10 +865,6 @@ class MaxwellSimNode(bpy.types.Node):
 			prop_name: The name of the property that changed.
 		"""
 		if hasattr(self, prop_name):
-			# Invalidate UI BLField Caches
-			if prop_name in self.ui_blfields:
-				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
-
 			# Trigger Event
 			self.trigger_event(ct.FlowEvent.DataChanged, prop_name=prop_name)
 		else:
@@ -952,16 +897,16 @@ class MaxwellSimNode(bpy.types.Node):
 			layout.enabled = False
 
 		if self.active_socket_set:
-			layout.prop(self, 'active_socket_set', text='')
+			layout.prop(self, self.blfields['active_socket_set'], text='')
 
 		if self.active_preset is not None:
-			layout.prop(self, 'active_preset', text='')
+			layout.prop(self, self.blfields['active_preset'], text='')
 
 		# Draw Name
 		if self.use_sim_node_name:
 			row = layout.row(align=True)
 			row.label(text='', icon='FILE_TEXT')
-			row.prop(self, 'sim_node_name', text='')
+			row.prop(self, self.blfields['sim_node_name'], text='')
 
 		# Draw Name
 		self.draw_props(context, layout)
@@ -1029,23 +974,19 @@ class MaxwellSimNode(bpy.types.Node):
 		Notes:
 			Run by Blender when a new instance of a node is added to a tree.
 		"""
+		# Initialize Sockets
+		## -> Ensures the availability of static sockets before items/methods.
+		## -> Ensures the availability of static sockets before items/methods.
+		self._sync_sockets()
+
 		# Initialize Instance ID
-		## This is used by various caches from 'bl_cache'.
+		## -> This is used by various caches from 'bl_cache'.
+		## -> Also generates (first-time) the various enums.
 		self.reset_instance_id()
 
 		# Initialize Name
-		## This is used whenever a unique name pointing to this node is needed.
-		## Contrary to self.name, it can be altered by the user as a property.
+		## -> Ensures the availability of sim_node_name immediately.
 		self.sim_node_name = self.name
-
-		# Initialize Sockets
-		## This initializes any nodes that need initializing
-		self._sync_sockets()
-
-		# Apply Preset
-		## This applies the default preset, if any.
-		if self.active_preset:
-			self._on_active_preset_changed()
 
 		# Event Methods
 		## Run any 'DataChanged' methods with 'run_on_init' set.

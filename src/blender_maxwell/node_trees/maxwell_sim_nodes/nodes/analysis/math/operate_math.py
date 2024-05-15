@@ -71,22 +71,22 @@ class OperateMathNode(base.MaxwellSimNode):
 	bl_label = 'Operate Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
-		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Array),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 
 	####################
 	# - Properties
 	####################
-	category: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_categories()
+	category: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_categories()
 	)
 
-	operation: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
+	operation: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_operations()
 	)
 
 	def search_categories(self) -> list[ct.BLEnumElement]:

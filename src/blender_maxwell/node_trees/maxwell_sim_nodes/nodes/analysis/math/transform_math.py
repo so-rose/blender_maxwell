@@ -62,8 +62,8 @@ class TransformMathNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	operation: enum.Enum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
+	operation: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_operations()
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:

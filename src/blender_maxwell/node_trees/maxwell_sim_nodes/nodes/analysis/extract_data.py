@@ -67,8 +67,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	extract_filter: enum.Enum = bl_cache.BLField(
-		prop_ui=True,
+	extract_filter: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_extract_filters(),
 	)
 

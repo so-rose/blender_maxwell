@@ -54,13 +54,13 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
 		'Center': sockets.ExprSocketDef(
-			shape=(3,),
+			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_value=sp.Matrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
-			shape=(2,),
+			size=spux.NumberSize1D.Vec2,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
 			default_value=sp.Matrix([1, 1]),
@@ -77,7 +77,7 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 			abs_min=0.01,
 		),
 		'Spherical': sockets.ExprSocketDef(
-			shape=(2,),
+			size=spux.NumberSize1D.Vec2,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Angle,
 			default_value=sp.Matrix([0, 0]),

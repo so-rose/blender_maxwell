@@ -49,36 +49,28 @@ class WaveConstantNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Wavelength': {
 			'WL': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.Value,
-				physical_type=spux.PhysicalType.Length,
-				# Defaults
 				default_unit=spu.nm,
 				default_value=500,
 				default_min=200,
 				default_max=700,
-				default_steps=2,
+				default_steps=50,
 			)
 		},
 		'Frequency': {
 			'Freq': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.Value,
-				physical_type=spux.PhysicalType.Freq,
-				# Defaults
 				default_unit=spux.THz,
 				default_value=1,
 				default_min=0.3,
 				default_max=3,
-				default_steps=2,
+				default_steps=50,
 			),
 		},
 	}
 	output_sockets: typ.ClassVar = {
 		'WL': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.Value,
 			physical_type=spux.PhysicalType.Length,
 		),
 		'Freq': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.Value,
 			physical_type=spux.PhysicalType.Freq,
 		),
 	}
@@ -86,7 +78,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	use_range: bool = bl_cache.BLField(False, prop_ui=True)
+	use_range: bool = bl_cache.BLField(False)
 
 	####################
 	# - UI
@@ -192,6 +184,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 				sci_constants.vac_speed_of_light / (freq.start * freq.unit), spu.um
 			),
 			steps=freq.steps,
+			scaling=freq.scaling,
 			unit=spu.um,
 		)
 
@@ -220,6 +213,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 				sci_constants.vac_speed_of_light / (wl.start * wl.unit), spux.THz
 			),
 			steps=wl.steps,
+			scaling=wl.scaling,
 			unit=spux.THz,
 		)
 

@@ -44,7 +44,7 @@ def socket_def_from_bl_isocket(
 		## -> Accounts for any combo of shape/MathType/PhysicalType.
 		if blsck_info.socket_type == ct.SocketType.Expr:
 			return sockets.ExprSocketDef(
-				shape=blsck_info.size.shape,
+				size=blsck_info.size,
 				mathtype=blsck_info.mathtype,
 				physical_type=blsck_info.physical_type,
 				default_unit=ct.UNITS_BLENDER[blsck_info.physical_type],

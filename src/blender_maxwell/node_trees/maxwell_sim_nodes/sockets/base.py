@@ -16,13 +16,11 @@
 
 import abc
 import typing as typ
-import uuid
-from types import MappingProxyType
 
 import bpy
 import pydantic as pyd
 
-from blender_maxwell.utils import bl_cache, logger, serialize
+from blender_maxwell.utils import bl_cache, bl_instance, logger, serialize
 
 from .. import contracts as ct
 
@@ -60,7 +58,7 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
-		bl_socket.initializing = False
+		bl_socket.is_initializing = False
 		bl_socket.on_active_kind_changed()
 
 	@abc.abstractmethod
@@ -116,9 +114,12 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 
 
 ####################
-# - SocketDef
+# - Socket
 ####################
-class MaxwellSimSocket(bpy.types.NodeSocket):
+MANDATORY_PROPS: set[str] = {'socket_type', 'bl_label'}
+
+
+class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	"""A specialized Blender socket for nodes in a Maxwell simulation.
 
 	Attributes:
@@ -128,112 +129,45 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		locked: The lock-state of a particular socket, which determines the socket's user editability
 	"""
 
-	# Fundamentals
+	# Properties
+	## Class
 	socket_type: ct.SocketType
 	bl_label: str
 
-	# Style
-	display_shape: typ.Literal[
-		'CIRCLE',
-		'SQUARE',
-		'DIAMOND',
-		'CIRCLE_DOT',
-		'SQUARE_DOT',
-		'DIAMOND_DOT',
-	]
-	## We use the following conventions for shapes:
-	## - CIRCLE: Single Value.
-	## - SQUARE: Container of Value.
-	## - DIAMOND: Pointer Value.
-	## - +DOT: Uses Units
-	socket_color: tuple
-
-	# Options
-	use_prelock: bool = False
-	use_info_draw: bool = False
-
-	# Computed
+	## Computed by Subclass
 	bl_idname: str
 
 	# BLFields
-	blfields: typ.ClassVar[dict[str, str]] = MappingProxyType({})
-	ui_blfields: typ.ClassVar[set[str]] = frozenset()
+	## Identifying
+	is_initializing: bool = bl_cache.BLField(True, use_prop_update=False)
+
+	active_kind: ct.FlowKind = bl_cache.BLField(ct.FlowKind.Value)
+
+	## UI
+	use_info_draw: bool = bl_cache.BLField(False, use_prop_update=False)
+	use_prelock: bool = bl_cache.BLField(False, use_prop_update=False)
+
+	locked: bool = bl_cache.BLField(False, use_prop_update=False)
+
+	use_socket_color: bool = bl_cache.BLField(False, use_prop_update=False)
+	socket_color: tuple[float, float, float, float] = bl_cache.BLField(
+		(0, 0, 0, 0), use_prop_update=False
+	)
 
 	####################
 	# - Initialization
 	####################
-	## TODO: Common implementation of this for both sockets and nodes - perhaps a BLInstance base class?
-	def reset_instance_id(self) -> None:
-		self.instance_id = str(uuid.uuid4())
-
-	@classmethod
-	def declare_blfield(
-		cls, attr_name: str, bl_attr_name: str, prop_ui: bool = False
-	) -> None:
-		cls.blfields = cls.blfields | {attr_name: bl_attr_name}
-
-		if prop_ui:
-			cls.ui_blfields = cls.ui_blfields | {attr_name}
-
-	@classmethod
-	def set_prop(
-		cls,
-		prop_name: str,
-		prop: bpy.types.Property,
-		no_update: bool = False,
-		update_with_name: str | None = None,
-		**kwargs,
-	) -> None:
-		"""Adds a Blender property to a class via `__annotations__`, so it initializes with any subclass.
+	def __init_subclass__(cls, **kwargs: typ.Any):
+		"""Initializes socket properties and attributes for use.
 
 		Notes:
-			- Blender properties can't be set within `__init_subclass__` simply by adding attributes to the class; they must be added as type annotations.
-			- Must be called **within** `__init_subclass__`.
-
-		Parameters:
-			name: The name of the property to set.
-			prop: The `bpy.types.Property` to instantiate and attach..
-			no_update: Don't attach a `self.on_prop_changed()` callback to the property's `update`.
+			Run when initializing any subclass of MaxwellSimSocket.
 		"""
-		_update_with_name = prop_name if update_with_name is None else update_with_name
-		extra_kwargs = (
-			{
-				'update': lambda self, context: self.on_prop_changed(
-					_update_with_name, context
-				),
-			}
-			if not no_update
-			else {}
-		)
-		cls.__annotations__[prop_name] = prop(
-			**kwargs,
-			**extra_kwargs,
-		)
-
-	def __init_subclass__(cls, **kwargs: typ.Any):
 		log.debug('Initializing Socket: %s', cls.socket_type)
 		super().__init_subclass__(**kwargs)
-		# cls._assert_attrs_valid()
-		## TODO: Implement this :)
+		cls.assert_attrs_valid(MANDATORY_PROPS)
 
-		# Socket Properties
-		## Identifiers
 		cls.bl_idname: str = str(cls.socket_type.value)
-		cls.set_prop('instance_id', bpy.props.StringProperty, no_update=True)
-		cls.set_prop(
-			'initializing', bpy.props.BoolProperty, default=True, no_update=True
-		)
-
-		## Special States
-		cls.set_prop('locked', bpy.props.BoolProperty, no_update=True, default=False)
-
-		# Setup Style
-		cls.socket_color = ct.SOCKET_COLORS[cls.socket_type]
-
-		# Setup List
-		cls.set_prop(
-			'active_kind', bpy.props.StringProperty, default=str(ct.FlowKind.Value)
-		)
 
 	####################
 	# - Property Event: On Update
@@ -244,12 +178,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		Notes:
 			Called by `self.on_prop_changed()` when `self.active_kind` was changed.
 		"""
-		self.display_shape = {
-			ct.FlowKind.Value: 'CIRCLE',
-			ct.FlowKind.Array: 'SQUARE',
-			ct.FlowKind.LazyArrayRange: 'SQUARE',
-			ct.FlowKind.LazyValueFunc: 'DIAMOND',
-		}[self.active_kind]
+		self.display_shape = self.active_kind.socket_shape
 
 	def on_socket_prop_changed(self, prop_name: str) -> None:
 		"""Called when a property has been updated.
@@ -264,7 +193,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			prop_name: The name of the property that was changed.
 		"""
 
-	def on_prop_changed(self, prop_name: str, _: bpy.types.Context) -> None:
+	def on_prop_changed(self, prop_name: str) -> None:
 		"""Called when a property has been updated.
 
 		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
@@ -275,17 +204,13 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 			prop_name: The name of the property that was changed.
 		"""
 		## TODO: Evaluate this properly
-		if self.initializing:
+		if self.is_initializing:
 			log.debug(
 				'%s: Rejected on_prop_changed("%s") while initializing',
 				self.bl_label,
 				prop_name,
 			)
 		elif hasattr(self, prop_name):
-			# Invalidate UI BLField Caches
-			if prop_name in self.ui_blfields:
-				setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
-
 			# Property Callbacks: Active Kind
 			if prop_name == 'active_kind':
 				self.on_active_kind_changed()
@@ -469,34 +394,32 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
 			self.locked = event == ct.FlowEvent.EnableLock
 
-		# Input Socket | Input Flow
-		if not self.is_output and flow_direction == 'input':
-			for link in self.links:
-				link.from_socket.trigger_event(event, socket_kinds=socket_kinds)
+		# Event by Socket Orientation | Flow Direction
+		match (self.is_output, flow_direction):
+			case (False, 'input'):
+				for link in self.links:
+					link.from_socket.trigger_event(event, socket_kinds=socket_kinds)
 
-		# Input Socket | Output Flow
-		if not self.is_output and flow_direction == 'output':
-			if event == ct.FlowEvent.LinkChanged:
-				self.node.trigger_event(
-					ct.FlowEvent.DataChanged,
-					socket_name=self.name,
-					socket_kinds=socket_kinds,
-				)
-			else:
+			case (False, 'output'):
+				if event == ct.FlowEvent.LinkChanged:
+					self.node.trigger_event(
+						ct.FlowEvent.DataChanged,
+						socket_name=self.name,
+						socket_kinds=socket_kinds,
+					)
+				else:
+					self.node.trigger_event(
+						event, socket_name=self.name, socket_kinds=socket_kinds
+					)
+
+			case (True, 'input'):
 				self.node.trigger_event(
 					event, socket_name=self.name, socket_kinds=socket_kinds
 				)
 
-		# Output Socket | Input Flow
-		if self.is_output and flow_direction == 'input':
-			self.node.trigger_event(
-				event, socket_name=self.name, socket_kinds=socket_kinds
-			)
-
-		# Output Socket | Output Flow
-		if self.is_output and flow_direction == 'output':
-			for link in self.links:
-				link.to_socket.trigger_event(event, socket_kinds=socket_kinds)
+			case (True, 'output'):
+				for link in self.links:
+					link.to_socket.trigger_event(event, socket_kinds=socket_kinds)
 
 	####################
 	# - FlowKind: Auxiliary
@@ -729,19 +652,24 @@ class MaxwellSimSocket(bpy.types.NodeSocket):
 		raise NotImplementedError(msg)
 
 	####################
-	# - Theme
+	# - UI - Color
 	####################
-	@classmethod
-	def draw_color_simple(cls) -> ct.BLColorRGBA:
-		"""Sets the socket's color to `cls.socket_color`.
+	def draw_color(
+		self,
+		_: bpy.types.Context,
+		node: bpy.types.Node,  # noqa: ARG002
+	) -> tuple[float, float, float, float]:
+		"""Draw the socket color depending on context.
+
+		When `self.use_socket_color` is set, the property `socket_color` can be used to control the socket color directly.
+		Otherwise, a default based on `self.socket_type` will be used.
 
 		Notes:
-			Blender calls this method to determine the socket color.
-
-		Returns:
-			A Blender-compatible RGBA value, with no explicit color space.
+			Called by Blender to call the socket color.
 		"""
-		return cls.socket_color
+		if self.use_socket_color:
+			return self.socket_color
+		return ct.SOCKET_COLORS[self.socket_type]
 
 	####################
 	# - UI

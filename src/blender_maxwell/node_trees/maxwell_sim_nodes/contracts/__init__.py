@@ -50,6 +50,7 @@ from .flow_kinds import (
 	LazyArrayRangeFlow,
 	LazyValueFuncFlow,
 	ParamsFlow,
+	ScalingMode,
 	ValueFlow,
 )
 from .flow_signals import FlowSignal
@@ -116,6 +117,7 @@ __all__ = [
 	'LazyArrayRangeFlow',
 	'LazyValueFuncFlow',
 	'ParamsFlow',
+	'ScalingMode',
 	'ValueFlow',
 	'FlowSignal',
 ]

@@ -14,28 +14,23 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Package providing various tools to handle cached data on Blender objects, especially nodes and node socket classes."""
 
-class staticproperty(property):  # noqa: N801
-	"""A read-only variant of `@property` that is entirely static, for use in specific situations.
+from .bl_field import BLField
+from .bl_prop import BLProp, BLPropType
+from .cached_bl_property import CachedBLProperty, cached_bl_property
+from .keyed_cache import KeyedCache, keyed_cache
+from .managed_cache import invalidate_nonpersist_instance_id
+from .signal import Signal
 
-	The decorated method must take no arguments whatsoever, including `self`/`cls`.
-
-	Examples:
-		Exactly as you'd expect.
-		```python
-		class Spam:
-			@staticproperty
-			def eggs():
-				return 10
-
-		assert Spam.eggs == 10
-		```
-	"""
-
-	def __get__(self, *_):
-		"""Overridden getter that ignores instance and owner, and just returns the value of the evaluated (static) method.
-
-		Returns:
-			The evaluated value of the static method that was decorated.
-		"""
-		return self.fget()
+__all__ = [
+	'BLField',
+	'BLProp',
+	'BLPropType',
+	'CachedBLProperty',
+	'cached_bl_property',
+	'KeyedCache',
+	'keyed_cache',
+	'invalidate_nonpersist_instance_id',
+	'Signal',
+]

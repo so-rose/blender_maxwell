@@ -96,6 +96,26 @@ class MathType(enum.StrEnum):
 			}[self]
 		)
 
+	def coerce_compatible_pyobj(
+		self, pyobj: bool | int | Fraction | float | complex
+	) -> bool | int | Fraction | float | complex:
+		MT = MathType
+		match self:
+			case MT.Bool:
+				return pyobj
+			case MT.Integer:
+				return int(pyobj)
+			case MT.Rational if isinstance(pyobj, int):
+				return Fraction(pyobj, 1)
+			case MT.Rational if isinstance(pyobj, Fraction):
+				return pyobj
+			case MT.Real:
+				return float(pyobj)
+			case MT.Complex if isinstance(pyobj, int | Fraction):
+				return complex(float(pyobj), 0)
+			case MT.Complex if isinstance(pyobj, float):
+				return complex(pyobj, 0)
+
 	@staticmethod
 	def from_expr(sp_obj: SympyType) -> type:
 		if isinstance(sp_obj, sp.MatrixBase):
@@ -124,13 +144,23 @@ class MathType(enum.StrEnum):
 		raise ValueError(msg)
 
 	@staticmethod
-	def from_pytype(dtype) -> type:
+	def from_pytype(dtype: type) -> type:
 		return {
 			bool: MathType.Bool,
 			int: MathType.Integer,
+			Fraction: MathType.Rational,
 			float: MathType.Real,
 			complex: MathType.Complex,
 		}[dtype]
+
+	@staticmethod
+	def has_mathtype(obj: typ.Any) -> typ.Literal['pytype', 'expr'] | None:
+		if isinstance(obj, bool | int | Fraction | float | complex):
+			return 'pytype'
+		if isinstance(obj, sp.Basic | sp.MatrixBase | sp.MutableDenseMatrix):
+			return 'expr'
+
+		return None
 
 	@property
 	def pytype(self) -> type:
@@ -138,7 +168,7 @@ class MathType(enum.StrEnum):
 		return {
 			MT.Bool: bool,
 			MT.Integer: int,
-			MT.Rational: float,
+			MT.Rational: Fraction,
 			MT.Real: float,
 			MT.Complex: complex,
 		}[self]
@@ -209,8 +239,20 @@ class NumberSize1D(enum.StrEnum):
 		)
 
 	@staticmethod
-	def supports_shape(shape: tuple[int, ...] | None):
-		return shape is None or (len(shape) == 1 and shape[0] in [2, 3])
+	def has_shape(shape: tuple[int, ...] | None):
+		return shape in [None, (2,), (3,), (4,), (2, 1), (3, 1), (4, 1)]
+
+	def supports_shape(self, shape: tuple[int, ...] | None):
+		NS = NumberSize1D
+		match self:
+			case NS.Scalar:
+				return shape is None
+			case NS.Vec2:
+				return shape in ((2,), (2, 1))
+			case NS.Vec3:
+				return shape in ((3,), (3, 1))
+			case NS.Vec4:
+				return shape in ((4,), (4, 1))
 
 	@staticmethod
 	def from_shape(shape: tuple[typ.Literal[2, 3]] | None) -> typ.Self:
@@ -220,6 +262,9 @@ class NumberSize1D(enum.StrEnum):
 			(2,): NS.Vec2,
 			(3,): NS.Vec3,
 			(4,): NS.Vec4,
+			(2, 1): NS.Vec2,
+			(3, 1): NS.Vec3,
+			(4, 1): NS.Vec4,
 		}[shape]
 
 	@property
@@ -231,6 +276,14 @@ class NumberSize1D(enum.StrEnum):
 			NS.Vec3: (3,),
 			NS.Vec4: (4,),
 		}[self]
+
+
+def symbol_range(sym: sp.Symbol) -> str:
+	return f'{sym.name} ∈ ' + (
+		'ℂ'
+		if sym.is_complex
+		else ('ℝ' if sym.is_real else ('ℤ' if sym.is_integer else '?'))
+	)
 
 
 ####################
@@ -749,7 +802,7 @@ def scale_to_unit(sp_obj: SympyType, unit: spu.Quantity) -> Number:
 	Raises:
 		ValueError: If the result of unit-conversion and -stripping still has units, as determined by `uses_units()`.
 	"""
-	unitless_expr = spu.convert_to(sp_obj, unit) / unit
+	unitless_expr = spu.convert_to(sp_obj, unit) / unit if unit is not None else sp_obj
 	if not uses_units(unitless_expr):
 		return unitless_expr
 
@@ -800,6 +853,9 @@ def unit_str_to_unit(unit_str: str) -> Unit | None:
 class PhysicalType(enum.StrEnum):
 	"""Type identifiers for expressions with both `MathType` and a unit, aka a "physical" type."""
 
+	# Unitless
+	NonPhysical = enum.auto()
+
 	# Global
 	Time = enum.auto()
 	Angle = enum.auto()
@@ -845,10 +901,11 @@ class PhysicalType(enum.StrEnum):
 	AngularWaveVector = enum.auto()
 	PoyntingVector = enum.auto()
 
-	@property
+	@functools.cached_property
 	def unit_dim(self):
 		PT = PhysicalType
 		return {
+			PT.NonPhysical: None,
 			# Global
 			PT.Time: Dims.time,
 			PT.Angle: Dims.angle,
@@ -894,10 +951,11 @@ class PhysicalType(enum.StrEnum):
 			PT.PoyntingVector: Dims.power / Dims.length**2,
 		}[self]
 
-	@property
+	@functools.cached_property
 	def default_unit(self) -> list[Unit]:
 		PT = PhysicalType
 		return {
+			PT.NonPhysical: None,
 			# Global
 			PT.Time: spu.picosecond,
 			PT.Angle: spu.radian,
@@ -942,10 +1000,11 @@ class PhysicalType(enum.StrEnum):
 			PT.AngularWaveVector: spu.radian * terahertz,
 		}[self]
 
-	@property
+	@functools.cached_property
 	def valid_units(self) -> list[Unit]:
 		PT = PhysicalType
 		return {
+			PT.NonPhysical: [None],
 			# Global
 			PT.Time: [
 				femtosecond,
@@ -1101,12 +1160,13 @@ class PhysicalType(enum.StrEnum):
 		for physical_type in list(PhysicalType):
 			if unit in physical_type.valid_units:
 				return physical_type
+		## TODO: Optimize
 
-		msg = f'No PhysicalType found for unit {unit}'
+		msg = f'Could not determine PhysicalType for {unit}'
 		raise ValueError(msg)
 
-	@property
-	def valid_shapes(self):
+	@functools.cached_property
+	def valid_shapes(self) -> list[typ.Literal[(3,), (2,)] | None]:
 		PT = PhysicalType
 		overrides = {
 			# Cartesian
@@ -1133,7 +1193,7 @@ class PhysicalType(enum.StrEnum):
 
 		return overrides.get(self, [None])
 
-	@property
+	@functools.cached_property
 	def valid_mathtypes(self) -> list[MathType]:
 		"""Returns a list of valid mathematical types, especially whether it can be real- or complex-valued.
 
@@ -1157,6 +1217,7 @@ class PhysicalType(enum.StrEnum):
 		MT = MathType
 		PT = PhysicalType
 		overrides = {
+			PT.NonPhysical: list(MT),  ## Support All
 			# Cartesian
 			PT.Freq: [MT.Real, MT.Complex],  ## Im -> Growth/Damping
 			PT.AngFreq: [MT.Real, MT.Complex],  ## Im -> Growth/Damping
@@ -1187,6 +1248,8 @@ class PhysicalType(enum.StrEnum):
 
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
+		if value is PhysicalType.NonPhysical:
+			return 'Unitless'
 		return PhysicalType(value).name
 
 	@staticmethod
