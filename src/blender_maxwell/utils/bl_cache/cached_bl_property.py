@@ -75,6 +75,9 @@ class CachedBLProperty:
 
 		self.decode_type: type = inspect.signature(getter_method).return_annotation
 
+		# Write Suppressing
+		self.suppress_write: dict[str, bool] = {}
+
 		# Check Non-Empty Type Annotation
 		## For now, just presume that all types can be encoded/decoded.
 		if self.decode_type is inspect.Signature.empty:
@@ -122,6 +125,10 @@ class CachedBLProperty:
 			return Signal.CacheNotReady
 		return cached_value
 
+	def suppress_next_write(self, bl_instance) -> None:
+		self.suppress_write[bl_instance.instance_id] = True
+		## TODO: Make it a context manager to prevent the worst of surprises
+
 	def __set__(
 		self, bl_instance: bl_instance.BLInstance | None, value: typ.Any
 	) -> None:
@@ -144,7 +151,10 @@ class CachedBLProperty:
 				# Fill Caches
 				## -> persist: Fill Persist and Non-Persist Cache
 				## -> else: Fill Non-Persist Cache
-				if self.persist:
+				if self.persist and not self.suppress_write.get(
+					bl_instance.instance_id
+				):
+					self.suppress_next_write(bl_instance)
 					self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
 
 				else:
@@ -162,7 +172,7 @@ class CachedBLProperty:
 				self.setter_method(bl_instance, value)
 
 			# Fill Non-Persistant (and maybe Persistent) Cache
-			if self.persist:
+			if self.persist and not self.suppress_write.get(bl_instance.instance_id):
 				self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
 
 			else:

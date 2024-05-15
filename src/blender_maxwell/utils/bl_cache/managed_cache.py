@@ -20,7 +20,6 @@
 
 import typing as typ
 
-from blender_maxwell import contracts as ct
 from blender_maxwell.utils import bl_instance, logger
 
 from .signal import Signal
@@ -94,8 +93,9 @@ def read(
 	# Check if Instance ID is Available
 	if not bl_instance.instance_id:
 		log.debug(
-			"Can't Get CachedBLProperty: Instance ID not (yet) defined on bl_instance.BLInstance %s",
+			'%s (Non-Persist): Tried read() (key=%s), but Instance ID not (yet) defined',
 			str(bl_instance),
+			str(key),
 		)
 		return Signal.CacheNotReady
 

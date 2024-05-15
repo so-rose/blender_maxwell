@@ -30,6 +30,7 @@ from ... import base, events
 log = logger.get(__name__)
 
 FUNCS = {
+	# Number | Number
 	'ADD': lambda exprs: exprs[0] + exprs[1],
 	'SUB': lambda exprs: exprs[0] - exprs[1],
 	'MUL': lambda exprs: exprs[0] * exprs[1],

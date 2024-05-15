@@ -974,15 +974,18 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		Notes:
 			Run by Blender when a new instance of a node is added to a tree.
 		"""
-		# Initialize Sockets
-		## -> Ensures the availability of static sockets before items/methods.
-		## -> Ensures the availability of static sockets before items/methods.
-		self._sync_sockets()
-
 		# Initialize Instance ID
 		## -> This is used by various caches from 'bl_cache'.
 		## -> Also generates (first-time) the various enums.
 		self.reset_instance_id()
+
+		# Initialize Sockets
+		## -> Ensures the availability of static sockets before dynamic fields.
+		self._sync_sockets()
+
+		# Initialize Dynamic Field Persistance
+		## -> Ensures the availability of enum items for subsequent setters.
+		self.regenerate_dynamic_field_persistance()
 
 		# Initialize Name
 		## -> Ensures the availability of sim_node_name immediately.

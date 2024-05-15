@@ -214,9 +214,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		return None
 
-	@bl_cache.cached_bl_property()
-	def prev_unit(self) -> spux.Unit | None:
-		return self.unit
+	prev_unit: str | None = bl_cache.BLField(None)
 
 	####################
 	# - Prop-Change Callback
@@ -231,19 +229,21 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			## -> 1. "Laggy" unit must be different than new unit.
 			## -> 2. Unit-conversion of value only within same physical_type
 			## -> 3. Never unit-convert expressions w/symbolic variables
-			## No matter what, prev_unit is always re-armed.
+			## No matter what, prev_unit is always regenerated.
+			prev_unit = (
+				spux.unit_str_to_unit(self.prev_unit)
+				if self.prev_unit is not None
+				else None
+			)
 			if (
-				self.prev_unit != self.unit
-				and self.prev_unit in self.physical_type.valid_units
+				prev_unit != self.unit
+				and prev_unit in self.physical_type.valid_units
 				and not self.symbols
 			):
-				log.critical(self.value, self.prev_unit, self.unit)
-				self.value = spu.convert_to(self.value, self.prev_unit)
-				log.critical(self.value, self.prev_unit, self.unit)
-				self.lazy_array_range = self.lazy_array_range.rescale_to_unit(
-					self.prev_unit
-				)
-			self.prev_unit = bl_cache.Signal.InvalidateCache
+				self.value = self.value.subs({self.unit: prev_unit})
+				self.lazy_array_range = self.lazy_array_range.correct_unit(prev_unit)
+
+			self.prev_unit = self.active_unit
 
 	####################
 	# - Value Utilities
@@ -378,18 +378,22 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				),
 			},
 			NS.Vec2: {
-				MT_Z: lambda: sp.Matrix([Z(i) for i in self.raw_value_int2]),
-				MT_Q: lambda: sp.Matrix([Q(q[0], q[1]) for q in self.raw_value_rat2]),
-				MT_R: lambda: sp.Matrix([R(r) for r in self.raw_value_float2]),
-				MT_C: lambda: sp.Matrix(
+				MT_Z: lambda: sp.ImmutableMatrix([Z(i) for i in self.raw_value_int2]),
+				MT_Q: lambda: sp.ImmutableMatrix(
+					[Q(q[0], q[1]) for q in self.raw_value_rat2]
+				),
+				MT_R: lambda: sp.ImmutableMatrix([R(r) for r in self.raw_value_float2]),
+				MT_C: lambda: sp.ImmutableMatrix(
 					[c[0] + sp.I * c[1] for c in self.raw_value_complex2]
 				),
 			},
 			NS.Vec3: {
-				MT_Z: lambda: sp.Matrix([Z(i) for i in self.raw_value_int3]),
-				MT_Q: lambda: sp.Matrix([Q(q[0], q[1]) for q in self.raw_value_rat3]),
-				MT_R: lambda: sp.Matrix([R(r) for r in self.raw_value_float3]),
-				MT_C: lambda: sp.Matrix(
+				MT_Z: lambda: sp.ImmutableMatrix([Z(i) for i in self.raw_value_int3]),
+				MT_Q: lambda: sp.ImmutableMatrix(
+					[Q(q[0], q[1]) for q in self.raw_value_rat3]
+				),
+				MT_R: lambda: sp.ImmutableMatrix([R(r) for r in self.raw_value_float3]),
+				MT_C: lambda: sp.ImmutableMatrix(
 					[c[0] + sp.I * c[1] for c in self.raw_value_complex3]
 				),
 			},
@@ -1185,10 +1189,12 @@ class ExprSocketDef(base.SocketDef):
 		# FlowKind.Value
 		## -> We must take units into account when setting bl_socket.value
 		if self.physical_type is not spux.PhysicalType.NonPhysical:
-			self.active_unit = sp.sstr(self.default_unit)
+			bl_socket.active_unit = sp.sstr(self.default_unit)
 			bl_socket.value = self.default_value * self.default_unit
 		else:
 			bl_socket.value = self.default_value
+
+		bl_socket.prev_unit = bl_socket.active_unit
 
 		# FlowKind.LazyArrayRange
 		## -> We can directly pass None to unit.

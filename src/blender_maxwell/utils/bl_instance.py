@@ -74,7 +74,6 @@ class BLInstance:
 			The Instance ID is a `UUID4`, which is globally unique, negating the need for extraneous overlap-checks.
 		"""
 		self.instance_id = str(uuid.uuid4())
-		self.regenerate_dynamic_field_persistance()
 
 	@classmethod
 	def assert_attrs_valid(cls, mandatory_props: set[str]) -> None:

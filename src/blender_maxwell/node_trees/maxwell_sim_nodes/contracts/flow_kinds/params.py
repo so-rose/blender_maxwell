@@ -56,6 +56,7 @@ class ParamsFlow:
 			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
 			raise ValueError(msg)
 
+		## TODO: MutableDenseMatrix causes error with 'in' check bc it isn't hashable.
 		return [
 			spux.scale_to_unit_system(arg, unit_system, use_jax_array=True)
 			if arg not in symbol_values

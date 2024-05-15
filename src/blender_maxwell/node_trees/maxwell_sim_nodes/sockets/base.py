@@ -51,6 +51,7 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
 		bl_socket.reset_instance_id()
+		bl_socket.regenerate_dynamic_field_persistance()
 
 	def postinit(self, bl_socket: bpy.types.NodeSocket) -> None:
 		"""Pre-initialize a real Blender node socket from this socket definition.
@@ -205,11 +206,12 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		"""
 		## TODO: Evaluate this properly
 		if self.is_initializing:
-			log.debug(
-				'%s: Rejected on_prop_changed("%s") while initializing',
-				self.bl_label,
-				prop_name,
-			)
+			pass
+			# log.debug(
+			# '%s: Rejected on_prop_changed("%s") while initializing',
+			# self.bl_label,
+			# prop_name,
+			# )
 		elif hasattr(self, prop_name):
 			# Property Callbacks: Active Kind
 			if prop_name == 'active_kind':
