@@ -65,7 +65,6 @@ class SimDomainNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'mesh': managed_objs.ManagedBLMesh,
 		'modifier': managed_objs.ManagedBLModifier,
 	}
 
@@ -95,19 +94,17 @@ class SimDomainNode(base.MaxwellSimNode):
 	# - Preview
 	####################
 	@events.on_value_changed(
+		# Trigger
 		prop_name='preview_active',
-		run_on_init=True,
+		# Loaded
+		managed_objs={'modifier'},
 		props={'preview_active'},
-		managed_objs={'mesh'},
 	)
-	def on_preview_changed(self, props, managed_objs) -> None:
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
+	def on_preview_changed(self, managed_objs, props):
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
 		## Trigger
@@ -115,7 +112,7 @@ class SimDomainNode(base.MaxwellSimNode):
 		run_on_init=True,
 		# Loaded
 		input_sockets={'Center', 'Size'},
-		managed_objs={'mesh', 'modifier'},
+		managed_objs={'modifier'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
@@ -127,21 +124,17 @@ class SimDomainNode(base.MaxwellSimNode):
 		input_sockets,
 		unit_systems,
 	):
-		mesh = managed_objs['mesh']
-		modifier = managed_objs['modifier']
-		center = input_sockets['Center']
-		size = input_sockets['Size']
-		unit_system = unit_systems['BlenderUnits']
-
 		# Push Loose Input Values to GeoNodes Modifier
-		modifier.bl_modifier(
-			mesh.bl_object(location=center),
+		managed_objs['modifier'].bl_modifier(
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.SimulationSimDomain),
-				'inputs': {'Size': size},
-				'unit_system': unit_system,
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Size': input_sockets['Size'],
+				},
 			},
+			location=input_sockets['Center'],
 		)
 
 

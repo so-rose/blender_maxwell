@@ -14,62 +14,127 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import typing as typ
+
+import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from .... import contracts, sockets
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
+
+from .... import contracts as ct
+from .... import managed_objs, sockets
 from ... import base, events
 
+log = logger.get(__name__)
 
-class CylinderStructureNode(base.MaxwellSimTreeNode):
-	node_type = contracts.NodeType.CylinderStructure
+
+class CylinderStructureNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.CylinderStructure
 	bl_label = 'Cylinder Structure'
-	# bl_icon = ...
+	use_sim_node_name = True
 
 	####################
 	# - Sockets
 	####################
-	input_sockets = {
-		'medium': sockets.MaxwellMediumSocketDef(
-			label='Medium',
+	input_sockets: typ.ClassVar = {
+		'Medium': sockets.MaxwellMediumSocketDef(),
+		'Center': sockets.ExprSocketDef(
+			size=spux.NumberSize1D.Vec3,
+			default_unit=spu.micrometer,
+			default_value=sp.Matrix([0, 0, 0]),
 		),
-		'center': sockets.PhysicalPoint3DSocketDef(
-			label='Center',
+		'Radius': sockets.ExprSocketDef(
+			default_unit=spu.nanometer,
+			default_value=150,
 		),
-		'radius': sockets.PhysicalLengthSocketDef(
-			label='Radius',
-		),
-		'height': sockets.PhysicalLengthSocketDef(
-			label='Height',
+		'Height': sockets.ExprSocketDef(
+			default_unit=spu.nanometer,
+			default_value=500,
 		),
 	}
-	output_sockets = {
-		'structure': sockets.MaxwellStructureSocketDef(
-			label='Structure',
-		),
+	output_sockets: typ.ClassVar = {
+		'Structure': sockets.MaxwellStructureSocketDef(),
+	}
+
+	managed_obj_types: typ.ClassVar = {
+		'modifier': managed_objs.ManagedBLModifier,
 	}
 
 	####################
 	# - Output Socket Computation
 	####################
-	@events.computes_output_socket('structure')
-	def compute_simulation(self: contracts.NodeTypeProtocol) -> td.Box:
-		medium = self.compute_input('medium')
-		_center = self.compute_input('center')
-		_radius = self.compute_input('radius')
-		_height = self.compute_input('height')
-
-		center = tuple(spu.convert_to(_center, spu.um) / spu.um)
-		radius = spu.convert_to(_radius, spu.um) / spu.um
-		height = spu.convert_to(_height, spu.um) / spu.um
-
+	@events.computes_output_socket(
+		'Structure',
+		input_sockets={'Center', 'Radius', 'Medium', 'Height'},
+		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
+		scale_input_sockets={
+			'Center': 'Tidy3DUnits',
+			'Radius': 'Tidy3DUnits',
+			'Height': 'Tidy3DUnits',
+		},
+	)
+	def compute_structure(self, input_sockets, unit_systems) -> td.Box:
 		return td.Structure(
 			geometry=td.Cylinder(
-				radius=radius,
-				center=center,
-				length=height,
+				radius=input_sockets['Radius'],
+				center=input_sockets['Center'],
+				length=input_sockets['Height'],
 			),
-			medium=medium,
+			medium=input_sockets['Medium'],
+		)
+
+	####################
+	# - Preview
+	####################
+	@events.on_value_changed(
+		# Trigger
+		prop_name='preview_active',
+		# Loaded
+		managed_objs={'modifier'},
+		props={'preview_active'},
+	)
+	def on_preview_changed(self, managed_objs, props):
+		if props['preview_active']:
+			managed_objs['modifier'].show_preview()
+		else:
+			managed_objs['modifier'].hide_preview()
+
+	@events.on_value_changed(
+		# Trigger
+		socket_name={'Center', 'Radius', 'Medium', 'Height'},
+		run_on_init=True,
+		# Loaded
+		input_sockets={'Center', 'Radius', 'Medium', 'Height'},
+		managed_objs={'modifier'},
+		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
+		scale_input_sockets={
+			'Center': 'BlenderUnits',
+		},
+	)
+	def on_inputs_changed(
+		self,
+		managed_objs,
+		input_sockets,
+		unit_systems,
+	):
+		modifier = managed_objs['modifier']
+		unit_system = unit_systems['BlenderUnits']
+
+		# Push Loose Input Values to GeoNodes Modifier
+		modifier.bl_modifier(
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.StructurePrimitiveCylinder),
+				'inputs': {
+					'Radius': input_sockets['Radius'],
+					'Height': input_sockets['Height'],
+				},
+				'unit_system': unit_system,
+			},
+			location=input_sockets['Center'],
 		)
 
 
@@ -80,7 +145,5 @@ BL_REGISTER = [
 	CylinderStructureNode,
 ]
 BL_NODES = {
-	contracts.NodeType.CylinderStructure: (
-		contracts.NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES
-	)
+	ct.NodeType.CylinderStructure: (ct.NodeCategory.MAXWELLSIM_STRUCTURES_PRIMITIVES)
 }

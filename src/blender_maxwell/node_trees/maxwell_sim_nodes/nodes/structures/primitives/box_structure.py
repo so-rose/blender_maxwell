@@ -43,15 +43,11 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Center': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Length,
 			default_unit=spu.micrometer,
 			default_value=sp.Matrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Length,
 			default_unit=spu.nanometer,
 			default_value=sp.Matrix([500, 500, 500]),
 			abs_min=0.001,
@@ -62,7 +58,6 @@ class BoxStructureNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'mesh': managed_objs.ManagedBLMesh,
 		'modifier': managed_objs.ManagedBLModifier,
 	}
 
@@ -91,25 +86,25 @@ class BoxStructureNode(base.MaxwellSimNode):
 	# - Preview
 	####################
 	@events.on_value_changed(
+		# Trigger
 		prop_name='preview_active',
-		run_on_init=True,
+		# Loaded
+		managed_objs={'modifier'},
 		props={'preview_active'},
-		managed_objs={'mesh'},
 	)
-	def on_preview_changed(self, props, managed_objs) -> None:
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
+	def on_preview_changed(self, managed_objs, props):
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Center', 'Size'},
 		run_on_init=True,
+		# Loaded
 		input_sockets={'Center', 'Size'},
-		managed_objs={'mesh', 'modifier'},
+		managed_objs={'modifier'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
@@ -121,21 +116,17 @@ class BoxStructureNode(base.MaxwellSimNode):
 		input_sockets,
 		unit_systems,
 	):
-		mesh = managed_objs['mesh']
-		modifier = managed_objs['modifier']
-		center = input_sockets['Center']
-		size = input_sockets['Size']
-		unit_system = unit_systems['BlenderUnits']
-
 		# Push Loose Input Values to GeoNodes Modifier
-		modifier.bl_modifier(
-			mesh.bl_object(location=center),
+		managed_objs['modifier'].bl_modifier(
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
-				'inputs': {'Size': size},
-				'unit_system': unit_system,
+				'unit_system': unit_systems['BlenderUnits'],
+				'inputs': {
+					'Size': input_sockets['Size'],
+				},
 			},
+			location=input_sockets['Center'],
 		)
 
 

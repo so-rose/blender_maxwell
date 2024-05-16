@@ -56,7 +56,6 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'mesh': managed_objs.ManagedBLMesh,
 		'modifier': managed_objs.ManagedBLModifier,
 	}
 
@@ -106,27 +105,24 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	# - Preview
 	####################
 	@events.on_value_changed(
+		# Trigger
 		prop_name='preview_active',
-		run_on_init=True,
+		# Loaded
+		managed_objs={'modifier'},
 		props={'preview_active'},
-		managed_objs={'mesh'},
 	)
-	def on_preview_changed(self, props, managed_objs) -> None:
-		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
+	def on_preview_changed(self, managed_objs, props):
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
 		socket_name={'Center'},
 		prop_name='pol_axis',
 		run_on_init=True,
 		# Pass Data
-		managed_objs={'mesh', 'modifier'},
+		managed_objs={'modifier'},
 		props={'pol_axis'},
 		input_sockets={'Center'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
@@ -135,9 +131,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 	def on_inputs_changed(
 		self, managed_objs, props, input_sockets, unit_systems
 	) -> None:
-		mesh = managed_objs['mesh']
 		modifier = managed_objs['modifier']
-		center = input_sockets['Center']
 		unit_system = unit_systems['BlenderUnits']
 		axis = {
 			ct.SimSpaceAxis.X: 0,
@@ -147,13 +141,13 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 
 		# Push Loose Input Values to GeoNodes Modifier
 		modifier.bl_modifier(
-			mesh.bl_object(location=center),
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.SourcePointDipole),
 				'inputs': {'Axis': axis},
 				'unit_system': unit_system,
 			},
+			location=input_sockets['Center'],
 		)
 
 

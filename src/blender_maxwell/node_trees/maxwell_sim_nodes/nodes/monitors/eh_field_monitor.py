@@ -222,9 +222,9 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	)
 	def on_inputs_changed(
 		self,
-		managed_objs: dict,
-		input_sockets: dict,
-		unit_systems: dict,
+		managed_objs,
+		input_sockets,
+		unit_systems,
 	):
 		# Push Input Values to GeoNodes Modifier
 		managed_objs['modifier'].bl_modifier(

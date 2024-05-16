@@ -92,7 +92,6 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'mesh': managed_objs.ManagedBLMesh,
 		'modifier': managed_objs.ManagedBLModifier,
 	}
 
@@ -170,18 +169,14 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 		# Trigger
 		prop_name='preview_active',
 		# Loaded
-		managed_objs={'mesh'},
+		managed_objs={'modifier'},
 		props={'preview_active'},
 	)
 	def on_preview_changed(self, managed_objs, props):
-		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
 		# Trigger
@@ -196,7 +191,7 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 		prop_name={'injection_axis', 'injection_direction'},
 		run_on_init=True,
 		# Loaded
-		managed_objs={'mesh', 'modifier'},
+		managed_objs={'modifier'},
 		props={'injection_axis', 'injection_direction'},
 		input_sockets={
 			'Temporal Shape',
@@ -222,7 +217,6 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 
 		# Push Input Values to GeoNodes Modifier
 		managed_objs['modifier'].bl_modifier(
-			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.SourceGaussianBeam),
@@ -240,6 +234,7 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 					'Waist Radius': input_sockets['Waist Radius'],
 				},
 			},
+			location=input_sockets['Center'],
 		)
 
 

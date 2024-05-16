@@ -17,8 +17,12 @@
 import bpy
 import tidy3d as td
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
@@ -28,17 +32,7 @@ class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	min_steps_per_wl: bpy.props.FloatProperty(
-		name='Minimum Steps per Wavelength',
-		description='How many grid steps to ensure per wavelength',
-		default=10.0,
-		min=0.01,
-		# step=10,
-		precision=2,
-		update=(
-			lambda self, context: self.on_prop_changed('min_steps_per_wl', context)
-		),
-	)
+	min_steps_per_wl: float = bl_cache.BLField(10.0, abs_min=0.01, float_prec=2)
 
 	####################
 	# - Socket UI
@@ -50,7 +44,7 @@ class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
 		col.label(text='min. stp/λ')
 
 		col = split.column(align=True)
-		col.prop(self, 'min_steps_per_wl', text='')
+		col.prop(self, self.blfields['min_steps_per_wl'], text='')
 
 	####################
 	# - Computation of Default Value

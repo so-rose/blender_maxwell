@@ -56,7 +56,6 @@ class SphereStructureNode(base.MaxwellSimNode):
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'mesh': managed_objs.ManagedBLMesh,
 		'modifier': managed_objs.ManagedBLModifier,
 	}
 
@@ -85,25 +84,25 @@ class SphereStructureNode(base.MaxwellSimNode):
 	# - Preview
 	####################
 	@events.on_value_changed(
+		# Trigger
 		prop_name='preview_active',
-		run_on_init=True,
+		# Loaded
+		managed_objs={'modifier'},
 		props={'preview_active'},
-		managed_objs={'mesh'},
 	)
-	def on_preview_changed(self, props, managed_objs) -> None:
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
+	def on_preview_changed(self, managed_objs, props):
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Center', 'Radius'},
 		run_on_init=True,
+		# Loaded
 		input_sockets={'Center', 'Radius'},
-		managed_objs={'mesh', 'modifier'},
+		managed_objs={'modifier'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
@@ -115,21 +114,20 @@ class SphereStructureNode(base.MaxwellSimNode):
 		input_sockets,
 		unit_systems,
 	):
-		mesh = managed_objs['mesh']
 		modifier = managed_objs['modifier']
-		center = input_sockets['Center']
-		radius = input_sockets['Radius']
 		unit_system = unit_systems['BlenderUnits']
 
 		# Push Loose Input Values to GeoNodes Modifier
 		modifier.bl_modifier(
-			mesh.bl_object(location=center),
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.StructurePrimitiveSphere),
-				'inputs': {'Radius': radius},
+				'inputs': {
+					'Radius': input_sockets['Radius'],
+				},
 				'unit_system': unit_system,
 			},
+			location=input_sockets['Center'],
 		)
 
 
