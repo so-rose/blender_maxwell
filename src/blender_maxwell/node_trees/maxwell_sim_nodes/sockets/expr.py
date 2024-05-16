@@ -116,13 +116,22 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	size: spux.NumberSize1D = bl_cache.BLField(spux.NumberSize1D.Scalar)
 	mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real)
 	physical_type: spux.PhysicalType = bl_cache.BLField(spux.PhysicalType.NonPhysical)
+
+	# Symbols
+	# active_symbols: list[sim_symbols.SimSymbol] = bl_cache.BLField([])
 	symbols: frozenset[sp.Symbol] = bl_cache.BLField(frozenset())
+
+	# @property
+	# def symbols(self) -> set[sp.Symbol]:
+	# """Current symbols as an unordered set."""
+	# return {sim_symbol.sp_symbol for sim_symbol in self.active_symbols}
 
 	@bl_cache.cached_bl_property(depends_on={'symbols'})
 	def sorted_symbols(self) -> list[sp.Symbol]:
-		"""Name-sorted symbols."""
+		"""Current symbols as a sorted list."""
 		return sorted(self.symbols, key=lambda sym: sym.name)
 
+	# Unit
 	active_unit: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_valid_units(),
 		cb_depends_on={'physical_type'},
@@ -672,16 +681,16 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			Whether information about the expression passing through a linked socket is shown is governed by `self.show_info_columns`.
 		"""
 		info = self.compute_data(kind=ct.FlowKind.Info)
-		has_dims = not ct.FlowSignal.check(info) and info.dim_names
+		has_info = not ct.FlowSignal.check(info)
 
-		if has_dims:
+		if has_info:
 			split = row.split(factor=0.85, align=True)
 			_row = split.row(align=False)
 		else:
 			_row = row
 
 		_row.label(text=text)
-		if has_dims:
+		if has_info:
 			if self.show_info_columns:
 				_row.prop(self, self.blfields['info_columns'])
 
@@ -735,9 +744,17 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	# - UI: Active FlowKind
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		"""Draw the socket body for a single values/expression.
+		"""Draw the socket body for a single value/expression.
 
-		Drawn when `self.active_kind == FlowKind.Value`.
+		This implements the base UI for `ExprSocket`, for when `self.size`, `self.mathtype`, `self.physical_type`, and `self.symbols` are set.
+
+		Notes:
+			Drawn when `self.active_kind == FlowKind.Value`.
+
+			Alone, `draw_value` provides no mechanism for altering expression constraints like size.
+			Thus, `FlowKind.Value` is a good choice for when the expression must be of a very particular type.
+
+			However, `draw_value` may also be called by the `draw_*` methods of other `FlowKinds`, who may choose to layer more flexibility around this base UI.
 		"""
 		if self.symbols:
 			col.prop(self, self.blfields['raw_value_spstr'], text='')
@@ -819,23 +836,43 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			col.prop(self, self.blfields['steps'], text='')
 
 	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
-		"""Draw the socket body for a value/expression meant for use in a lazy function composition chain.
+		"""Draw the socket body for a single flexible value/expression, for down-chain lazy evaluation.
 
-		Drawn when `self.active_kind == FlowKind.LazyValueFunc`.
+		This implements the most flexible variant of the `ExprSocket` UI, providing the user with full runtime-configuration of the exact `self.size`, `self.mathtype`, `self.physical_type`, and `self.symbols` of the expression.
+
+		Notes:
+			Drawn when `self.active_kind == FlowKind.LazyValueFunc`.
+
+			This is an ideal choice for ex. math nodes that need to accept arbitrary expressions as inputs, with an eye towards lazy evaluation of ex. symbolic terms.
+
+			Uses `draw_value` to draw the base UI
 		"""
+		# Physical Type Selector
+		## -> Determines whether/which unit-dropdown will be shown.
 		col.prop(self, self.blfields['physical_type'], text='')
+
+		# Non-Symbolic: Size/Mathtype Selector
+		## -> Symbols imply str expr input.
+		## -> For arbitrary str exprs, size/mathtype are derived from the expr.
+		## -> Otherwise, size/mathtype must be pre-specified for a nice UI.
 		if not self.symbols:
 			row = col.row(align=True)
 			row.prop(self, self.blfields['size'], text='')
 			row.prop(self, self.blfields['mathtype'], text='')
 
+		# Base UI
+		## -> Draws the UI appropriate for the above choice of constraints.
 		self.draw_value(col)
+
+		# Symbol UI
+		## -> Draws the UI appropriate for the above choice of constraints.
+		## -> TODO
 
 	####################
 	# - UI: InfoFlow
 	####################
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
-		if self.active_kind == ct.FlowKind.Array and self.show_info_columns:
+		if self.active_kind == ct.FlowKind.LazyValueFunc and self.show_info_columns:
 			row = col.row()
 			box = row.box()
 			grid = box.grid_flow(
@@ -899,7 +936,8 @@ class ExprSocketDef(base.SocketDef):
 	physical_type: spux.PhysicalType = spux.PhysicalType.NonPhysical
 
 	default_unit: spux.Unit | None = None
-	symbols: frozenset[spux.Symbol] = frozenset()
+	# symbols: list[sim_symbols.SimSymbol] = frozenset()
+	symbols: frozenset[spux.SympyExpr] = frozenset()
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = 0

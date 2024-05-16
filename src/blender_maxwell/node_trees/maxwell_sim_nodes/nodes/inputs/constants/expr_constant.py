@@ -16,6 +16,8 @@
 
 import typing as typ
 
+import sympy as sp
+
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events
@@ -26,25 +28,67 @@ class ExprConstantNode(base.MaxwellSimNode):
 	bl_label = 'Expr Constant'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.LazyValueFunc,
+		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.LazyValueFunc,
+			show_info_columns=True,
+		),
 	}
 
-	## TODO: Symbols (defined w/props?)
-	## - Currently expr constant isn't excessively useful, since there are no variables.
-	## - We'll define the #, type, name with props.
-	## - We'll add loose-socket inputs as int/real/complex/physical socket (based on type) for Param.
-	## - We the output expr would support `Value` (just the expression), `LazyValueFunc` (evaluate w/symbol support), `Param` (example values for symbols).
+	## TODO: Allow immediately realizing any symbol, or just passing it along.
+	## TODO: Alter output physical_type when the input PhysicalType changes.
 
 	####################
-	# - Callbacks
+	# - FlowKinds
 	####################
 	@events.computes_output_socket(
-		'Expr', kind=ct.FlowKind.Value, input_sockets={'Expr'}
+		# Trigger
+		'Expr',
+		kind=ct.FlowKind.Value,
+		# Loaded
+		input_sockets={'Expr'},
 	)
 	def compute_value(self, input_sockets: dict) -> typ.Any:
+		return input_sockets['Expr']
+
+	@events.computes_output_socket(
+		# Trigger
+		'Expr',
+		kind=ct.FlowKind.LazyValueFunc,
+		# Loaded
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.LazyValueFunc},
+	)
+	def compute_lazy_value_func(self, input_sockets: dict) -> typ.Any:
+		return input_sockets['Expr']
+
+	####################
+	# - FlowKinds: Auxiliary
+	####################
+	@events.computes_output_socket(
+		# Trigger
+		'Expr',
+		kind=ct.FlowKind.Info,
+		# Loaded
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
+	)
+	def compute_info(self, input_sockets: dict) -> typ.Any:
+		return input_sockets['Expr']
+
+	@events.computes_output_socket(
+		# Trigger
+		'Expr',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Params},
+	)
+	def compute_params(self, input_sockets: dict) -> typ.Any:
 		return input_sockets['Expr']
 
 

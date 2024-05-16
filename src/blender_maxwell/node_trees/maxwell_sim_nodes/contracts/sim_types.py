@@ -21,9 +21,11 @@ import enum
 import typing as typ
 
 import jax.numpy as jnp
+import sympy as sp
 import tidy3d as td
 
 from blender_maxwell.services import tdcloud
+from blender_maxwell.utils import extra_sympy_units as spux
 
 
 ####################

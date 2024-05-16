@@ -38,8 +38,6 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	Scene = enum.auto()
 	## Inputs / Constants
 	ExprConstant = enum.auto()
-	NumberConstant = enum.auto()
-	PhysicalConstant = enum.auto()
 	ScientificConstant = enum.auto()
 	UnitSystemConstant = enum.auto()
 	BlenderConstant = enum.auto()

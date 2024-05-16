@@ -47,8 +47,13 @@ class ManagedBLImage(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLImage
 	_bl_image_name: str
 
-	def __init__(self, name: str):
-		self._bl_image_name = name
+	def __init__(self, name: str, prev_name: str | None = None):
+		if prev_name is not None:
+			self._bl_image_name = prev_name
+		else:
+			self._bl_image_name = name
+
+		self.name = name
 
 	@property
 	def name(self):
@@ -57,26 +62,29 @@ class ManagedBLImage(base.ManagedObj):
 	@name.setter
 	def name(self, value: str):
 		log.info(
-			'Setting ManagedBLImage from "%s" to "%s"',
+			'Changing ManagedBLImage from "%s" to "%s"',
 			self.name,
 			value,
 		)
-		current_bl_image = bpy.data.images.get(self._bl_image_name)
-		wanted_bl_image = bpy.data.images.get(value)
+		existing_bl_image = bpy.data.images.get(self.name)
 
-		# Yoink Image Name
-		if current_bl_image is None and wanted_bl_image is None:
+		# No Existing Image: Set Value to Name
+		if existing_bl_image is None:
 			self._bl_image_name = value
 
-		# Alter Image Name
-		elif current_bl_image is not None and wanted_bl_image is None:
+		# Existing Image: Rename to New Name
+		else:
+			existing_bl_image.name = value
 			self._bl_image_name = value
-			current_bl_image.name = value
 
-		# Overlapping Image Name
-		elif wanted_bl_image is not None:
-			msg = f'ManagedBLImage "{self._bl_image_name}" could not change its name to "{value}", since it already exists.'
-			raise ValueError(msg)
+			# Check: Blender Rename -> Synchronization Error
+			## -> We can't do much else than report to the user & free().
+			if existing_bl_image.name != self._bl_image_name:
+				log.critical(
+					'BLImage: Failed to set name of %s to %s, as %s already exists.'
+				)
+				self._bl_image_name = existing_bl_image.name
+				self.free()
 
 	def free(self):
 		bl_image = bpy.data.images.get(self.name)
