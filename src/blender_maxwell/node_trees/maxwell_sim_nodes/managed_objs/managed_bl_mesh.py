@@ -45,82 +45,57 @@ class ManagedBLMesh(base.ManagedObj):
 
 	@name.setter
 	def name(self, value: str) -> None:
-		log.info(
+		log.debug(
 			'Changing BLMesh w/Name "%s" to Name "%s"', self._bl_object_name, value
 		)
 
-		if self._bl_object_name == value:
-			## TODO: This is a workaround.
-			## Really, we can't tell if a name is valid by searching objects.
-			## Since, after all, other managedobjs may have taken a name..
-			## ...but not yet made an object that has it.
-			return
+		existing_bl_object = bpy.data.objects.get(self.name)
 
-		if (bl_object := bpy.data.objects.get(value)) is None:
-			log.info(
-				'Desired BLMesh Name "%s" Not Taken',
-				value,
-			)
-
-			if self._bl_object_name is None:
-				log.info(
-					'Set New BLMesh Name to "%s"',
-					value,
-				)
-			elif (bl_object := bpy.data.objects.get(self._bl_object_name)) is not None:
-				log.info(
-					'Changed BLMesh Name to "%s"',
-					value,
-				)
-				bl_object.name = value
-			else:
-				msg = f'ManagedBLMesh with name "{self._bl_object_name}" was deleted'
-				raise RuntimeError(msg)
-
-			# Set Internal Name
+		# No Existing Object: Set Value to Name
+		if existing_bl_object is None:
 			self._bl_object_name = value
+
+		# Existing Object: Rename to New Name
 		else:
-			log.info(
-				'Desired BLMesh Name "%s" is Taken. Using Blender Rename',
-				value,
-			)
+			existing_bl_object.name = value
+			self._bl_object_name = value
 
-			# Set Name Anyway, but Respect Blender's Renaming
-			## When a name already exists, Blender adds .### to prevent overlap.
-			## `set_name` is allowed to change the name; nodes account for this.
-			bl_object.name = value
-			self._bl_object_name = bl_object.name
-
-			log.info(
-				'Changed BLMesh Name to "%s"',
-				bl_object.name,
-			)
+			# Check: Blender Rename -> Synchronization Error
+			## -> We can't do much else than report to the user & free().
+			if existing_bl_object.name != self._bl_object_name:
+				log.critical(
+					'BLMesh: Failed to set name of %s to %s, as %s already exists.'
+				)
+				self._bl_object_name = existing_bl_object.name
+				self.free()
 
 	####################
 	# - Allocation
 	####################
-	def __init__(self, name: str):
+	def __init__(self, name: str, prev_name: str | None = None):
+		if prev_name is not None:
+			self._bl_object_name = prev_name
+		else:
+			self._bl_object_name = name
+
 		self.name = name
 
 	####################
 	# - Deallocation
 	####################
 	def free(self):
-		if (bl_object := bpy.data.objects.get(self.name)) is None:
+		bl_object = bpy.data.objects.get(self.name)
+		if bl_object is None:
 			return
 
-		# Delete the Underlying Datablock
-		## This automatically deletes the object too
-		log.info('Removing "%s" BLMesh', bl_object.type)
+		# Delete the Mesh Datablock
+		## -> This automatically deletes the object too
+		log.info('BLMesh: Freeing "%s"', self.name)
 		bpy.data.meshes.remove(bl_object.data)
 
 	####################
 	# - Methods
 	####################
-	@property
-	def exists(self) -> bool:
-		return bpy.data.objects.get(self.name) is not None
-
 	def show_preview(self) -> None:
 		"""Moves the managed Blender object to the preview collection.
 
@@ -128,7 +103,7 @@ class ManagedBLMesh(base.ManagedObj):
 		"""
 		bl_object = bpy.data.objects.get(self.name)
 		if bl_object is None:
-			log.info('Created previewable ManagedBLMesh "%s"', bl_object.name)
+			log.info('%s (ManagedBLMesh): Created BLObject for Preview', bl_object.name)
 			bl_object = self.bl_object()
 
 		if bl_object.name not in preview_collection().objects:
@@ -136,23 +111,18 @@ class ManagedBLMesh(base.ManagedObj):
 			preview_collection().objects.link(bl_object)
 
 	def hide_preview(self) -> None:
-		"""Removes the managed Blender object from the preview collection.
-
-		If it's already removed, do nothing.
-		"""
+		"""Hide any active preview of the managed object, if it exists, and if such an operation makes sense."""
 		bl_object = bpy.data.objects.get(self.name)
 		if bl_object is not None and bl_object.name in preview_collection().objects:
 			log.info('Removing "%s" from Preview Collection', bl_object.name)
 			preview_collection().objects.unlink(bl_object)
 
 	def bl_select(self) -> None:
-		"""Selects the managed Blender object, causing it to be ex. outlined in the 3D viewport."""
-		if (bl_object := bpy.data.objects.get(self.name)) is not None:
+		"""Select the managed object in Blender, if it exists, and if such an operation makes sense."""
+		bl_object = bpy.data.objects.get(self.name)
+		if bl_object is not None:
 			bpy.ops.object.select_all(action='DESELECT')
 			bl_object.select_set(True)
-
-		msg = 'Managed BLMesh does not exist'
-		raise ValueError(msg)
 
 	####################
 	# - BLMesh Management

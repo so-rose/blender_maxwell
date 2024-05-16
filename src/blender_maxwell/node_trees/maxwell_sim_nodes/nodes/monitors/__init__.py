@@ -14,20 +14,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import eh_field_monitor, field_power_flux_monitor
+from . import eh_field_monitor, field_power_flux_monitor, permittivity_monitor
 
-# from . import epsilon_tensor_monitor
 # from . import diffraction_monitor
 
 BL_REGISTER = [
 	*eh_field_monitor.BL_REGISTER,
 	*field_power_flux_monitor.BL_REGISTER,
-	# *epsilon_tensor_monitor.BL_REGISTER,
+	*permittivity_monitor.BL_REGISTER,
 	# *diffraction_monitor.BL_REGISTER,
 ]
 BL_NODES = {
 	**eh_field_monitor.BL_NODES,
 	**field_power_flux_monitor.BL_NODES,
-	# **epsilon_tensor_monitor.BL_NODES,
+	**permittivity_monitor.BL_NODES,
 	# **diffraction_monitor.BL_NODES,
 }

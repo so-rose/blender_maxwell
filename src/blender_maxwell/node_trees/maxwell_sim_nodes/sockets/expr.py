@@ -22,7 +22,6 @@ import typing as typ
 import bpy
 import pydantic as pyd
 import sympy as sp
-import sympy.physics.units as spu
 
 from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -126,7 +125,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 	active_unit: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_valid_units(),
-		use_prop_update=False,
 		cb_depends_on={'physical_type'},
 	)
 

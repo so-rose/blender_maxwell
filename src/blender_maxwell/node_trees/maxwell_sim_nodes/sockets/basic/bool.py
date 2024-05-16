@@ -16,6 +16,8 @@
 
 import bpy
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
 
@@ -30,19 +32,13 @@ class BoolBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.BoolProperty(
-		name='Boolean',
-		description='Represents a boolean value',
-		default=False,
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: bool = bl_cache.BLField(False)
 
 	####################
 	# - Socket UI
 	####################
 	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		label_col_row.label(text=text)
-		label_col_row.prop(self, 'raw_value', text='')
+		label_col_row.prop(self, self.blfields['raw_value'], text=text, toggle=True)
 
 	####################
 	# - Computation of Default Value

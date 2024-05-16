@@ -16,13 +16,14 @@
 
 import typing as typ
 
+import bpy
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
@@ -32,6 +33,8 @@ log = logger.get(__name__)
 
 
 class PowerFluxMonitorNode(base.MaxwellSimNode):
+	"""Node providing for the monitoring of electromagnetic field flux a given planar region or volume, in either the frequency or the time domain."""
+
 	node_type = ct.NodeType.PowerFluxMonitor
 	bl_label = 'Power Flux Monitor'
 	use_sim_node_name = True
@@ -48,13 +51,14 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			size=spux.NumberSize1D.Vec3,
 			physical_type=spux.PhysicalType.Length,
 			default_value=sp.Matrix([1, 1, 1]),
+			abs_min=0,
 		),
-		'Samples/Space': sockets.ExprSocketDef(
+		'Stride': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Integer,
 			default_value=sp.Matrix([10, 10, 10]),
+			abs_min=0,
 		),
-		'Direction': sockets.BoolSocketDef(),
 	}
 	input_socket_sets: typ.ClassVar = {
 		'Freq Domain': {
@@ -68,7 +72,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			),
 		},
 		'Time Domain': {
-			'Time Range': sockets.ExprSocketDef(
+			't Range': sockets.ExprSocketDef(
 				active_kind=ct.FlowKind.LazyArrayRange,
 				physical_type=spux.PhysicalType.Time,
 				default_unit=spu.picosecond,
@@ -76,7 +80,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 				default_max=10,
 				default_steps=2,
 			),
-			'Samples/Time': sockets.ExprSocketDef(
+			't Stride': sockets.ExprSocketDef(
 				mathtype=spux.MathType.Integer,
 				default_value=100,
 			),
@@ -93,17 +97,44 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 	}
 
 	####################
+	# - Properties
+	####################
+	direction_2d: ct.SimAxisDir = bl_cache.BLField(ct.SimAxisDir.Plus)
+	include_3d: set[ct.SimSpaceAxis] = bl_cache.BLField(set(ct.SimSpaceAxis))
+	include_3d_x: set[ct.SimAxisDir] = bl_cache.BLField(set(ct.SimAxisDir))
+	include_3d_y: set[ct.SimAxisDir] = bl_cache.BLField(set(ct.SimAxisDir))
+	include_3d_z: set[ct.SimAxisDir] = bl_cache.BLField(set(ct.SimAxisDir))
+
+	####################
+	# - UI
+	####################
+	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		# 2D Monitor
+		if 0 in self._compute_input('Size'):
+			layout.prop(self, self.blfields['direction_2d'], expand=True)
+
+		# 3D Monitor
+		else:
+			layout.prop(self, self.blfields['include_3d'], expand=True)
+			row = layout.row(align=False)
+			if ct.SimSpaceAxis.X in self.include_3d:
+				row.prop(self, self.blfields['include_3d_x'], expand=True)
+			if ct.SimSpaceAxis.Y in self.include_3d:
+				row.prop(self, self.blfields['include_3d_y'], expand=True)
+			if ct.SimSpaceAxis.Z in self.include_3d:
+				row.prop(self, self.blfields['include_3d_z'], expand=True)
+
+	####################
 	# - Event Methods: Computation
 	####################
 	@events.computes_output_socket(
 		'Freq Monitor',
-		props={'sim_node_name'},
+		props={'sim_node_name', 'direction_2d'},
 		input_sockets={
 			'Center',
 			'Size',
-			'Samples/Space',
+			'Stride',
 			'Freqs',
-			'Direction',
 		},
 		input_socket_kinds={
 			'Freqs': ct.FlowKind.LazyArrayRange,
@@ -133,7 +164,7 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 			name=props['sim_node_name'],
 			interval_space=(1, 1, 1),
 			freqs=input_sockets['Freqs'].realize_array.values,
-			normal_dir='+' if input_sockets['Direction'] else '-',
+			normal_dir=props['direction_2d'].plus_or_minus,
 		)
 
 	####################
@@ -143,49 +174,42 @@ class PowerFluxMonitorNode(base.MaxwellSimNode):
 		# Trigger
 		prop_name='preview_active',
 		# Loaded
-		managed_objs={'mesh'},
+		managed_objs={'modifier'},
 		props={'preview_active'},
 	)
 	def on_preview_changed(self, managed_objs, props):
-		"""Enables/disables previewing of the GeoNodes-driven mesh, regardless of whether a particular GeoNodes tree is chosen."""
-		mesh = managed_objs['mesh']
-
-		# Push Preview State to Managed Mesh
 		if props['preview_active']:
-			mesh.show_preview()
+			managed_objs['modifier'].show_preview()
 		else:
-			mesh.hide_preview()
+			managed_objs['modifier'].hide_preview()
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'Size', 'Direction'},
+		socket_name={'Center', 'Size'},
+		prop_name={'direction_2d'},
 		run_on_init=True,
 		# Loaded
 		managed_objs={'mesh', 'modifier'},
-		input_sockets={'Center', 'Size', 'Direction'},
+		props={'direction_2d'},
+		input_sockets={'Center', 'Size'},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
 			'Center': 'BlenderUnits',
 		},
 	)
-	def on_inputs_changed(
-		self,
-		managed_objs: dict,
-		input_sockets: dict,
-		unit_systems: dict,
-	):
+	def on_inputs_changed(self, managed_objs, props, input_sockets, unit_systems):
 		# Push Input Values to GeoNodes Modifier
 		managed_objs['modifier'].bl_modifier(
-			managed_objs['mesh'].bl_object(location=input_sockets['Center']),
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.MonitorPowerFlux),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],
-					'Direction': input_sockets['Direction'],
+					'Direction': props['direction_2d'].true_or_false,
 				},
 			},
+			location=input_sockets['Center'],
 		)
 
 

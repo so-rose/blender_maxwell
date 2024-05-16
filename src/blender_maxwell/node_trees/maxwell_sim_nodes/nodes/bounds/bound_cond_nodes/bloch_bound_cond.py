@@ -132,7 +132,7 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	valid_sim_axis: ct.SimSpaceAxis = bl_cache.BLField(ct.SimSpaceAxis.X, prop_ui=True)
+	valid_sim_axis: ct.SimSpaceAxis = bl_cache.BLField(ct.SimSpaceAxis.X)
 
 	####################
 	# - UI

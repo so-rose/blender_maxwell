@@ -154,7 +154,6 @@ class CachedBLProperty:
 				if self.persist and not self.suppress_write.get(
 					bl_instance.instance_id
 				):
-					self.suppress_next_write(bl_instance)
 					self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
 
 				else:

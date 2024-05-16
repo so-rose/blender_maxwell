@@ -16,14 +16,12 @@
 
 import typing as typ
 
-import bpy
 import sympy as sp
-import sympy.physics.units as spu
 import tidy3d as td
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
-from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import logger
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
@@ -32,11 +30,11 @@ from .. import base, events
 log = logger.get(__name__)
 
 
-class EHFieldMonitorNode(base.MaxwellSimNode):
-	"""Node providing for the monitoring of electromagnetic fields within a given planar region or volume."""
+class PermittivityMonitorNode(base.MaxwellSimNode):
+	"""Provides a bounded 1D/2D/3D recording region for the diagonal of the complex-valued permittivity tensor."""
 
-	node_type = ct.NodeType.EHFieldMonitor
-	bl_label = 'EH Field Monitor'
+	node_type = ct.NodeType.PermittivityMonitor
+	bl_label = 'Permittivity Monitor'
 	use_sim_node_name = True
 
 	####################
@@ -59,36 +57,17 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			default_value=sp.Matrix([10, 10, 10]),
 			abs_min=0,
 		),
+		'Freqs': sockets.ExprSocketDef(
+			active_kind=ct.FlowKind.LazyArrayRange,
+			physical_type=spux.PhysicalType.Freq,
+			default_unit=spux.THz,
+			default_min=374.7406,  ## 800nm
+			default_max=1498.962,  ## 200nm
+			default_steps=100,
+		),
 	}
-	input_socket_sets: typ.ClassVar = {
-		'Freq Domain': {
-			'Freqs': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.LazyArrayRange,
-				physical_type=spux.PhysicalType.Freq,
-				default_unit=spux.THz,
-				default_min=374.7406,  ## 800nm
-				default_max=1498.962,  ## 200nm
-				default_steps=100,
-			),
-		},
-		'Time Domain': {
-			't Range': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.LazyArrayRange,
-				physical_type=spux.PhysicalType.Time,
-				default_unit=spu.picosecond,
-				default_min=0,
-				default_max=10,
-				default_steps=0,
-			),
-			't Stride': sockets.ExprSocketDef(
-				mathtype=spux.MathType.Integer,
-				default_value=100,
-			),
-		},
-	}
-	output_socket_sets: typ.ClassVar = {
-		'Freq Domain': {'Freq Monitor': sockets.MaxwellMonitorSocketDef()},
-		'Time Domain': {'Time Monitor': sockets.MaxwellMonitorSocketDef()},
+	output_sockets: typ.ClassVar = {
+		'Permittivity Monitor': sockets.MaxwellMonitorSocketDef()
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -96,22 +75,11 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Properties
-	####################
-	fields: set[ct.SimFieldPols] = bl_cache.BLField(set(ct.SimFieldPols))
-
-	####################
-	# - UI
-	####################
-	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		layout.prop(self, self.blfields['fields'], expand=True)
-
-	####################
 	# - Output
 	####################
 	@events.computes_output_socket(
-		'Freq Monitor',
-		props={'sim_node_name', 'fields'},
+		'Permittivity Monitor',
+		props={'sim_node_name'},
 		input_sockets={
 			'Center',
 			'Size',
@@ -128,68 +96,24 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			'Freqs': 'Tidy3DUnits',
 		},
 	)
-	def compute_freq_monitor(
+	def compute_permittivity_monitor(
 		self,
 		input_sockets: dict,
 		props: dict,
 		unit_systems: dict,
 	) -> td.FieldMonitor:
 		log.info(
-			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
+			'Computing PermittivityMonitor (name="%s") with center="%s", size="%s"',
 			props['sim_node_name'],
 			input_sockets['Center'],
 			input_sockets['Size'],
 		)
-		return td.FieldMonitor(
+		return td.PermittivityMonitor(
 			center=input_sockets['Center'],
 			size=input_sockets['Size'],
 			name=props['sim_node_name'],
 			interval_space=tuple(input_sockets['Stride']),
 			freqs=input_sockets['Freqs'].realize().values,
-			fields=props['fields'],
-		)
-
-	@events.computes_output_socket(
-		'Time Monitor',
-		props={'sim_node_name', 'fields'},
-		input_sockets={
-			'Center',
-			'Size',
-			'Stride',
-			't Range',
-			't Stride',
-		},
-		input_socket_kinds={
-			't Range': ct.FlowKind.LazyArrayRange,
-		},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Size': 'Tidy3DUnits',
-			't Range': 'Tidy3DUnits',
-		},
-	)
-	def compute_time_monitor(
-		self,
-		input_sockets: dict,
-		props: dict,
-		unit_systems: dict,
-	) -> td.FieldMonitor:
-		log.info(
-			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
-			props['sim_node_name'],
-			input_sockets['Center'],
-			input_sockets['Size'],
-		)
-		return td.FieldTimeMonitor(
-			center=input_sockets['Center'],
-			size=input_sockets['Size'],
-			name=props['sim_node_name'],
-			interval_space=tuple(input_sockets['Stride']),
-			start=input_sockets['t Range'].realize_start(),
-			stop=input_sockets['t Range'].realize_stop(),
-			interval=input_sockets['t Stride'],
-			fields=props['fields'],
 		)
 
 	####################
@@ -230,7 +154,7 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		managed_objs['modifier'].bl_modifier(
 			'NODES',
 			{
-				'node_group': import_geonodes(GeoNodes.MonitorEHField),
+				'node_group': import_geonodes(GeoNodes.MonitorPermittivity),
 				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					'Size': input_sockets['Size'],
@@ -244,6 +168,6 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 # - Blender Registration
 ####################
 BL_REGISTER = [
-	EHFieldMonitorNode,
+	PermittivityMonitorNode,
 ]
-BL_NODES = {ct.NodeType.EHFieldMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)}
+BL_NODES = {ct.NodeType.PermittivityMonitor: (ct.NodeCategory.MAXWELLSIM_MONITORS)}

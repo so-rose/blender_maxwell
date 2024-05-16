@@ -170,6 +170,52 @@ class SimAxisDir(enum.StrEnum):
 
 
 ####################
+# - Simulation Fields
+####################
+class SimFieldPols(enum.StrEnum):
+	"""Positive or negative direction along an injection axis."""
+
+	Ex = 'Ex'
+	Ey = 'Ey'
+	Ez = 'Ez'
+	Hx = 'Hx'
+	Hy = 'Hy'
+	Hz = 'Hz'
+
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		"""Convert the enum value to a human-friendly name.
+
+		Notes:
+			Used to print names in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		SFP = SimFieldPols
+		return {
+			SFP.Ex: 'Ex',
+			SFP.Ey: 'Ey',
+			SFP.Ez: 'Ez',
+			SFP.Hx: 'Hx',
+			SFP.Hy: 'Hy',
+			SFP.Hz: 'Hz',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		"""Convert the enum value to a Blender icon.
+
+		Notes:
+			Used to print icons in `EnumProperty`s based on this enum.
+
+		Returns:
+			A human-friendly name corresponding to the enum value.
+		"""
+		return ''
+
+
+####################
 # - Boundary Condition Type
 ####################
 class BoundCondType(enum.StrEnum):

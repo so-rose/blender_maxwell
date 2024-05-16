@@ -61,6 +61,7 @@ from .sim_types import (
 	BoundCondType,
 	NewSimCloudTask,
 	SimAxisDir,
+	SimFieldPols,
 	SimSpaceAxis,
 	manual_amp_time,
 )
@@ -104,6 +105,7 @@ __all__ = [
 	'BoundCondType',
 	'NewSimCloudTask',
 	'SimAxisDir',
+	'SimFieldPols',
 	'SimSpaceAxis',
 	'manual_amp_time',
 	'NodeCategory',

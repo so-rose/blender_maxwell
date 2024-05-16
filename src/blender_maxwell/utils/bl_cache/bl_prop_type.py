@@ -649,7 +649,8 @@ class BLPropType(enum.StrEnum):
 			case BPT.SingleEnum if isinstance(raw_value, str):
 				return obj_type(raw_value)
 			case BPT.SetEnum if isinstance(raw_value, set):
-				return {obj_type(v) for v in raw_value}
+				SubStrEnum = typ.get_args(obj_type)[0]
+				return {SubStrEnum(v) for v in raw_value}
 
 			## Dynamic Enums: Nothing to coerce to.
 			## -> The critical distinction is that dynamic enums can't be coerced beyond str.

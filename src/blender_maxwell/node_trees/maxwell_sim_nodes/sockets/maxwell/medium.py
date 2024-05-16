@@ -19,10 +19,13 @@ import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td
 
+from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
 
@@ -36,16 +39,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	rel_permittivity: bpy.props.FloatVectorProperty(
-		name='Relative Permittivity',
-		description='Represents a simple, complex permittivity',
-		size=2,
-		default=(1.0, 0.0),
-		precision=2,
-		update=(
-			lambda self, context: self.on_prop_changed('rel_permittivity', context)
-		),
-	)
+	rel_permittivity: tuple[float, float] = bl_cache.BLField((1.0, 0.0), float_prec=2)
 
 	####################
 	# - FlowKinds
@@ -83,7 +77,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 		col.label(text='ϵ_r (ℂ)')
 
 		col = split.column(align=True)
-		col.prop(self, 'rel_permittivity', text='')
+		col.prop(self, self.blfields['rel_permittivity'], text='')
 
 
 ####################

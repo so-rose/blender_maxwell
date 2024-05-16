@@ -24,12 +24,14 @@ import tidy3d as td
 from tidy3d.material_library.material_library import MaterialItem as Tidy3DMediumItem
 from tidy3d.material_library.material_library import VariantItem as Tidy3DMediumVariant
 
-from blender_maxwell.utils import bl_cache, sci_constants
+from blender_maxwell.utils import bl_cache, logger, sci_constants
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
+
+log = logger.get(__name__)
 
 _mat_lib_iter = iter(td.material_library)
 _mat_key = ''
@@ -131,7 +133,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	vendored_medium: VendoredMedium = bl_cache.BLField(VendoredMedium.Au)
 	variant_name: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_variants()
+		enum_cb=lambda self, _: self.search_variants(),
+		cb_depends_on={'vendored_medium'},
 	)
 
 	def search_variants(self) -> list[ct.BLEnumElement]:
@@ -141,7 +144,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	# - Computed
 	####################
-	@bl_cache.cached_bl_property(depends_on={'vendored_medium', 'variant_name'})
+	@bl_cache.cached_bl_property(depends_on={'variant_name'})
 	def variant(self) -> Tidy3DMediumVariant:
 		"""Deduce the actual medium variant from `self.vendored_medium` and `self.variant_name`."""
 		return self.vendored_medium.medium_variants[self.variant_name]
@@ -240,21 +243,6 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			box.operator('wm.url_open', text='Link to Data').url = self.data_url
 
 	####################
-	# - Events
-	####################
-	@events.on_value_changed(
-		prop_name={'vendored_medium', 'variant_name'},
-		run_on_init=True,
-		props={'vendored_medium'},
-	)
-	def on_medium_changed(self, props):
-		if self.variant_name not in props['vendored_medium'].medium_variants:
-			self.variant_name = bl_cache.Signal.ResetEnumItems
-
-		self.ui_freq_range = bl_cache.Signal.InvalidateCache
-		self.ui_wl_range = bl_cache.Signal.InvalidateCache
-
-	####################
 	# - Output
 	####################
 	@events.computes_output_socket(
@@ -263,13 +251,6 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	)
 	def compute_medium(self, props) -> sp.Expr:
 		return props['medium']
-
-	@events.computes_output_socket(
-		'Valid Freqs',
-		props={'freq_range'},
-	)
-	def compute_valid_freqs(self, props) -> sp.Expr:
-		return props['freq_range']
 
 	@events.computes_output_socket(
 		'Valid Freqs',
@@ -284,13 +265,6 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			scaling=ct.ScalingMode.Lin,
 			unit=spux.THz,
 		)
-
-	@events.computes_output_socket(
-		'Valid WLs',
-		props={'wl_range'},
-	)
-	def compute_valid_wls(self, props) -> sp.Expr:
-		return props['wl_range']
 
 	@events.computes_output_socket(
 		'Valid WLs',
@@ -320,7 +294,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 		props,
 	):
 		managed_objs['plot'].mpl_plot_to_image(
-			lambda ax: self.medium.plot(props['medium'].frequency_range, ax=ax),
+			lambda ax: props['medium'].plot(props['medium'].frequency_range, ax=ax),
 			bl_select=True,
 		)
 		## TODO: Plot based on Wl, not freq.

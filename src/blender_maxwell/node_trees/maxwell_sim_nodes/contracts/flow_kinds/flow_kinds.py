@@ -120,7 +120,7 @@ class FlowKind(enum.StrEnum):
 			FlowKind.Value: 'Value',
 			FlowKind.Array: 'Array',
 			FlowKind.LazyArrayRange: 'Range',
-			FlowKind.LazyValueFunc: 'Lazy Value',
+			FlowKind.LazyValueFunc: 'Func',
 			FlowKind.Params: 'Parameters',
 			FlowKind.Info: 'Information',
 		}[v]

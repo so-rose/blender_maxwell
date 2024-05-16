@@ -75,7 +75,7 @@ class GeoNodes(enum.StrEnum):
 	## Monitor
 	MonitorEHField = '_monitor_eh_field'
 	MonitorPowerFlux = '_monitor_power_flux'
-	MonitorEpsTensor = '_monitor_eps_tensor'
+	MonitorPermittivity = '_monitor_permittivity'
 	MonitorDiffraction = '_monitor_diffraction'
 	MonitorProjCartEHField = '_monitor_proj_eh_field'
 	MonitorProjAngEHField = '_monitor_proj_ang_eh_field'
@@ -186,7 +186,7 @@ class GeoNodes(enum.StrEnum):
 			## Monitor
 			GN.MonitorEHField: GN_INTERNAL_MONITORS_PATH,
 			GN.MonitorPowerFlux: GN_INTERNAL_MONITORS_PATH,
-			GN.MonitorEpsTensor: GN_INTERNAL_MONITORS_PATH,
+			GN.MonitorPermittivity: GN_INTERNAL_MONITORS_PATH,
 			GN.MonitorDiffraction: GN_INTERNAL_MONITORS_PATH,
 			GN.MonitorProjCartEHField: GN_INTERNAL_MONITORS_PATH,
 			GN.MonitorProjAngEHField: GN_INTERNAL_MONITORS_PATH,

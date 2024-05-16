@@ -25,14 +25,28 @@ log = logger.get(__name__)
 
 
 class ManagedObj(abc.ABC):
+	"""A weak name-based reference to some kind of object external to this software.
+
+	While the object doesn't have to come from Blender's `bpy.types`, that is admittedly the driving motivation for this class: To encapsulate access to the powerful visual tools granted by Blender's 3D viewport, image editor, and UI.
+	Through extensive testing, the functionality of an implicitly-cached, semi-strictly immediate-mode interface, demanding only a weakly-referenced name as persistance, has emerged (with all of the associated tradeoffs).
+
+	While not suited to all use cases, the `ManagedObj` paradigm is perfect for many situations where a node needs to "loosely own" something external and non-trivial.
+	Intriguingly, the precise definition of "loose" has grown to vary greatly between subclasses, as it ends of demonstrating itself to be a matter of taste more than determinism.
+
+	This abstract base class serves to provide a few of the most basic of commonly-available - especially the `dump_as_msgspec`/`parse_as_msgspec` methods that allow it to be persisted using `blender_maxwell.utils.serialize`.
+
+	Parameters:
+		managed_obj_type: Enum identifier indicating which of the `ct.ManagedObjType` the instance should declare itself as.
+	"""
+
 	managed_obj_type: ct.ManagedObjType
 
 	@abc.abstractmethod
-	def __init__(
-		self,
-		name: ct.ManagedObjName,
-	):
-		"""Initializes the managed object with a unique name."""
+	def __init__(self, name: ct.ManagedObjName, prev_name: str | None = None):
+		"""Initializes the managed object with a unique name.
+
+		Use `prev_name` to indicate that the managed object will initially be avaiable under `prev_name`, but that it should be renamed to `name`.
+		"""
 
 	####################
 	# - Properties
@@ -60,7 +74,7 @@ class ManagedObj(abc.ABC):
 
 	@abc.abstractmethod
 	def hide_preview(self) -> None:
-		"""Select the managed object in Blender, if such an operation makes sense."""
+		"""Hide any active preview of the managed object, if it exists, and if such an operation makes sense."""
 
 	####################
 	# - Serialization

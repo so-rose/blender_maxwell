@@ -26,6 +26,7 @@ from blender_maxwell.utils import logger
 from .. import bl_socket_map
 from .. import contracts as ct
 from . import base
+from .managed_bl_mesh import ManagedBLMesh
 
 log = logger.get(__name__)
 
@@ -71,7 +72,7 @@ def read_modifier(bl_modifier: bpy.types.Modifier) -> ModifierAttrs:
 		return {
 			'node_group': bl_modifier.node_group,
 		}
-	elif bl_modifier.type == 'ARRAY':
+	if bl_modifier.type == 'ARRAY':
 		raise NotImplementedError
 
 	raise NotImplementedError
@@ -162,6 +163,7 @@ def write_modifier(
 class ManagedBLModifier(base.ManagedObj):
 	managed_obj_type = ct.ManagedObjType.ManagedBLModifier
 	_modifier_name: str | None = None
+	twin_bl_mesh: ManagedBLMesh | None = None
 
 	####################
 	# - BL Object Name
@@ -172,94 +174,117 @@ class ManagedBLModifier(base.ManagedObj):
 
 	@name.setter
 	def name(self, value: str) -> None:
-		## TODO: Handle name conflict within same BLObject
-		log.info(
-			'Changing BLModifier w/Name "%s" to Name "%s"', self._modifier_name, value
-		)
-		self._modifier_name = value
+		log.debug('Changing BLModifier w/Name "%s" to Name "%s"', self.name, value)
+
+		twin_bl_object = bpy.data.objects.get(self.twin_bl_mesh.name)
+
+		# No Existing Twin BLObject
+		## -> Since no modifier-holding object exists, we're all set.
+		if twin_bl_object is None:
+			self._modifier_name = value
+
+		# Existing Twin BLObject
+		else:
+			# No Existing Modifier: Set Value to Name
+			## -> We'll rename the bl_object; otherwise we're set.
+			bl_modifier = twin_bl_object.modifiers.get(self.name)
+			if bl_modifier is None:
+				self.twin_bl_mesh.name = value
+				self._modifier_name = value
+
+			# Existing Modifier: Rename to New Name
+			## -> We'll rename the bl_modifier, then the bl_object.
+			else:
+				bl_modifier.name = value
+				self.twin_bl_mesh.name = value
+				self._modifier_name = value
 
 	####################
 	# - Allocation
 	####################
-	def __init__(self, name: str):
+	def __init__(self, name: str, prev_name: str | None = None):
+		self.twin_bl_mesh = ManagedBLMesh(name, prev_name=prev_name)
+		if prev_name is not None:
+			self._modifier_name = prev_name
+		else:
+			self._modifier_name = name
+
 		self.name = name
 
 	def bl_select(self) -> None:
-		pass
+		self.twin_bl_mesh.bl_select()
+
+	def show_preview(self) -> None:
+		self.twin_bl_mesh.show_preview()
 
 	def hide_preview(self) -> None:
-		pass
+		self.twin_bl_mesh.hide_preview()
 
 	####################
 	# - Deallocation
 	####################
 	def free(self):
-		"""Not needed - when the object is removed, its modifiers are also removed."""
-
-	def free_from_bl_object(
-		self,
-		bl_object: bpy.types.Object,
-	) -> None:
-		"""Remove the managed BL modifier from the passed Blender object.
-
-		Parameters:
-			bl_object: The Blender object to remove the modifier from.
-		"""
-		if (bl_modifier := bl_object.modifiers.get(self.name)) is not None:
-			log.info(
-				'Removing (recreating) BLModifier "%s" on BLObject "%s" (existing modifier_type is "%s")',
-				bl_modifier.name,
-				bl_object.name,
-				bl_modifier.type,
-			)
-			bl_modifier = bl_object.modifiers.remove(bl_modifier)
-		else:
-			msg = f'Tried to free bl_modifier "{self.name}", but bl_object "{bl_object.name}" has no modifier of that name'
-			raise ValueError(msg)
+		log.info('BLModifier: Freeing "%s" w/Twin BLObject of same name', self.name)
+		self.twin_bl_mesh.free()
 
 	####################
 	# - Modifiers
 	####################
 	def bl_modifier(
 		self,
-		bl_object: bpy.types.Object,
 		modifier_type: ct.BLModifierType,
 		modifier_attrs: ModifierAttrs,
+		location: tuple[float, float, float] = (0, 0, 0),
 	):
 		"""Creates a new modifier for the current `bl_object`.
 
 		- Modifier Type Names: <https://docs.blender.org/api/current/bpy_types_enum_items/object_modifier_type_items.html#rna-enum-object-modifier-type-items>
 		"""
-		# Remove Mismatching Modifier
+		# Retrieve Twin BLObject
+		twin_bl_object = self.twin_bl_mesh.bl_object(location=location)
+		if twin_bl_object is None:
+			msg = f'BLModifier: No BLObject twin "{self.name}" exists to attach a modifier to.'
+			raise ValueError(msg)
+
+		bl_modifier = twin_bl_object.modifiers.get(self.name)
+
+		# Existing Modifier: Maybe Remove
 		modifier_was_removed = False
-		if (
-			bl_modifier := bl_object.modifiers.get(self.name)
-		) and bl_modifier.type != modifier_type:
+		if bl_modifier is not None and bl_modifier.type != modifier_type:
 			log.info(
-				'Removing (recreating) BLModifier "%s" on BLObject "%s" (existing modifier_type is "%s", but "%s" is requested)',
-				bl_modifier.name,
-				bl_object.name,
-				bl_modifier.type,
-				modifier_type,
+				'BLModifier: Clearing BLModifier "%s" from BLObject "%s"',
+				self.name,
+				twin_bl_object.name,
 			)
-			self.free_from_bl_object(bl_object)
+			twin_bl_object.modifiers.remove(bl_modifier)
 			modifier_was_removed = True
 
-		# Create Modifier
+		# No/Removed Modifier: Create
 		if bl_modifier is None or modifier_was_removed:
 			log.info(
-				'Creating BLModifier "%s" on BLObject "%s" with modifier_type "%s"',
+				'BLModifier: (Re)Creating BLModifier "%s" on BLObject "%s" (type=%s)',
 				self.name,
-				bl_object.name,
+				twin_bl_object.name,
 				modifier_type,
 			)
-			bl_modifier = bl_object.modifiers.new(
+			bl_modifier = twin_bl_object.modifiers.new(
 				name=self.name,
 				type=modifier_type,
 			)
 
+		# Write Modifier Attrs
+		## -> For GeoNodes modifiers, this is the critical component.
+		## -> From 'write_modifier', we only need to know if something changed.
+		## -> If so, we make sure to update the object data.
 		modifier_altered = write_modifier(bl_modifier, modifier_attrs)
 		if modifier_altered:
-			bl_object.data.update()
+			twin_bl_object.data.update()
 
 		return bl_modifier
+
+	####################
+	# - Mesh Data
+	####################
+	@property
+	def mesh_as_arrays(self) -> dict:
+		return self.twin_bl_mesh.mesh_as_arrays

@@ -131,27 +131,10 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			for i, (preset_name, preset_def) in enumerate(cls.presets.items())
 		]
 
-	####################
-	# - Managed Objects
-	####################
-	@bl_cache.cached_bl_property(depends_on={'sim_node_name'})
-	def managed_objs(self) -> dict[str, _managed_objs.ManagedObj]:
-		"""Access the constructed managed objects defined in `self.managed_obj_types`.
-
-		Managed objects are special in that they **don't keep any non-reproducible state**.
-		In fact, all managed object state can generally be derived entirely from the managed object's `name` attribute.
-		As a result, **consistency in namespacing is of the utmost importance**, if reproducibility of managed objects is to be guaranteed.
-
-		This name must be in sync with the name of the managed "thing", which is where this computed property comes in.
-		The node's half of the responsibility is to push a new name whenever `self.sim_node_name` changes.
-		"""
-		if self.managed_obj_types:
-			return {
-				mobj_name: mobj_type(self.sim_node_name)
-				for mobj_name, mobj_type in self.managed_obj_types.items()
-			}
-
-		return {}
+	# Managed Objects
+	managed_objs: dict[str, _managed_objs.ManagedObj] = bl_cache.BLField(
+		{}, use_prop_update=False
+	)
 
 	####################
 	# - Class Methods
@@ -221,25 +204,30 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 	####################
 	@events.on_value_changed(
 		prop_name='sim_node_name',
-		props={'sim_node_name', 'managed_objs'},
+		props={'sim_node_name', 'managed_objs', 'managed_obj_types'},
 		stop_propagation=True,
 	)
 	def _on_sim_node_name_changed(self, props):
-		log.info(
+		log.debug(
 			'Changed Sim Node Name of a "%s" to "%s" (self=%s)',
 			self.bl_idname,
 			props['sim_node_name'],
 			str(self),
 		)
 
-		# Set Name of Managed Objects
-		for mobj in props['managed_objs'].values():
-			mobj.name = props['sim_node_name']
-
-		## Invalidate Cache
-		## -> Persistance doesn't happen if we simply mutate.
-		## -> This ensures that the name change is picked up.
-		self.managed_objs = bl_cache.Signal.InvalidateCache
+		# (Re)Construct Managed Objects
+		## -> Due to 'prev_name', the new MObjs will be renamed on construction
+		self.managed_objs = {
+			mobj_name: mobj_type(
+				self.sim_node_name,
+				prev_name=(
+					props['managed_objs'][mobj_name].name
+					if mobj_name in props['managed_objs']
+					else None
+				),
+			)
+			for mobj_name, mobj_type in props['managed_obj_types'].items()
+		}
 
 	@events.on_value_changed(prop_name='active_socket_set')
 	def _on_socket_set_changed(self):
@@ -1027,12 +1015,14 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 				bl_socket.reset_instance_id()
 
 		# Generate New Sim Node Name
-		## Blender will automatically add .001 so that `self.name` is unique.
+		## -> Blender will adds .00# so that `self.name` is unique.
+		## -> We can shamelessly piggyback on this for unique managed objs.
+		## -> ...But to avoid stealing the old node's mobjs, we first rename.
 		self.sim_node_name = self.name
 
 		# Event Methods
-		## Run any 'DataChanged' methods with 'run_on_init' set.
-		## -> Copying a node _arguably_ re-initializes the new node.
+		## -> Re-run any 'DataChanged' methods with 'run_on_init' set.
+		## -> Copying a node ~ re-initializing the new node.
 		for event_method in [
 			event_method
 			for event_method in self.event_methods_by_event[ct.FlowEvent.DataChanged]
