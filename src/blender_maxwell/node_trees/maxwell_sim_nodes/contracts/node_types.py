@@ -55,10 +55,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	JSONFileExporter = enum.auto()
 
 	# Sources
-	## Sources / Temporal Shapes
-	PulseTemporalShape = enum.auto()
-	WaveTemporalShape = enum.auto()
-	ExprTemporalShape = enum.auto()
+	TemporalShape = enum.auto()
 	## Sources /
 	PointDipoleSource = enum.auto()
 	PlaneWaveSource = enum.auto()

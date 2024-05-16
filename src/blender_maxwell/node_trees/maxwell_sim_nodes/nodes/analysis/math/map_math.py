@@ -374,7 +374,7 @@ class MapMathNode(base.MaxwellSimNode):
 	# - Properties
 	####################
 	operation: MapOperation = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_operations()
+		enum_cb=lambda self, _: self.search_operations()
 	)
 
 	@property

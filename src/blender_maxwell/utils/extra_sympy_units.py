@@ -173,6 +173,17 @@ class MathType(enum.StrEnum):
 			MT.Complex: complex,
 		}[self]
 
+	@property
+	def symbolic_set(self) -> type:
+		MT = MathType
+		return {
+			MT.Bool: sp.Set([sp.S(False), sp.S(True)]),
+			MT.Integer: sp.Integers,
+			MT.Rational: sp.Rationals,
+			MT.Real: sp.Reals,
+			MT.Complex: sp.Complexes,
+		}[self]
+
 	@staticmethod
 	def to_str(value: typ.Self) -> type:
 		return {

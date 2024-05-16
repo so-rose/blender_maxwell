@@ -23,7 +23,7 @@ import bpy
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, logger, sim_symbols
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from .. import contracts as ct
@@ -936,8 +936,11 @@ class ExprSocketDef(base.SocketDef):
 	physical_type: spux.PhysicalType = spux.PhysicalType.NonPhysical
 
 	default_unit: spux.Unit | None = None
-	# symbols: list[sim_symbols.SimSymbol] = frozenset()
-	symbols: frozenset[spux.SympyExpr] = frozenset()
+	default_symbols: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
+
+	@property
+	def symbols(self) -> set[sp.Symbol]:
+		return {sim_symbol.sp_symbol for sim_symbol in self.default_symbols}
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = 0

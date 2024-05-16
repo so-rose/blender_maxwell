@@ -22,7 +22,7 @@ import jaxtyping as jtyp
 import matplotlib.axis as mpl_ax
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache, image_ops, logger
+from blender_maxwell.utils import bl_cache, image_ops, logger, sim_symbols
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
@@ -210,8 +210,8 @@ class VizNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.LazyValueFunc,
-			symbols={_x := sp.Symbol('x', real=True)},
-			default_value=2 * _x,
+			default_symbols=[sim_symbols.x],
+			default_value=2 * sim_symbols.x.sp_symbol,
 		),
 	}
 	output_sockets: typ.ClassVar = {
@@ -295,8 +295,8 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		socket_name='Expr',
-		input_sockets={'Expr'},
 		run_on_init=True,
+		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': {ct.FlowKind.Info, ct.FlowKind.Params}},
 		input_sockets_optional={'Expr': True},
 	)

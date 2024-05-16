@@ -19,11 +19,11 @@ from . import (
 	gaussian_beam_source,
 	plane_wave_source,
 	point_dipole_source,
-	temporal_shapes,
+	temporal_shape,
 )
 
 BL_REGISTER = [
-	*temporal_shapes.BL_REGISTER,
+	*temporal_shape.BL_REGISTER,
 	*plane_wave_source.BL_REGISTER,
 	*point_dipole_source.BL_REGISTER,
 	# *uniform_current_source.BL_REGISTER,
@@ -32,7 +32,7 @@ BL_REGISTER = [
 	# *tfsf_source.BL_REGISTER,
 ]
 BL_NODES = {
-	**temporal_shapes.BL_NODES,
+	**temporal_shape.BL_NODES,
 	**plane_wave_source.BL_NODES,
 	**point_dipole_source.BL_NODES,
 	# **uniform_current_source.BL_NODES,

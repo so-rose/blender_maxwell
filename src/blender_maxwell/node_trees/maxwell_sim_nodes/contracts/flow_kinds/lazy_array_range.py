@@ -388,6 +388,12 @@ class LazyArrayRangeFlow:
 			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
 		)
 
+	def realize_step_size(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> ArrayFlow | LazyValueFuncFlow:
+		return (self.realize_stop() - self.realize_start()) / self.steps
+
 	def realize(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
