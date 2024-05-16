@@ -33,7 +33,7 @@ log = logger.get(__name__)
 # - Operators
 ####################
 class RunSimulation(bpy.types.Operator):
-	"""Run a Tidy3D simulation accessible from a `Tidy3DWebRunnerNode`."""
+	"""Run a Tidy3D simulation accessible from a `Tidy3DWebImporterNode`."""
 
 	bl_idname = ct.OperatorType.NodeRunSimulation
 	bl_label = 'Run Sim'
@@ -44,10 +44,10 @@ class RunSimulation(bpy.types.Operator):
 		return (
 			# Check Tidy3D Cloud
 			tdcloud.IS_AUTHENTICATED
-			# Check Tidy3DWebRunnerNode is Accessible
+			# Check Tidy3DWebImporterNode is Accessible
 			and hasattr(context, 'node')
 			and hasattr(context.node, 'node_type')
-			and context.node.node_type == ct.NodeType.Tidy3DWebRunner
+			and context.node.node_type == ct.NodeType.Tidy3DWebImporter
 			# Check Task is Runnable
 			and context.node.is_task_runnable
 		)
@@ -60,7 +60,7 @@ class RunSimulation(bpy.types.Operator):
 
 
 class ReloadTrackedTask(bpy.types.Operator):
-	"""Reload information of the selected task in a `Tidy3DWebRunnerNode`."""
+	"""Reload information of the selected task in a `Tidy3DWebImporterNode`."""
 
 	bl_idname = ct.OperatorType.NodeReloadTrackedTask
 	bl_label = 'Reload Tracked Tidy3D Cloud Task'
@@ -71,10 +71,10 @@ class ReloadTrackedTask(bpy.types.Operator):
 		return (
 			# Check Tidy3D Cloud
 			tdcloud.IS_AUTHENTICATED
-			# Check Tidy3DWebRunnerNode is Accessible
+			# Check Tidy3DWebImporterNode is Accessible
 			and hasattr(context, 'node')
 			and hasattr(context.node, 'node_type')
-			and context.node.node_type == ct.NodeType.Tidy3DWebRunner
+			and context.node.node_type == ct.NodeType.Tidy3DWebImporter
 		)
 
 	def execute(self, context):
@@ -87,9 +87,9 @@ class ReloadTrackedTask(bpy.types.Operator):
 ####################
 # - Node
 ####################
-class Tidy3DWebRunnerNode(base.MaxwellSimNode):
-	node_type = ct.NodeType.Tidy3DWebRunner
-	bl_label = 'Tidy3D Web Runner'
+class Tidy3DWebImporterNode(base.MaxwellSimNode):
+	node_type = ct.NodeType.Tidy3DWebImporter
+	bl_label = 'Tidy3D Web Runner/Importer'
 
 	input_sockets: typ.ClassVar = {
 		'Cloud Task': sockets.Tidy3DCloudTaskSocketDef(
@@ -269,8 +269,8 @@ class Tidy3DWebRunnerNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	RunSimulation,
 	ReloadTrackedTask,
-	Tidy3DWebRunnerNode,
+	Tidy3DWebImporterNode,
 ]
 BL_NODES = {
-	ct.NodeType.Tidy3DWebRunner: (ct.NodeCategory.MAXWELLSIM_INPUTS_WEBIMPORTERS)
+	ct.NodeType.Tidy3DWebImporter: (ct.NodeCategory.MAXWELLSIM_INPUTS_WEBIMPORTERS)
 }
