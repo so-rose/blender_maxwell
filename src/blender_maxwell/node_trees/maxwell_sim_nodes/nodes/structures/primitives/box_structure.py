@@ -83,7 +83,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 		)
 
 	####################
-	# - Preview
+	# - Events: Preview
 	####################
 	@events.on_value_changed(
 		# Trigger

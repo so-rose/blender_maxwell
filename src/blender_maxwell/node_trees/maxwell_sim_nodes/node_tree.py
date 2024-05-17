@@ -435,6 +435,7 @@ def initialize_sim_tree_node_link_cache(_):
 	"""Whenever a file is loaded, create/regenerate the NodeLinkCache in all trees."""
 	for node_tree in bpy.data.node_groups:
 		if node_tree.bl_idname == 'MaxwellSimTree':
+			log.debug('%s: Initializing NodeLinkCache for NodeTree', str(node_tree))
 			node_tree.on_load()
 
 
@@ -450,13 +451,26 @@ def populate_missing_persistence(_) -> None:
 		for _node_tree in bpy.data.node_groups
 		if _node_tree.bl_idname == ct.TreeType.MaxwellSim.value and _node_tree.is_active
 	]:
+		log.debug(
+			'%s: Regenerating Dynamic Field Persistance for NodeTree nodes/sockets',
+			str(node_tree),
+		)
 		# Iterate over MaxwellSim Nodes
 		# -> Excludes ex. frame and reroute nodes.
 		for node in [_node for _node in node_tree.nodes if hasattr(_node, 'node_type')]:
+			log.debug(
+				'-> %s: Regenerating Dynamic Field Persistance for Node',
+				str(node),
+			)
 			node.regenerate_dynamic_field_persistance()
 			for bl_sockets in [node.inputs, node.outputs]:
 				for bl_socket in bl_sockets:
+					log.debug(
+						'|-> %s: Regenerating Dynamic Field Persistance for Socket',
+						str(bl_socket),
+					)
 					bl_socket.regenerate_dynamic_field_persistance()
+	log.debug('Regenerated All Dynamic Field Persistance')
 
 
 ####################

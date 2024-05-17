@@ -173,6 +173,10 @@ class BLProp:
 	def read_nonpersist(self, bl_instance: bl_instance.BLInstance | None) -> typ.Any:
 		"""Read the non-persistent cache value for this property.
 
+		Notes:
+			**Never reads cached BLPointers**; invokes `self.read()` instead.
+			`BLPointer`s must align perfectly with Blender's internal logic, and as such, the cache cannot get involved, else we risk access-after-free crashes.
+
 		Returns:
 			Generally, the cache value, with two exceptions.
 
@@ -184,6 +188,8 @@ class BLProp:
 			- `Signal.CacheEmpty`: When the cache has no entry.
 				A good idea might be to fill it immediately with `self.write_nonpersist(bl_instance)`.
 		"""
+		if self.bl_prop_type is BLPropType.BLPointer:
+			return self.read(bl_instance)
 		return managed_cache.read(
 			bl_instance,
 			self.bl_name,
@@ -215,11 +221,17 @@ class BLProp:
 			use_nonpersist=False,
 			use_persist=True,
 		)
+		if self.bl_prop_type is BLPropType.BLPointer:
+			return
+
 		self.write_nonpersist(bl_instance, value)
 
 	def write_nonpersist(
 		self, bl_instance: bl_instance.BLInstance, value: typ.Any
 	) -> None:
+		if self.bl_prop_type is BLPropType.BLPointer:
+			return  ## We can't always write here, so we can only do nothing.
+
 		managed_cache.write(
 			bl_instance,
 			self.bl_name,
@@ -229,6 +241,9 @@ class BLProp:
 		)
 
 	def invalidate_nonpersist(self, bl_instance: bl_instance.BLInstance | None) -> None:
+		if self.bl_prop_type is BLPropType.BLPointer:
+			return
+
 		managed_cache.invalidate_nonpersist(
 			bl_instance,
 			self.bl_name,

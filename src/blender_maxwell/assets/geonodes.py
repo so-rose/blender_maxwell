@@ -220,7 +220,6 @@ class GeoNodes(enum.StrEnum):
 ####################
 def import_geonodes(
 	_geonodes: GeoNodes,
-	force_append: bool = False,
 ) -> bpy.types.GeometryNodeGroup:
 	"""Given vendored GeoNodes tree link/append and return the local datablock.
 
@@ -496,6 +495,7 @@ class GeoNodesToStructureNode(bpy.types.Operator):
 				)
 				bpy.ops.node.select_all(action='DESELECT')
 				node = node_tree.nodes.new(geonodes.dedicated_node_type)
+				node.sim_node_name = asset.name
 				node.select = True
 				node.location.x = node_location[0]
 				node.location.y = node_location[1]
@@ -505,9 +505,9 @@ class GeoNodesToStructureNode(bpy.types.Operator):
 				## Since the node doesn't itself handle the structure, we must.
 				## We just import the GN tree, then attach the data block to the node.
 				if geonodes.dedicated_node_type == 'GeoNodesStructureNodeType':
+					## TODO: Is this too presumptuous? Or a fine little hack?
 					geonodes_data = import_geonodes(asset.name)
 					node.inputs['GeoNodes'].value = geonodes_data
-					## TODO: Is this too presumptuous? Or a fine little hack?
 
 			# Restore the Pre-Modal Mouse Cursor Shape
 			context.window.cursor_modal_restore()

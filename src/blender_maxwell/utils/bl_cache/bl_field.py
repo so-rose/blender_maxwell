@@ -36,6 +36,7 @@ StringPropSubType: typ.TypeAlias = typ.Literal[
 	'FILE_PATH', 'DIR_PATH', 'FILE_NAME', 'BYTE_STRING', 'PASSWORD', 'NONE'
 ]
 
+PollMethod: typ.TypeAlias = typ.Callable[[bl_instance.BLInstance, typ.Any], bool]
 StrMethod: typ.TypeAlias = typ.Callable[
 	[bl_instance.BLInstance, bpy.types.Context, str], list[tuple[str, str]]
 ]
@@ -72,8 +73,7 @@ class BLField:
 		float_prec: int | None = None,
 		str_secret: bool | None = None,
 		path_type: typ.Literal['dir', 'file'] | None = None,
-		# blptr_type: typ.Any | None = None,  ## A Blender ID type
-		## TODO: Test/Implement
+		bltype_poll: PollMethod | None = None,
 		## Dynamic
 		str_cb: StrMethod | None = None,
 		enum_cb: EnumMethod | None = None,
@@ -110,6 +110,10 @@ class BLField:
 				Only meaningful for `pathlib.Path` properties.
 				**NOTE**: No effort is made to make paths portable between operating systems.
 				Use with care.
+			bltype_poll: User-provided method for filtering selectable datablocks.
+				Whenever the annotated type is `ct.BLIDStruct`, it may be desirable to constrain which datablocks the user should be able to select.
+				This allows doing so.
+				**NOTE**: The method will be run very often, and must therefore be cheap.
 			str_cb: Method used to determine all valid strings, which presents to the user as a fuzzy-style search dropdown.
 				Only meaningful for `str` properties.
 				Results are not persisted, and must therefore re-run when reloading the file.
@@ -121,12 +125,6 @@ class BLField:
 			cb_depends_on: Declares that `str_cb` / `enum_cb` should be regenerated whenever any of the given property names change.
 				This allows fully automating the invocation of `Signal.ResetEnumItems` / `Signal.ResetStrSearch` in common cases.
 		"""
-		log.debug(
-			'Initializing BLField (default_value=%s, use_prop_update=%s)',
-			str(default_value),
-			str(use_prop_update),
-		)
-
 		self.use_dynamic_enum = enum_cb is not None
 		self.use_str_search = str_cb is not None
 
@@ -143,7 +141,7 @@ class BLField:
 			'step': float_step,
 			'precision': float_prec,
 			# BLPointer: ID Type
-			#'blptr_type': blptr_type,
+			'bltype_poll': bltype_poll,
 			# Str | Path | Enum: Flag Setters
 			'str_secret': str_secret,
 			'path_type': path_type,
@@ -222,6 +220,14 @@ class BLField:
 			)
 			self.bl_prop_str_search.init_bl_type(owner)
 
+		log.debug(
+			'Initialized BLField "%s" (prop_type=%s, type=%s, default_value=%s)',
+			str(self.bl_prop.name),
+			str(self.bl_prop.bl_prop_type),
+			str(self.bl_prop.prop_type),
+			str(self.bl_prop.default_value),
+		)
+
 	def __get__(
 		self,
 		bl_instance: bl_instance.BLInstance | None,
@@ -290,6 +296,9 @@ class BLField:
 
 		# Reset Enum Items
 		elif value is Signal.ResetEnumItems:
+			if self.bl_prop_enum_items is None:
+				return
+
 			# Retrieve Old Items
 			## -> This is verbatim what is being persisted, currently.
 			## -> len(0): Manually replaced w/fallback to guarantee >=len(1)
@@ -356,6 +365,9 @@ class BLField:
 
 		# Reset Str Search
 		elif value is Signal.ResetStrSearch:
+			if self.bl_prop_str_search is None:
+				return
+
 			self.bl_prop_str_search.invalidate_nonpersist(bl_instance)
 
 		# General __set__

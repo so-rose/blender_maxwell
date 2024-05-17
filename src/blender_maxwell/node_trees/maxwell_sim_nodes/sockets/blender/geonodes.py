@@ -14,30 +14,40 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import typing as typ
+
 import bpy
+import sympy as sp
+import sympy.physics.units as spu
+import tidy3d as td
+
+from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
+from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 ####################
 # - Operators
 ####################
 class BlenderMaxwellResetGeoNodesSocket(bpy.types.Operator):
-	bl_idname = 'blender_maxwell.reset_geo_nodes_socket'
-	bl_label = 'Reset GeoNodes Socket'
+	"""Simulate a change to the geometry nodes group of the attached `GeoNodes` socket.
 
-	node_tree_name: bpy.props.StringProperty(name='Node Tree Name')
-	node_name: bpy.props.StringProperty(name='Node Name')
-	socket_name: bpy.props.StringProperty(name='Socket Name')
+	This causes updates to the GN group (ex. internal logic) to be immediately caught.
+	"""
+
+	bl_idname = ct.OperatorType.SocketGeoNodesReset
+	bl_label = 'Reset GeoNodes Group'
 
 	def execute(self, context):
-		node_tree = bpy.data.node_groups[self.node_tree_name]
-		node = node_tree.nodes[self.node_name]
-		socket = node.inputs[self.socket_name]
+		bl_socket = context.socket
 
 		# Report as though the GeoNodes Tree Changed
-		socket.on_prop_changed('raw_value', context)
+		bl_socket.on_prop_changed('raw_value', context)
 
 		return {'FINISHED'}
 
@@ -52,35 +62,18 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.PointerProperty(
-		name='Blender GeoNodes Tree',
-		description='Represents a Blender GeoNodes Tree',
-		type=bpy.types.NodeTree,
-		poll=(lambda self, obj: obj.bl_idname == 'GeometryNodeTree'),
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
+	raw_value: bpy.types.NodeTree = bl_cache.BLField(
+		bltype_poll=lambda self, obj: self.filter_gn_trees(obj)
 	)
 
-	####################
-	# - UI
-	####################
-	# def draw_label_row(self, label_col_row, text):
-	# label_col_row.label(text=text)
-	# if not self.raw_value: return
-	#
-	# op = label_col_row.operator(
-	# BlenderMaxwellResetGeoNodesSocket.bl_idname,
-	# text="",
-	# icon="FILE_REFRESH",
-	# )
-	# op.socket_name = self.name
-	# op.node_name = self.node.name
-	# op.node_tree_name = self.node.id_data.name
+	def filter_gn_trees(self, obj: ct.BLIDStruct) -> bool:
+		return obj.bl_idname == 'GeometryNodeTree' and not obj.name.startswith('_')
 
 	####################
 	# - UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col.prop(self, 'raw_value', text='')
+		col.prop(self, self.blfields['raw_value'], text='')
 
 	####################
 	# - Default Value

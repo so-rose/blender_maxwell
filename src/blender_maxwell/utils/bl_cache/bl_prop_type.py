@@ -82,6 +82,10 @@ def _is_strenum(T: type) -> bool:  # noqa: N803
 	return inspect.isclass(T) and issubclass(T, enum.StrEnum)
 
 
+def _is_bl_id_struct(T: type) -> bool:  # noqa: N803
+	return T in BLIDStructs
+
+
 ####################
 # - Blender Property Type
 ####################
@@ -323,7 +327,7 @@ class BLPropType(enum.StrEnum):
 			BPT.SingleDynEnum: ['enum_dynamic'],
 			BPT.SetDynEnum: ['enum_dynamic'],
 			# Special
-			BPT.BLPointer: ['blptr_type'],
+			BPT.BLPointer: [],
 			BPT.Serialized: [],
 		}[self]
 
@@ -365,6 +369,12 @@ class BLPropType(enum.StrEnum):
 
 		# Define Information -> KWArg Getter
 		def g_kwarg(name: str, force_key: str | None = None):
+			"""Retrieve a dictionary mapping a name to its `prop_info[name]` value.
+
+			If `name` is not defined in `prop_info`, then return an empty dictionary.
+
+			If `force_key` is set, then use it as to override `name` as the key when returning the dictionary.
+			"""
 			key = force_key if force_key is not None else name
 			return {key: prop_info[name]} if prop_info.get(name) is not None else {}
 
@@ -482,10 +492,13 @@ class BLPropType(enum.StrEnum):
 
 			# BLPointer
 			case BPT.BLPointer:
-				kwargs |= encoded_default
-
 				# BLPointer: ID Type
-				kwargs |= g_kwarg('blptr_type', force_key='type')
+				## -> This is the type of datablock that will be selectable.
+				kwargs |= {'type': obj_type}
+
+				# BLPointer: Poll Method
+				## -> This allows the user filter selectable datablocks.
+				kwargs |= g_kwarg('bltype_poll', force_key='poll')
 
 			# BLPointer
 			case BPT.Serialized:
@@ -573,7 +586,7 @@ class BLPropType(enum.StrEnum):
 				return {str(v) for v in value}
 
 			# BLPointer: Don't Alter
-			case BPT.BLPointer if value in BLIDStructs or value is None:
+			case BPT.BLPointer:
 				return value
 
 			# Serialized: Serialize To UTF-8
@@ -662,7 +675,7 @@ class BLPropType(enum.StrEnum):
 
 			# BLPointer
 			## -> None is always valid when it comes to BLPointers.
-			case BPT.BLPointer if raw_value in BLIDStructs or raw_value is None:
+			case BPT.BLPointer:
 				return raw_value
 
 			# Serialized: Deserialize the Argument
@@ -748,7 +761,7 @@ class BLPropType(enum.StrEnum):
 			return BPT.SetEnum
 
 		# Match BLPointers
-		if obj_type in BLIDStructs:
+		if _is_bl_id_struct(obj_type):
 			return BPT.BLPointer
 
 		# Fallback: Serializable Object

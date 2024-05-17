@@ -37,10 +37,40 @@ class BLSocketInfo:
 	is_preview: bool
 	socket_type: SocketType | None
 	size: spux.NumberSize1D | None
+	mathtype: spux.MathType | None
 	physical_type: spux.PhysicalType | None
 	default_value: spux.ScalarUnitlessRealExpr
 
 	bl_isocket_identifier: spux.ScalarUnitlessRealExpr
+
+	def encode(
+		self, raw_value: typ.Any, unit_system: spux.UnitSystem | None
+	) -> typ.Any:
+		"""Encode a raw value, given a unit system, to be directly writable to a node socket.
+
+		This encoded form is also guaranteed to support writing to a node socket via a modifier interface.
+		"""
+		# Non-Numerical: Passthrough
+		if unit_system is None or self.physical_type is None:
+			return raw_value
+
+		# Numerical: Convert to Pure Python Type
+		if (
+			unit_system is not None
+			and self.physical_type is not spux.PhysicalType.NonPhysical
+		):
+			unitless_value = spux.scale_to_unit_system(raw_value, unit_system)
+		elif isinstance(raw_value, spux.SympyType):
+			unitless_value = spux.sympy_to_python(raw_value)
+		else:
+			unitless_value = raw_value
+
+		# Coerce int -> float w/Target is Real
+		## -> The value - modifier - GN path is more strict than properties.
+		if self.mathtype is spux.MathType.Real and isinstance(unitless_value, int):
+			return float(unitless_value)
+
+		return unitless_value
 
 
 class BLSocketType(enum.StrEnum):
@@ -85,12 +115,20 @@ class BLSocketType(enum.StrEnum):
 	def from_bl_isocket(
 		bl_isocket: bpy.types.NodeTreeInterfaceSocket,
 	) -> typ.Self:
+		"""Deduce the exact `BLSocketType` represented by an interface socket.
+
+		Interface sockets are an abstraction of what any instance of a particular node tree _will have of input sockets_ once constructed.
+		"""
 		return BLSocketType(bl_isocket.bl_socket_idname)
 
 	@staticmethod
 	def info_from_bl_isocket(
 		bl_isocket: bpy.types.NodeTreeInterfaceSocket,
 	) -> typ.Self:
+		"""Deduce all `BLSocketInfo` from an interface socket.
+
+		This is a high-level method providing a clean way to chain `BLSocketType.from_bl_isocket()` together with `self.parse()`.
+		"""
 		bl_socket_type = BLSocketType.from_bl_isocket(bl_isocket)
 		if bl_socket_type.has_support:
 			return bl_socket_type.parse(
@@ -103,13 +141,21 @@ class BLSocketType(enum.StrEnum):
 	####################
 	@property
 	def has_support(self) -> bool:
+		"""Decides whether the current `BLSocketType` is explicitly not supported.
+
+		Not all socket types make sense to represent in our node tree.
+		In general, these should be skipped.
+		"""
 		BLST = BLSocketType
 		return {
+			# Won't Fix
 			BLST.Virtual: False,
 			BLST.Geometry: False,
 			BLST.Shader: False,
 			BLST.FloatUnsigned: False,
 			BLST.IntUnsigned: False,
+			## TODO
+			BLST.Menu: False,
 		}.get(self, True)
 
 	@property
@@ -132,12 +178,36 @@ class BLSocketType(enum.StrEnum):
 		ST = SocketType
 		return {
 			# Blender
+			BLST.Image: ST.BlenderImage,
+			BLST.Material: ST.BlenderMaterial,
+			BLST.Object: ST.BlenderObject,
+			BLST.Collection: ST.BlenderCollection,
 			# Basic
-			BLST.Bool: ST.Bool,
+			BLST.Bool: ST.BlenderCollection,
+			BLST.String: ST.String,
 			# Float
-			# Array-Like
+			BLST.Float: ST.Expr,
+			BLST.FloatAngle: ST.Expr,
+			BLST.FloatDistance: ST.Expr,
+			BLST.FloatFactor: ST.Expr,
+			BLST.FloatPercentage: ST.Expr,
+			BLST.FloatTime: ST.Expr,
+			BLST.FloatTimeAbsolute: ST.Expr,
+			# Int
+			BLST.Int: ST.Expr,
+			BLST.IntFactor: ST.Expr,
+			BLST.IntPercentage: ST.Expr,
+			# Vector
 			BLST.Color: ST.Color,
-		}.get(self, ST.Expr)
+			BLST.Rotation: ST.Expr,
+			BLST.Vector: ST.Expr,
+			BLST.VectorAcceleration: ST.Expr,
+			BLST.VectorDirection: ST.Expr,
+			BLST.VectorEuler: ST.Expr,
+			BLST.VectorTranslation: ST.Expr,
+			BLST.VectorVelocity: ST.Expr,
+			BLST.VectorXYZ: ST.Expr,
+		}[self]
 
 	@property
 	def mathtype(self) -> spux.MathType | None:
@@ -240,7 +310,7 @@ class BLSocketType(enum.StrEnum):
 			BLST.FloatAngle: P.Angle,
 			BLST.FloatDistance: P.Length,
 			BLST.FloatTime: P.Time,
-			BLST.FloatTimeAbsolute: P.Time,  ## What's the difference?
+			BLST.FloatTimeAbsolute: P.Time,  ## TODO: What's the difference?
 			BLST.VectorAcceleration: P.Accel,
 			## BLST.VectorDirection: Directions are unitless (within cartesian)
 			BLST.VectorEuler: P.Angle,
@@ -291,8 +361,8 @@ class BLSocketType(enum.StrEnum):
 	def parse(
 		self, bl_default_value: typ.Any, description: str, bl_isocket_identifier: str
 	) -> BLSocketInfo:
-		# Parse the Description
-		## TODO: Some kind of error on invalid parse if there is also no unambiguous physical type
+		# Unpack Description
+		## -> TODO: Raise an kind of error on invalid parse if there is also no unambiguous physical type
 		descr_params = description.split(BL_SOCKET_DESCR_ANNOT_STRING)[0]
 		directive = (
 			_tokens[0]
@@ -300,33 +370,60 @@ class BLSocketType(enum.StrEnum):
 			else _tokens[1]
 		)
 
-		## Interpret the Description Parse
-		parsed_physical_type = getattr(spux.PhysicalType, directive, None)
-		physical_type = (
-			self.unambiguous_physical_type
-			if self.unambiguous_physical_type is not None
-			else parsed_physical_type
-		)
+		# Parse PhysicalType
+		## -> None if there is no appropriate MathType.
+		## -> Otherwise, prefer unambiguous - description hint - NonPhysical
+		has_physical_type = self.mathtype in [
+			spux.MathType.Integer,
+			spux.MathType.Rational,
+			spux.MathType.Real,
+			spux.MathType.Complex,
+		]
+		if has_physical_type:
+			parsed_physical_type = getattr(spux.PhysicalType, directive, None)
+			physical_type = (
+				self.unambiguous_physical_type
+				if self.unambiguous_physical_type is not None
+				else (
+					parsed_physical_type
+					if parsed_physical_type is not None
+					else spux.PhysicalType.NonPhysical
+				)
+			)
+		else:
+			physical_type = None
 
-		# Parse the Default Value
+		# Parse Default Value
+		## -> Read the Blender socket's default value and convrt it
 		if self.mathtype is not None and bl_default_value is not None:
+			# Scalar: Convert to Pure Python TYpe
 			if self.size == spux.NumberSize1D.Scalar:
 				default_value = self.mathtype.pytype(bl_default_value)
+
+			# 2D (Description Hint): Sympy Matrix
+			## -> The description hint "2D" is the trigger for this.
+			## -> Ignore the last component to get the effect of "2D".
 			elif description.startswith('2D'):
-				default_value = sp.Matrix(tuple(bl_default_value)[:2])
+				default_value = sp.ImmutableMatrix(tuple(bl_default_value)[:2])
+
+			# 3D/4D: Simple Parse to Sympy Matrix
+			## -> We don't explicitly check the size.
 			else:
-				default_value = sp.Matrix(tuple(bl_default_value))
+				default_value = sp.ImmutableMatrix(tuple(bl_default_value))
+
 		else:
+			# Non-Mathematical: Passthrough
 			default_value = bl_default_value
 
 		# Return Parsed Socket Information
 		## -> Combining directly known and parsed knowledge.
-		## -> Should contain everything needed to match the Blender socket.
+		## -> Should contain everything needed to create a socket in our tree.
 		return BLSocketInfo(
 			has_support=self.has_support,
 			is_preview=(directive == 'Preview'),
 			socket_type=self.socket_type,
 			size=self.size,
+			mathtype=self.mathtype,
 			physical_type=physical_type,
 			default_value=default_value,
 			bl_isocket_identifier=bl_isocket_identifier,

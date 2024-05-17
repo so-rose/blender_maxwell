@@ -149,6 +149,7 @@ def manage_pydeps(*_):
 	# path_addon_pydeps='',
 	# path_addon_reqs='',
 	# )
+	log.debug('PyDeps: Analyzing Post-File Load')
 	ct.addon.prefs().on_addon_pydeps_changed(show_popup_if_deps_invalid=True)
 
 

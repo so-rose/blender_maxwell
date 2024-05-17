@@ -1285,6 +1285,7 @@ UnitSystem: typ.TypeAlias = dict[PhysicalType, Unit]
 
 _PT = PhysicalType
 UNITS_SI: UnitSystem = {
+	_PT.NonPhysical: None,
 	# Global
 	_PT.Time: spu.second,
 	_PT.Angle: spu.radian,
@@ -1396,7 +1397,7 @@ def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
 	Notes:
 		You should probably use `scale_to_unit_system()` or `convert_to_unit_system()`.
 	"""
-	return sp_obj.subs({unit: 1 for unit in unit_system.values()})
+	return sp_obj.subs({unit: 1 for unit in unit_system.values() if unit is not None})
 
 
 def scale_to_unit_system(

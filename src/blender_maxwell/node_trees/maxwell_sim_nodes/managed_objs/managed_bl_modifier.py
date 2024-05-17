@@ -97,6 +97,7 @@ def write_modifier_geonodes(
 	modifier_altered = False
 
 	# Alter GeoNodes Group
+	## -> Check the existing node group, replace if it differs.
 	if bl_modifier.node_group != modifier_attrs['node_group']:
 		log.info(
 			'Changing GeoNodes Modifier NodeTree from "%s" to "%s"',
@@ -106,30 +107,25 @@ def write_modifier_geonodes(
 		bl_modifier.node_group = modifier_attrs['node_group']
 		modifier_altered = True
 
-	# Alter GeoNodes Modifier Inputs
+	# Parse GeoNodes Socket Info
+	## -> TODO: Slow and hard to optimize, but very likely worth it.
 	socket_infos = bl_socket_map.info_from_geonodes(bl_modifier.node_group)
 
 	for socket_name in modifier_attrs['inputs']:
+		# Retrieve Modifier Interface ID
+		## -> iface_id translates "modifier socket" to "GN input socket".
 		iface_id = socket_infos[socket_name].bl_isocket_identifier
-		input_value = modifier_attrs['inputs'][socket_name]
 
-		if modifier_attrs['unit_system'] is not None and not isinstance(
-			input_value, bool
-		):
-			value_to_write = spux.scale_to_unit_system(
-				input_value, modifier_attrs['unit_system']
-			)
-		else:
-			value_to_write = input_value
-
-		# Edge Case: int -> float
-		if isinstance(bl_modifier[iface_id], float) and isinstance(value_to_write, int):
-			bl_modifier[iface_id] = float(value_to_write)
-		else:
-			bl_modifier[iface_id] = value_to_write
-
-	modifier_altered = True
-	## TODO: More fine-grained alterations
+		# Deduce Value to Write
+		## -> This may involve a unit system conversion.
+		## -> Special Case: Booleans do not go through unit conversion.
+		## -> TODO: A special case isn't clean enough.
+		bl_modifier[iface_id] = socket_infos[socket_name].encode(
+			raw_value=modifier_attrs['inputs'][socket_name],
+			unit_system=modifier_attrs['unit_system'],
+		)
+		modifier_altered = True
+		## TODO: More fine-grained alterations?
 
 	return modifier_altered  # noqa: RET504
 

@@ -737,6 +737,14 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
+		# log.debug(
+		# '%s: Triggered Event %s (socket_name=%s, socket_kinds=%s, prop_name=%s)',
+		# self.sim_node_name,
+		# event,
+		# str(socket_name),
+		# str(socket_kinds),
+		# str(prop_name),
+		# )
 		# Outflow Socket Kinds
 		## -> Something has happened!
 		## -> The effect is yet to be determined...
@@ -815,9 +823,9 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
 			# log.critical(
-			# '$[%s] [%s %s %s %s] Running: (%s)',
+			# '%s: Running %s',
 			# self.sim_node_name,
-			# event_method.callback_info,
+			# str(event_method.callback_info),
 			# )
 			event_method(self)
 

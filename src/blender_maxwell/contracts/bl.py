@@ -53,44 +53,44 @@ BLClass: typ.TypeAlias = (
 	| bpy.types.FileHandler
 )
 BLIDStruct: typ.TypeAlias = (
-	bpy.types.Action,
-	bpy.types.Armature,
-	bpy.types.Brush,
-	bpy.types.CacheFile,
-	bpy.types.Camera,
-	bpy.types.Collection,
-	bpy.types.Curve,
-	bpy.types.Curves,
-	bpy.types.FreestyleLineStyle,
-	bpy.types.GreasePencil,
-	bpy.types.Image,
-	bpy.types.Key,
-	bpy.types.Lattice,
-	bpy.types.Library,
-	bpy.types.Light,
-	bpy.types.LightProbe,
-	bpy.types.Mask,
-	bpy.types.Material,
-	bpy.types.Mesh,
-	bpy.types.MetaBall,
-	bpy.types.MovieClip,
-	bpy.types.NodeTree,
-	bpy.types.Object,
-	bpy.types.PaintCurve,
-	bpy.types.Palette,
-	bpy.types.ParticleSettings,
-	bpy.types.PointCloud,
-	bpy.types.Scene,
-	bpy.types.Screen,
-	bpy.types.Sound,
-	bpy.types.Speaker,
-	bpy.types.Text,
-	bpy.types.Texture,
-	bpy.types.VectorFont,
-	bpy.types.Volume,
-	bpy.types.WindowManager,
-	bpy.types.WorkSpace,
-	bpy.types.World,
+	bpy.types.Action
+	| bpy.types.Armature
+	| bpy.types.Brush
+	| bpy.types.CacheFile
+	| bpy.types.Camera
+	| bpy.types.Collection
+	| bpy.types.Curve
+	| bpy.types.Curves
+	| bpy.types.FreestyleLineStyle
+	| bpy.types.GreasePencil
+	| bpy.types.Image
+	| bpy.types.Key
+	| bpy.types.Lattice
+	| bpy.types.Library
+	| bpy.types.Light
+	| bpy.types.LightProbe
+	| bpy.types.Mask
+	| bpy.types.Material
+	| bpy.types.Mesh
+	| bpy.types.MetaBall
+	| bpy.types.MovieClip
+	| bpy.types.NodeTree
+	| bpy.types.Object
+	| bpy.types.PaintCurve
+	| bpy.types.Palette
+	| bpy.types.ParticleSettings
+	| bpy.types.PointCloud
+	| bpy.types.Scene
+	| bpy.types.Screen
+	| bpy.types.Sound
+	| bpy.types.Speaker
+	| bpy.types.Text
+	| bpy.types.Texture
+	| bpy.types.VectorFont
+	| bpy.types.Volume
+	| bpy.types.WindowManager
+	| bpy.types.WorkSpace
+	| bpy.types.World
 )
 BLKeymapItem: typ.TypeAlias = typ.Any  ## TODO: Better Type
 BLPropFlag: typ.TypeAlias = typ.Literal[
