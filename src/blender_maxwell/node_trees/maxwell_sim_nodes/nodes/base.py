@@ -416,13 +416,45 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 
 			# Remove Sockets
 			for bl_socket in bl_sockets_to_remove:
+				bl_socket_name = bl_socket.name
+
+				# 1. Report the socket removal to the NodeTree.
+				## -> The NodeLinkCache needs to be adjusted manually.
 				node_tree.on_node_socket_removed(bl_socket)
+
+				# 2. Invalidate the input socket cache across all kinds.
+				## -> Prevents phantom values from remaining available.
 				self._compute_input.invalidate(
-					input_socket_name=bl_socket.name,
+					input_socket_name=bl_socket_name,
 					kind=...,
 					unit_system=...,
 				)
+
+				# 3. Perform the removal using Blender's API.
+				## -> Actually removes the socket.
 				all_bl_sockets.remove(bl_socket)
+
+				if direc == 'input':
+					# 4. Run all trigger-only `on_value_changed` callbacks.
+					## -> Runs any event methods that relied on the socket.
+					## -> Only methods that don't **require** the socket.
+					## Trigger-Only: If method loads no socket data, it runs.
+					## `optional`: If method optional-loads socket, it runs.
+					triggered_event_methods = [
+						event_method
+						for event_method in self.filtered_event_methods_by_event(
+							ct.FlowEvent.DataChanged, (bl_socket_name, None, None)
+						)
+						if bl_socket_name
+						not in event_method.callback_info.must_load_sockets
+					]
+					for event_method in triggered_event_methods:
+						log.critical(
+							'%s: Running %s',
+							self.sim_node_name,
+							str(event_method),
+						)
+						event_method(self)
 
 	def _add_new_active_sockets(self):
 		"""Add and initialize all "active" sockets that aren't on the node.
@@ -737,14 +769,14 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
-		# log.debug(
-		# '%s: Triggered Event %s (socket_name=%s, socket_kinds=%s, prop_name=%s)',
-		# self.sim_node_name,
-		# event,
-		# str(socket_name),
-		# str(socket_kinds),
-		# str(prop_name),
-		# )
+		log.debug(
+			'%s: Triggered Event %s (socket_name=%s, socket_kinds=%s, prop_name=%s)',
+			self.sim_node_name,
+			event,
+			str(socket_name),
+			str(socket_kinds),
+			str(prop_name),
+		)
 		# Outflow Socket Kinds
 		## -> Something has happened!
 		## -> The effect is yet to be determined...
@@ -860,12 +892,18 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		Parameters:
 			prop_name: The name of the property that changed.
 		"""
+		# All Attributes: Trigger Event
+		## -> This declares that the single property has changed.
+		## -> This should happen first, in case dependents need a cache.
 		if hasattr(self, prop_name):
-			# Trigger Event
 			self.trigger_event(ct.FlowEvent.DataChanged, prop_name=prop_name)
-		else:
-			msg = f'Property {prop_name} not defined on node {self}'
-			raise RuntimeError(msg)
+
+		# BLField Attributes: Invalidate BLField Dependents
+		## -> Dependent props will generally also trigger on_prop_changed.
+		## -> The recursion ends with the depschain.
+		## -> WARNING: The chain is not checked for ex. cycles.
+		if prop_name in self.blfields:
+			self.invalidate_blfield_deps(prop_name)
 
 	####################
 	# - UI Methods

@@ -200,32 +200,37 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Contrary to `node.on_prop_changed()`, socket-specific callbacks are baked into this function:
 
 		- **Active Kind** (`self.active_kind`): Sets the socket shape to reflect the active `FlowKind`.
+			**MAY NOT** rely on `FlowEvent` driven caches.
+		- **Overrided Local Events** (`self.active_kind`): Sets the socket shape to reflect the active `FlowKind`.
+			**MAY NOT** rely on `FlowEvent` driven caches.
 
 		Attributes:
 			prop_name: The name of the property that was changed.
 		"""
-		## TODO: Evaluate this properly
-		if self.is_initializing:
-			pass
-			# log.debug(
-			# '%s: Rejected on_prop_changed("%s") while initializing',
-			# self.bl_label,
-			# prop_name,
-			# )
-		elif hasattr(self, prop_name):
+		# All Attributes: Trigger Local Event
+		## -> While initializing, only `DataChanged` won't trigger.
+		if hasattr(self, prop_name):
 			# Property Callbacks: Active Kind
+			## -> WARNING: May NOT rely on flow.
 			if prop_name == 'active_kind':
 				self.on_active_kind_changed()
 
 			# Property Callbacks: Per-Socket
+			## -> WARNING: May NOT rely on flow.
 			self.on_socket_prop_changed(prop_name)
 
-			# Trigger Event
-			self.trigger_event(ct.FlowEvent.DataChanged)
+			# Not Initializing: Trigger Event
+			## -> This declares that the socket has changed.
+			## -> This should happen first, in case dependents need a cache.
+			if not self.is_initializing:
+				self.trigger_event(ct.FlowEvent.DataChanged)
 
-		else:
-			msg = f'Property {prop_name} not defined on socket {self.bl_label} ({self.socket_type})'
-			raise RuntimeError(msg)
+		# BLField Attributes: Invalidate BLField Dependents
+		## -> Dependent props will generally also trigger on_prop_changed.
+		## -> The recursion ends with the depschain.
+		## -> WARNING: The chain is not checked for ex. cycles.
+		if prop_name in self.blfields:
+			self.invalidate_blfield_deps(prop_name)
 
 	####################
 	# - Link Event: Consent / On Change

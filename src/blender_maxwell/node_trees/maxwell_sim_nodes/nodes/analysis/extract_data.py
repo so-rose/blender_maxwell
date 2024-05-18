@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Declares `ExtractDataNode`."""
+"""Implements `ExtractDataNode`."""
 
 import enum
 import typing as typ
@@ -40,16 +40,12 @@ TDMonitorData: typ.TypeAlias = td.components.data.monitor_data.MonitorData
 class ExtractDataNode(base.MaxwellSimNode):
 	"""Extract data from sockets for further analysis.
 
-	# Socket Sets
-	## Sim Data
-	Extracts monitors from a `MaxwelFDTDSimDataSocket`.
-
-	## Monitor Data
-	Extracts array attributes from a `MaxwelFDTDSimDataSocket`.
+	Socket Sets:
+		Sim Data: Extract monitor data from simulation data by-name.
+		Monitor Data: Extract `Expr`s from monitor data by-component.
 
 	Attributes:
 		extract_filter: Identifier for data to extract from the input.
-
 	"""
 
 	node_type = ct.NodeType.ExtractData
@@ -71,12 +67,18 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	extract_filter: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_extract_filters(),
+		cb_depends_on={'sim_data_monitor_nametype', 'monitor_data_type'},
 	)
 
 	####################
 	# - Computed: Sim Data
 	####################
-	@property
+	@events.on_value_changed(socket_name='Sim Data')
+	def on_sim_data_changed(self) -> None:  # noqa: D102
+		log.critical('On Value Changed: Sim Data')
+		self.sim_data = bl_cache.Signal.InvalidateCache
+
+	@bl_cache.cached_bl_property()
 	def sim_data(self) -> td.SimulationData | None:
 		"""Extracts the simulation data from the input socket.
 
@@ -92,7 +94,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 		return None
 
-	@bl_cache.cached_bl_property()
+	@bl_cache.cached_bl_property(depends_on={'sim_data'})
 	def sim_data_monitor_nametype(self) -> dict[str, str] | None:
 		"""For simulation data, deduces a map from the monitor name to the monitor "type".
 
@@ -110,7 +112,12 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Computed Properties: Monitor Data
 	####################
-	@property
+	@events.on_value_changed(socket_name='Monitor Data')
+	def on_monitor_data_changed(self) -> None:  # noqa: D102
+		log.critical('On Value Changed: Sim Data')
+		self.monitor_data = bl_cache.Signal.InvalidateCache
+
+	@bl_cache.cached_bl_property()
 	def monitor_data(self) -> TDMonitorData | None:
 		"""Extracts the monitor data from the input socket.
 
@@ -126,7 +133,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 		return None
 
-	@bl_cache.cached_bl_property()
+	@bl_cache.cached_bl_property(depends_on={'monitor_data'})
 	def monitor_data_type(self) -> str | None:
 		r"""For monitor data, deduces the monitor "type".
 
@@ -149,7 +156,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 		return None
 
-	@bl_cache.cached_bl_property()
+	@bl_cache.cached_bl_property(depends_on={'monitor_data_type'})
 	def monitor_data_attrs(self) -> list[str] | None:
 		r"""For monitor data, deduces the valid data-containing attributes.
 
@@ -304,26 +311,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 		col.prop(self, self.blfields['extract_filter'], text='')
 
 	####################
-	# - Events
-	####################
-	@events.on_value_changed(
-		# Trigger
-		socket_name={'Sim Data', 'Monitor Data'},
-		prop_name='active_socket_set',
-		run_on_init=True,
-	)
-	def on_input_sockets_changed(self) -> None:
-		"""Invalidate the cached properties for sim data / monitor data, and reset the extraction filter."""
-		self.sim_data_monitor_nametype = bl_cache.Signal.InvalidateCache
-		self.monitor_data_type = bl_cache.Signal.InvalidateCache
-		self.monitor_data_attrs = bl_cache.Signal.InvalidateCache
-		self.extract_filter = bl_cache.Signal.ResetEnumItems
-
-	####################
-	# - Output (Value): Sim Data -> Monitor Data
+	# - FlowKind.Value: Sim Data -> Monitor Data
 	####################
 	@events.computes_output_socket(
-		# Trigger
 		'Monitor Data',
 		kind=ct.FlowKind.Value,
 		# Loaded
@@ -348,10 +338,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - Output (Array): Monitor Data -> Expr
+	# - FlowKind.Array|LazyValueFunc: Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
-		# Trigger
 		'Expr',
 		kind=ct.FlowKind.Array,
 		# Loaded
@@ -407,7 +396,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - Auxiliary (Params): Monitor Data -> Expr
+	# - FlowKind.Params: Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -422,10 +411,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 		return ct.ParamsFlow()
 
 	####################
-	# - Auxiliary (Info): Monitor Data -> Expr
+	# - FlowKind.Info: Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
-		# Trigger
 		'Expr',
 		kind=ct.FlowKind.Info,
 		# Loaded

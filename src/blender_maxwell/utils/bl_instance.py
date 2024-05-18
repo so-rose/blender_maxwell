@@ -219,8 +219,56 @@ class BLInstance:
 		for str_search_prop_name in self.blfields_str_search:
 			setattr(self, str_search_prop_name, bl_cache.Signal.ResetStrSearch)
 
+	def invalidate_blfield_deps(self, prop_name: str) -> None:
+		"""Invalidates all properties that depend on `prop_name`.
+
+		A property can recursively depend on other properties, including specificity as to whether the cache should be invalidated, the enum items be recomputed, or the string search items be recomputed.
+
+		This method actually implements this, by correctly invalidating all immediate dependents of `prop_name`.
+		As it is generally called during `self.on_bl_prop_changed()` / `self.on_prop_changed()`, invalidating immediate dependents is an implicitly recursive action.
+
+		Notes:
+			The dictionaries governing exactly what invalidates what, and how, are encoded as `self.blfield_deps`, `self.blfield_dynamic_enum_deps`, and `self.blfield_str_search_deps`.
+			All of these are filled when creating the `BLInstance` subclass, using `self.declare_blfield_dep()`, generally via the `BLField` descriptor (which internally uses `BLProp`).
+		"""
+		# Invalidate Dependent Properties (incl. DynEnums and StrSearch)
+		## -> NOTE: Dependent props may also trigger `on_prop_changed`.
+		## -> Don't abuse dependencies :)
+		for deps, invalidate_signal in zip(
+			[
+				self.blfield_deps,
+				self.blfield_dynamic_enum_deps,
+				self.blfield_str_search_deps,
+			],
+			[
+				bl_cache.Signal.InvalidateCache,
+				bl_cache.Signal.ResetEnumItems,
+				bl_cache.Signal.ResetStrSearch,
+			],
+			strict=True,
+		):
+			if prop_name in deps:
+				for dst_prop_name in deps[prop_name]:
+					log.debug(
+						'Property %s is invalidating %s',
+						prop_name,
+						dst_prop_name,
+					)
+					setattr(
+						self,
+						dst_prop_name,
+						invalidate_signal,
+					)
+
 	def on_bl_prop_changed(self, bl_prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated via the Blender UI.
+
+		In general, **all** Blender UI properties in the entire program will call this method using `update`.
+		Whether anything further happens is a little more nuanced.
+
+		1. The cache of the `prop_name` associated with `bl_prop_name` is invalidated, but without invoking a cache update.
+
+		Primarily, `self.invalidate_blfield_deps()`
 
 		The only effect is to invalidate the non-persistent cache of the associated BLField.
 		The BLField then decides whether to take any other action, ex. calling `self.on_prop_changed()`.
@@ -230,61 +278,11 @@ class BLInstance:
 		# Strip the Internal Prefix
 		## -> TODO: This is a bit of a hack. Use a contracts constant.
 		prop_name = bl_prop_name.removeprefix('blfield__')
-		# log.debug(
-		# 'Callback on Property %s (stripped: %s)',
-		# bl_prop_name,
-		# prop_name,
-		# )
-		# log.debug(
-		# 'Dependencies (PROP: %s) (ENUM: %s) (SEAR: %s)',
-		# self.blfield_deps,
-		# self.blfield_dynamic_enum_deps,
-		# self.blfield_str_search_deps,
-		# )
 
 		# Invalidate Property Cache
-		## -> Only the non-persistent cache is regenerated.
 		## -> The BLField decides whether to trigger `on_prop_changed`.
 		if prop_name in self.blfields:
-			# RULE: =1 DataChanged per Dependency Chain
-			## -> We MUST invalidate the cache, but might not want to update.
-			## -> Update should only be triggered when ==0 dependents.
-			setattr(self, prop_name, bl_cache.Signal.InvalidateCacheNoUpdate)
-
-			# Invalidate Dependent Properties (incl. DynEnums and StrSearch)
-			## -> NOTE: Dependent props may also trigger `on_prop_changed`.
-			## -> Meaning, don't use extraneous dependencies (as usual).
-			for deps, invalidate_signal in zip(
-				[
-					self.blfield_deps,
-					self.blfield_dynamic_enum_deps,
-					self.blfield_str_search_deps,
-				],
-				[
-					bl_cache.Signal.InvalidateCache,
-					bl_cache.Signal.ResetEnumItems,
-					bl_cache.Signal.ResetStrSearch,
-				],
-				strict=True,
-			):
-				if prop_name in deps:
-					for dst_prop_name in deps[prop_name]:
-						# log.debug(
-						# 'Property %s is invalidating %s',
-						# prop_name,
-						# dst_prop_name,
-						# )
-						setattr(
-							self,
-							dst_prop_name,
-							invalidate_signal,
-						)
-
-			# Do Update AFTER Dependencies
-			## -> Yes, update will run once per dependency.
-			## -> Don't abuse dependencies :)
-			## -> If no-update is important, use_prop_update is still respected.
-			setattr(self, prop_name, bl_cache.Signal.DoUpdate)
+			setattr(self, prop_name, bl_cache.Signal.InvalidateCache)
 
 	def on_prop_changed(self, prop_name: str) -> None:
 		"""Triggers changes/an event chain based on a changed property.

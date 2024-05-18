@@ -38,6 +38,7 @@ class InfoDataChanged:
 	on_changed_sockets: set[ct.SocketName]
 	on_changed_props: set[str]
 	on_any_changed_loose_input: set[str]
+	must_load_sockets: set[str]
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -356,12 +357,19 @@ def on_value_changed(
 	return event_decorator(
 		event=ct.FlowEvent.DataChanged,
 		callback_info=InfoDataChanged(
+			# Triggers
 			run_on_init=run_on_init,
 			on_changed_sockets=(
 				socket_name if isinstance(socket_name, set) else {socket_name}
 			),
 			on_changed_props=(prop_name if isinstance(prop_name, set) else {prop_name}),
 			on_any_changed_loose_input=any_loose_input_socket,
+			# Loaded
+			must_load_sockets={
+				socket_name
+				for socket_name in kwargs.get('input_sockets', {})
+				if socket_name not in kwargs.get('input_sockets_optional', {})
+			},
 		),
 		**kwargs,
 	)
