@@ -198,7 +198,12 @@ class BLProp:
 		)
 
 	def read(self, bl_instance: bl_instance.BLInstance) -> typ.Any:
-		"""Read the Blender property's particular value on the given `bl_instance`."""
+		"""Read the persisted Blender property value for this property, from a particular `BLInstance`.
+
+		Parameters:
+			bl_instance: The Blender object to
+				**NOTE**: `bl_instance` must not be `None`, as neighboring methods sometimes allow.
+		"""
 		persisted_value = self.decode(
 			managed_cache.read(
 				bl_instance,

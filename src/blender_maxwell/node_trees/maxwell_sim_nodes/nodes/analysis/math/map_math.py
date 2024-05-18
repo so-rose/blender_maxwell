@@ -99,6 +99,9 @@ class MapOperation(enum.StrEnum):
 	Chol = enum.auto()
 	Svd = enum.auto()
 
+	####################
+	# - UI
+	####################
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
 		MO = MapOperation
@@ -150,6 +153,9 @@ class MapOperation(enum.StrEnum):
 			i,
 		)
 
+	####################
+	# - Ops from Shape
+	####################
 	@staticmethod
 	def by_element_shape(shape: tuple[int, ...] | None) -> list[typ.Self]:
 		MO = MapOperation
@@ -198,10 +204,21 @@ class MapOperation(enum.StrEnum):
 
 		return []
 
-	def jax_func(self, user_expr_func: ct.LazyValueFuncFlow | None = None):
+	def jax_func_expr(self, user_expr_func: ct.LazyValueFuncFlow):
 		MO = MapOperation
-		if self == MO.UserExpr and user_expr_func is not None:
+		if self == MO.UserExpr:
 			return lambda data: user_expr_func.func(data)
+
+		msg = "Can't generate JAX function for user-provided expression when MapOperation is not `UserExpr`"
+		raise ValueError(msg)
+
+	@property
+	def jax_func(self):
+		MO = MapOperation
+		if self == MO.UserExpr:
+			msg = "Can't generate JAX function without user-provided expression when MapOperation is `UserExpr`"
+			raise ValueError(msg)
+
 		return {
 			# By Number
 			MO.Real: lambda data: jnp.real(data),
@@ -386,8 +403,6 @@ class MapMathNode(base.MaxwellSimNode):
 
 		return 'noshape'
 
-	output_shape: tuple[int, ...] | None = bl_cache.BLField(None)
-
 	def search_operations(self) -> list[ct.BLEnumElement]:
 		if self.expr_output_shape != 'noshape':
 			return [
@@ -472,12 +487,12 @@ class MapMathNode(base.MaxwellSimNode):
 		if has_expr and operation is not None:
 			if not has_mapper:
 				return expr.compose_within(
-					operation.jax_func(),
+					operation.jax_func,
 					supports_jax=True,
 				)
 			if operation == MapOperation.UserExpr and has_mapper:
 				return expr.compose_within(
-					operation.jax_func(user_expr_func=mapper),
+					operation.jax_func_expr(user_expr_func=mapper),
 					supports_jax=True,
 				)
 		return ct.FlowSignal.FlowPending

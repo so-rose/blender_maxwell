@@ -74,6 +74,12 @@ class InfoFlow:
 	output_mathtype: spux.MathType = dataclasses.field()
 	output_unit: spux.Unit | None = dataclasses.field()
 
+	@property
+	def output_shape_len(self) -> int:
+		if self.output_shape is None:
+			return 0
+		return len(self.output_shape)
+
 	# Pinned Dimension Information
 	## TODO: Add PhysicalType
 	pinned_dim_names: list[str] = dataclasses.field(default_factory=list)

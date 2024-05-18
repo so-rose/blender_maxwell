@@ -50,6 +50,7 @@ class BLInstance:
 	# - Attributes
 	####################
 	instance_id: bpy.props.StringProperty(default='')
+	is_updating: bpy.props.BoolProperty(default=False)
 
 	blfields: typ.ClassVar[dict[str, str]] = MappingProxyType({})
 	blfield_deps: typ.ClassVar[dict[str, list[str]]] = MappingProxyType({})

@@ -186,7 +186,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	# UI: Info
 	show_info_columns: bool = bl_cache.BLField(False)
 	info_columns: set[InfoDisplayCol] = bl_cache.BLField(
-		{InfoDisplayCol.MathType, InfoDisplayCol.Unit}
+		{InfoDisplayCol.Length, InfoDisplayCol.MathType}
 	)
 
 	####################

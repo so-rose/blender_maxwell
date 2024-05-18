@@ -477,7 +477,7 @@ def populate_missing_persistence(_) -> None:
 # - Blender Registration
 ####################
 bpy.app.handlers.load_post.append(initialize_sim_tree_node_link_cache)
-bpy.app.handlers.load_post.append(populate_missing_persistence)
+# bpy.app.handlers.load_post.append(populate_missing_persistence)
 ## TODO: Move to top-level registration.
 
 BL_REGISTER = [

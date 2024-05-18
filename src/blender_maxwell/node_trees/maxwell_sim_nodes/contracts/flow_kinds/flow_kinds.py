@@ -80,7 +80,6 @@ class FlowKind(enum.StrEnum):
 				unit_system,
 			)
 		if kind == FlowKind.LazyArrayRange:
-			log.debug([kind, flow_obj, unit_system])
 			return flow_obj.rescale_to_unit_system(unit_system)
 
 		if kind == FlowKind.Params:

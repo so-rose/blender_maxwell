@@ -329,8 +329,8 @@ class BLField:
 				# Retrieve Old Enum Item
 				## -> This is verbatim what is being used.
 				## -> De-Coerce None -> 'NONE' to avoid special-cased search.
-				_old_item = self.bl_prop.read(bl_instance)
-				old_item = 'NONE' if _old_item is None else _old_item
+				old_item = self.bl_prop.read(bl_instance)
+				raw_old_item = 'NONE' if old_item is None else str(old_item)
 
 				# Swap Enum Items
 				## -> This is the hot stuff - the enum elements are overwritten.
@@ -343,7 +343,7 @@ class BLField:
 				## -> If so, the user will expect it to "remain".
 				## -> Thus, we set it - Blender sees a change, user doesn't.
 				## -> DO NOT trigger on_prop_changed (since "nothing changed").
-				if any(old_item == item[0] for item in current_items):
+				if any(raw_old_item == item[0] for item in current_items):
 					self.suppress_next_update(bl_instance)
 					self.bl_prop.write(bl_instance, old_item)
 					## -> TODO: Don't write if not needed.
@@ -352,10 +352,8 @@ class BLField:
 				## -> In this case, fallback to the first current item.
 				## -> DO trigger on_prop_changed (since it changed!)
 				else:
-					_first_current_item = current_items[0][0]
-					first_current_item = (
-						_first_current_item if _first_current_item != 'NONE' else None
-					)
+					raw_first_current_item = current_items[0][0]
+					first_current_item = self.bl_prop.decode(raw_first_current_item)
 
 					self.suppress_next_update(bl_instance)
 					self.bl_prop.write(bl_instance, first_current_item)

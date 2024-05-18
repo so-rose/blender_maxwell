@@ -73,10 +73,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Computed: Sim Data
 	####################
-	@events.on_value_changed(socket_name='Sim Data')
-	def on_sim_data_changed(self) -> None:  # noqa: D102
-		log.critical('On Value Changed: Sim Data')
-		self.sim_data = bl_cache.Signal.InvalidateCache
+	@events.on_value_changed(
+		socket_name='Sim Data',
+		input_sockets={'Sim Data'},
+		input_sockets_optional={'Sim Data': True},
+	)
+	def on_sim_data_changed(self, input_sockets) -> None:  # noqa: D102
+		has_sim_data = not ct.FlowSignal.check(input_sockets['Sim Data'])
+		if has_sim_data:
+			self.sim_data = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
 	def sim_data(self) -> td.SimulationData | None:
@@ -112,10 +117,15 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	# - Computed Properties: Monitor Data
 	####################
-	@events.on_value_changed(socket_name='Monitor Data')
-	def on_monitor_data_changed(self) -> None:  # noqa: D102
-		log.critical('On Value Changed: Sim Data')
-		self.monitor_data = bl_cache.Signal.InvalidateCache
+	@events.on_value_changed(
+		socket_name='Monitor Data',
+		input_sockets={'Monitor Data'},
+		input_sockets_optional={'Monitor Data': True},
+	)
+	def on_monitor_data_changed(self, input_sockets) -> None:  # noqa: D102
+		has_monitor_data = not ct.FlowSignal.check(input_sockets['Monitor Data'])
+		if has_monitor_data:
+			self.monitor_data = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
 	def monitor_data(self) -> TDMonitorData | None:
@@ -319,6 +329,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		# Loaded
 		props={'extract_filter'},
 		input_sockets={'Sim Data'},
+		input_sockets_optional={'Sim Data': True},
 	)
 	def compute_monitor_data(
 		self, props: dict, input_sockets: dict
@@ -347,6 +358,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		props={'extract_filter'},
 		input_sockets={'Monitor Data'},
 		input_socket_kinds={'Monitor Data': ct.FlowKind.Value},
+		input_sockets_optional={'Monitor Data': True},
 	)
 	def compute_expr(
 		self, props: dict, input_sockets: dict
@@ -376,6 +388,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		# Loaded
 		output_sockets={'Expr'},
 		output_socket_kinds={'Expr': ct.FlowKind.Array},
+		output_sockets_optional={'Expr': True},
 	)
 	def compute_extracted_data_lazy(
 		self, output_sockets: dict
@@ -436,9 +449,18 @@ class ExtractDataNode(base.MaxwellSimNode):
 
 		has_monitor_data = not ct.FlowSignal.check(monitor_data)
 
+		# Edge Case: Dangling 'flux' Access on 'FieldMonitor'
+		## -> Sometimes works - UNLESS the FieldMonitor doesn't have all fields.
+		## -> We don't allow 'flux' attribute access, but it can dangle.
+		## -> (The method is called when updating each depschain component.)
+		if monitor_data_type == 'Field' and extract_filter == 'flux':
+			return ct.FlowSignal.FlowPending
+
 		# Retrieve XArray
 		if has_monitor_data and extract_filter is not None:
-			xarr = getattr(monitor_data, extract_filter)
+			xarr = getattr(monitor_data, extract_filter, None)
+			if xarr is None:
+				return ct.FlowSignal.FlowPending
 		else:
 			return ct.FlowSignal.FlowPending
 
