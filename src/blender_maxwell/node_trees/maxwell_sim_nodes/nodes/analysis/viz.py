@@ -301,8 +301,6 @@ class VizNode(base.MaxwellSimNode):
 		input_sockets_optional={'Expr': True},
 	)
 	def on_any_changed(self, input_sockets: dict):
-		self.input_info = bl_cache.Signal.InvalidateCache
-
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
 
@@ -339,6 +337,8 @@ class VizNode(base.MaxwellSimNode):
 
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
+
+		self.input_info = bl_cache.Signal.InvalidateCache
 
 	#####################
 	## - Plotting

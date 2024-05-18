@@ -62,7 +62,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	output_socket_sets: typ.ClassVar = {
 		'Sim Data': {'Monitor Data': sockets.MaxwellMonitorDataSocketDef()},
 		'Monitor Data': {
-			'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyArrayRange)
+			'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc)
 		},
 	}
 

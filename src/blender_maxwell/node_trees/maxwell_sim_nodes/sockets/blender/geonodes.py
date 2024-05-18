@@ -14,16 +14,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import typing as typ
-
 import bpy
-import sympy as sp
-import sympy.physics.units as spu
-import tidy3d as td
 
-from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
 from blender_maxwell.utils import bl_cache, logger
-from blender_maxwell.utils import extra_sympy_units as spux
 
 from ... import contracts as ct
 from .. import base
