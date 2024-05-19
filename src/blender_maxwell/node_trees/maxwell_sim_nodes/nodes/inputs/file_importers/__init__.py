@@ -14,11 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import tidy_3d_file_importer
+from . import data_file_importer, tidy_3d_file_importer
 
 BL_REGISTER = [
+	*data_file_importer.BL_REGISTER,
 	*tidy_3d_file_importer.BL_REGISTER,
 ]
 BL_NODES = {
+	**data_file_importer.BL_NODES,
 	**tidy_3d_file_importer.BL_NODES,
 }

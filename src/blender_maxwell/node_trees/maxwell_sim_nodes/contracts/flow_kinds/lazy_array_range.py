@@ -418,7 +418,11 @@ class LazyArrayRangeFlow:
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
 	) -> ArrayFlow | LazyValueFuncFlow:
-		return (self.realize_stop() - self.realize_start()) / self.steps
+		raw_step_size = (self.realize_stop() - self.realize_start() + 1) / self.steps
+
+		if self.mathtype is spux.MathType.Integer and raw_step_size.is_integer():
+			return int(raw_step_size)
+		return raw_step_size
 
 	def realize(
 		self,
@@ -463,3 +467,28 @@ class LazyArrayRangeFlow:
 	@functools.cached_property
 	def realize_array(self) -> ArrayFlow:
 		return self.realize()
+
+	def __getitem__(self, subscript: slice):
+		if isinstance(subscript, slice) and self.scaling == ScalingMode.Lin:
+			# Parse Slice
+			start = subscript.start if subscript.start is not None else 0
+			stop = subscript.stop if subscript.stop is not None else self.steps
+			step = subscript.step if subscript.step is not None else 1
+
+			slice_steps = (stop - start + step - 1) // step
+
+			# Compute New Start/Stop
+			step_size = self.realize_step_size()
+			new_start = step_size * start
+			new_stop = new_start + step_size * slice_steps
+
+			return LazyArrayRangeFlow(
+				start=sp.S(new_start),
+				stop=sp.S(new_stop),
+				steps=slice_steps,
+				scaling=self.scaling,
+				unit=self.unit,
+				symbols=self.symbols,
+			)
+
+		raise NotImplementedError

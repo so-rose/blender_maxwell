@@ -40,6 +40,16 @@ class InfoFlow:
 	)  ## TODO: Rename to dim_idxs
 
 	@functools.cached_property
+	def dim_has_coords(self) -> dict[str, int]:
+		return {
+			dim_name: not (
+				isinstance(dim_idx, LazyArrayRangeFlow)
+				and (dim_idx.start.is_infinite or dim_idx.stop.is_infinite)
+			)
+			for dim_name, dim_idx in self.dim_idx.items()
+		}
+
+	@functools.cached_property
 	def dim_lens(self) -> dict[str, int]:
 		return {dim_name: len(dim_idx) for dim_name, dim_idx in self.dim_idx.items()}
 
@@ -99,9 +109,29 @@ class InfoFlow:
 	####################
 	# - Methods
 	####################
+	def slice_dim(self, dim_name: str, slice_tuple: tuple[int, int, int]) -> typ.Self:
+		return InfoFlow(
+			# Dimensions
+			dim_names=self.dim_names,
+			dim_idx={
+				_dim_name: (
+					dim_idx
+					if _dim_name != dim_name
+					else dim_idx[slice_tuple[0] : slice_tuple[1] : slice_tuple[2]]
+				)
+				for _dim_name, dim_idx in self.dim_idx.items()
+			},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)
+
 	def replace_dim(
 		self, old_dim_name: str, new_dim_idx: tuple[str, ArrayFlow | LazyArrayRangeFlow]
 	) -> typ.Self:
+		"""Replace a dimension (and its indexing) with a new name and index array/range."""
 		return InfoFlow(
 			# Dimensions
 			dim_names=[
@@ -122,6 +152,7 @@ class InfoFlow:
 		)
 
 	def rescale_dim_idxs(self, new_dim_idxs: dict[str, LazyArrayRangeFlow]) -> typ.Self:
+		"""Replace several dimensional indices with new index arrays/ranges."""
 		return InfoFlow(
 			# Dimensions
 			dim_names=self.dim_names,
@@ -156,7 +187,7 @@ class InfoFlow:
 		)
 
 	def swap_dimensions(self, dim_0_name: str, dim_1_name: str) -> typ.Self:
-		"""Delete a dimension."""
+		"""Swap the position of two dimensions."""
 
 		# Compute Swapped Dimension Name List
 		def name_swapper(dim_name):
@@ -181,7 +212,7 @@ class InfoFlow:
 		)
 
 	def set_output_mathtype(self, output_mathtype: spux.MathType) -> typ.Self:
-		"""Set the MathType of a particular output name."""
+		"""Set the MathType of the output."""
 		return InfoFlow(
 			dim_names=self.dim_names,
 			dim_idx=self.dim_idx,
@@ -198,6 +229,7 @@ class InfoFlow:
 		collapsed_mathtype: spux.MathType,
 		collapsed_unit: spux.Unit,
 	) -> typ.Self:
+		"""Replace the (scalar) output with the given corrected values."""
 		return InfoFlow(
 			# Dimensions
 			dim_names=self.dim_names,

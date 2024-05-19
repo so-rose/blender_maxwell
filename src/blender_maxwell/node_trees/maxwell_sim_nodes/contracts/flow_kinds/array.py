@@ -122,7 +122,6 @@ class ArrayFlow:
 			if self.unit is not None
 			else rescale_func(a * self.unit)
 		)
-		log.critical([self.unit, new_unit, rescale_expr])
 		_rescale_func = sp.lambdify(a, rescale_expr, 'jax')
 		values = _rescale_func(self.values)
 
@@ -132,3 +131,13 @@ class ArrayFlow:
 			unit=new_unit,
 			is_sorted=self.is_sorted,
 		)
+
+	def __getitem__(self, subscript: slice):
+		if isinstance(subscript, slice):
+			return ArrayFlow(
+				values=self.values[subscript],
+				unit=self.unit,
+				is_sorted=self.is_sorted,
+			)
+
+		raise NotImplementedError

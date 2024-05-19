@@ -21,6 +21,7 @@ import typing as typ
 
 import bpy
 import jax.numpy as jnp
+import jaxtyping as jtyp
 import sympy as sp
 import sympy.physics.units as spu
 
@@ -47,13 +48,20 @@ class TransformOperation(enum.StrEnum):
 		InvFFT: Compute the inverse fourier transform of the input expression.
 	"""
 
-	# Index
+	# Covariant Transform
 	FreqToVacWL = enum.auto()
 	VacWLToFreq = enum.auto()
+
+	# Fold
+	IntDimToComplex = enum.auto()
+	DimToVec = enum.auto()
+	DimsToMat = enum.auto()
+
 	# Fourier
 	FFT1D = enum.auto()
 	InvFFT1D = enum.auto()
-	# Affine
+
+	# TODO: Affine
 	## TODO
 
 	####################
@@ -63,9 +71,14 @@ class TransformOperation(enum.StrEnum):
 	def to_name(value: typ.Self) -> str:
 		TO = TransformOperation
 		return {
-			# By Number
+			# Covariant Transform
 			TO.FreqToVacWL: '𝑓 → λᵥ',
 			TO.VacWLToFreq: 'λᵥ → 𝑓',
+			# Fold
+			TO.IntDimToComplex: '→ ℂ',
+			TO.DimToVec: '→ Vector',
+			TO.DimsToMat: '→ Matrix',
+			# Fourier
 			TO.FFT1D: 't → 𝑓',
 			TO.InvFFT1D: '𝑓 → t',
 		}[value]
@@ -92,7 +105,8 @@ class TransformOperation(enum.StrEnum):
 		TO = TransformOperation
 		operations = []
 
-		# Freq <-> VacWL
+		# Covariant Transform
+		## Freq <-> VacWL
 		for dim_name in info.dim_names:
 			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
 				operations.append(TO.FreqToVacWL)
@@ -100,7 +114,23 @@ class TransformOperation(enum.StrEnum):
 			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
 				operations.append(TO.VacWLToFreq)
 
-		# 1D Fourier
+		# Fold
+		## (Last) Int Dim (=2) to Complex
+		if len(info.dim_names) >= 1:
+			last_dim_name = info.dim_names[-1]
+			if info.dim_lens[last_dim_name] == 2:  # noqa: PLR2004
+				operations.append(TO.IntDimToComplex)
+
+		## To Vector
+		if len(info.dim_names) >= 1:
+			operations.append(TO.DimToVec)
+
+		## To Matrix
+		if len(info.dim_names) >= 2:  # noqa: PLR2004
+			operations.append(TO.DimsToMat)
+
+		# Fourier
+		## 1D Fourier
 		if info.dim_names:
 			last_physical_type = info.dim_physical_types[info.dim_names[-1]]
 			if last_physical_type == spux.PhysicalType.Time:
@@ -117,9 +147,13 @@ class TransformOperation(enum.StrEnum):
 	def sp_func(self):
 		TO = TransformOperation
 		return {
-			# Index
+			# Covariant Transform
 			TO.FreqToVacWL: lambda expr: expr,
 			TO.VacWLToFreq: lambda expr: expr,
+			# Fold
+			# TO.IntDimToComplex: lambda expr: expr,  ## TODO: Won't work?
+			TO.DimToVec: lambda expr: expr,
+			TO.DimsToMat: lambda expr: expr,
 			# Fourier
 			TO.FFT1D: lambda expr: sp.fourier_transform(
 				expr, sim_symbols.t, sim_symbols.freq
@@ -133,15 +167,26 @@ class TransformOperation(enum.StrEnum):
 	def jax_func(self):
 		TO = TransformOperation
 		return {
-			# Index
+			# Covariant Transform
 			TO.FreqToVacWL: lambda expr: expr,
 			TO.VacWLToFreq: lambda expr: expr,
+			# Fold
+			## -> To Complex: With a little imagination, this is a noop :)
+			## -> **Requires** dims[-1] to be integer-indexed w/length of 2.
+			TO.IntDimToComplex: lambda expr: expr.view(dtype=jnp.complex64).squeeze(),
+			TO.DimToVec: lambda expr: expr,
+			TO.DimsToMat: lambda expr: expr,
 			# Fourier
 			TO.FFT1D: lambda expr: jnp.fft(expr),
 			TO.InvFFT1D: lambda expr: jnp.ifft(expr),
 		}[self]
 
-	def transform_info(self, info: ct.InfoFlow | None) -> ct.InfoFlow | None:
+	def transform_info(
+		self,
+		info: ct.InfoFlow | None,
+		data: jtyp.Shaped[jtyp.Array, '...'] | None = None,
+		unit: spux.Unit | None = None,
+	) -> ct.InfoFlow | None:
 		TO = TransformOperation
 		if not info.dim_names:
 			return None
@@ -169,6 +214,12 @@ class TransformOperation(enum.StrEnum):
 					),
 				],
 			),
+			# Fold
+			TO.IntDimToComplex: lambda: info.delete_dimension(
+				info.dim_names[-1]
+			).set_output_mathtype(spux.MathType.Complex),
+			TO.DimToVec: lambda: info.shift_last_input,
+			TO.DimsToMat: lambda: info.shift_last_input.shift_last_input,
 			# Fourier
 			TO.FFT1D: lambda: info.replace_dim(
 				info.dim_names[-1],
@@ -216,7 +267,7 @@ class TransformMathNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Properties
+	# - Properties: Expr InfoFlow
 	####################
 	@events.on_value_changed(
 		socket_name={'Expr'},
@@ -243,6 +294,9 @@ class TransformMathNode(base.MaxwellSimNode):
 
 		return None
 
+	####################
+	# - Properties: Operation
+	####################
 	operation: TransformOperation = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_operations(),
 		cb_depends_on={'expr_info'},
@@ -257,9 +311,6 @@ class TransformMathNode(base.MaxwellSimNode):
 				)
 			]
 		return []
-
-	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
 	# - UI
@@ -339,6 +390,7 @@ class TransformMathNode(base.MaxwellSimNode):
 
 		if has_info and operation is not None:
 			transformed_info = operation.transform_info(info)
+
 			if transformed_info is None:
 				return ct.FlowSignal.FlowPending
 			return transformed_info

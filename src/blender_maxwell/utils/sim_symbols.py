@@ -110,6 +110,10 @@ class SimSymbol:
 	# - Properties
 	####################
 	@property
+	def name(self) -> str:
+		return self.sim_node_name.name
+
+	@property
 	def domain(self) -> sp.Interval | sp.Set:
 		"""Return the domain of valid values for the symbol.
 
@@ -235,6 +239,10 @@ class CommonSimSymbol(enum.StrEnum):
 	####################
 	# - Properties
 	####################
+	@property
+	def name(self) -> str:
+		return self.sim_symbol.name
+
 	@property
 	def sim_symbol_name(self) -> str:
 		SSN = SimSymbolName

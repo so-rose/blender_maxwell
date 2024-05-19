@@ -58,9 +58,11 @@ class ParamsFlow:
 
 		## TODO: MutableDenseMatrix causes error with 'in' check bc it isn't hashable.
 		return [
-			spux.scale_to_unit_system(arg, unit_system, use_jax_array=True)
-			if arg not in symbol_values
-			else symbol_values[arg]
+			(
+				spux.scale_to_unit_system(arg, unit_system, use_jax_array=True)
+				if arg not in symbol_values
+				else symbol_values[arg]
+			)
 			for arg in self.func_args
 		]
 

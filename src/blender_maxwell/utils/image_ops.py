@@ -234,7 +234,7 @@ def plot_curves_2d(
 	y_unit = info.output_unit
 
 	for category in range(data.shape[1]):
-		ax.plot(data[:, 0], data[:, 1])
+		ax.plot(info.dim_idx_arrays[0], data[:, category])
 
 	ax.set_title('2D Curves')
 	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
@@ -250,8 +250,9 @@ def plot_filled_curves_2d(
 	y_name = info.output_name
 	y_unit = info.output_unit
 
-	ax.fill_between(info.dim_arrays[0], data[:, 0], info.dim_arrays[0], data[:, 1])
-	ax.set_title('2D Curves')
+	shared_x_idx = info.dim_idx_arrays[0]
+	ax.fill_between(shared_x_idx, data[:, 0], shared_x_idx, data[:, 1])
+	ax.set_title('2D Filled Curves')
 	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
 	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
 
