@@ -268,6 +268,32 @@ class LazyArrayRangeFlow:
 	####################
 	# - Bound Operations
 	####################
+	def rescale(
+		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
+	) -> typ.Self:
+		new_pre_start = self.start if not reverse else self.stop
+		new_pre_stop = self.stop if not reverse else self.start
+
+		new_start = rescale_func(new_pre_start * self.unit)
+		new_stop = rescale_func(new_pre_stop * self.unit)
+
+		return LazyArrayRangeFlow(
+			start=(
+				spux.scale_to_unit(new_start, new_unit)
+				if new_unit is not None
+				else new_start
+			),
+			stop=(
+				spux.scale_to_unit(new_stop, new_unit)
+				if new_unit is not None
+				else new_stop
+			),
+			steps=self.steps,
+			scaling=self.scaling,
+			unit=new_unit,
+			symbols=self.symbols,
+		)
+
 	def rescale_bounds(
 		self,
 		rescale_func: typ.Callable[

@@ -139,8 +139,10 @@ class ViewerNode(base.MaxwellSimNode):
 
 		# Unset Plot if Nothing Plotted
 		with node_tree.replot():
-			if props['auto_plot']:
-				self.trigger_event(ct.FlowEvent.ShowPlot)
+			if props['auto_plot'] and self.inputs['Any'].is_linked:
+				self.inputs['Any'].links[0].from_socket.node.trigger_event(
+					ct.FlowEvent.ShowPlot
+				)
 
 	@events.on_value_changed(
 		socket_name='Any',

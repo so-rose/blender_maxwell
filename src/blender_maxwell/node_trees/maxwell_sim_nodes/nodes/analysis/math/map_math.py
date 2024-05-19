@@ -439,7 +439,7 @@ class MapMathNode(base.MaxwellSimNode):
 
 	@bl_cache.cached_bl_property()
 	def expr_output_shape(self) -> ct.InfoFlow | None:
-		info = self._compute_input('Expr', kind=ct.FlowKind.Info)
+		info = self._compute_input('Expr', kind=ct.FlowKind.Info, optional=True)
 		has_info = not ct.FlowSignal.check(info)
 		if has_info:
 			return info.output_shape
@@ -491,9 +491,9 @@ class MapMathNode(base.MaxwellSimNode):
 		# Compute Sympy Function
 		## -> The operation enum directly provides the appropriate function.
 		if has_expr_value and operation is not None:
-			operation.sp_func(expr)
+			return operation.sp_func(expr)
 
-		return ct.Flowsignal.FlowPending
+		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
 		'Expr',
@@ -529,7 +529,7 @@ class MapMathNode(base.MaxwellSimNode):
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
+	def compute_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
 		operation = props['operation']
 		info = input_sockets['Expr']
 
@@ -546,8 +546,11 @@ class MapMathNode(base.MaxwellSimNode):
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': ct.FlowKind.Params},
 	)
-	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
-		return input_sockets['Expr']
+	def compute_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
+		has_params = not ct.FlowSignal.check(input_sockets['Expr'])
+		if has_params:
+			return input_sockets['Expr']
+		return ct.FlowSignal.FlowPending
 
 
 ####################

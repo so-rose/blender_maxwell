@@ -225,8 +225,24 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	## - Properties
 	#####################
+	@events.on_value_changed(
+		socket_name={'Expr'},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		input_sockets_optional={'Expr': True},
+	)
+	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
+		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
+
+		info_pending = ct.FlowSignal.check_single(
+			input_sockets['Expr'], ct.FlowSignal.FlowPending
+		)
+
+		if has_info and not info_pending:
+			self.expr_info = bl_cache.Signal.InvalidateCache
+
 	@bl_cache.cached_bl_property()
-	def input_info(self) -> ct.InfoFlow | None:
+	def expr_info(self) -> ct.InfoFlow | None:
 		info = self._compute_input('Expr', kind=ct.FlowKind.Info)
 		if not ct.FlowSignal.check(info):
 			return info
@@ -235,7 +251,7 @@ class VizNode(base.MaxwellSimNode):
 
 	viz_mode: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_viz_modes(),
-		cb_depends_on={'input_info'},
+		cb_depends_on={'expr_info'},
 	)
 	viz_target: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_targets(),
@@ -251,7 +267,7 @@ class VizNode(base.MaxwellSimNode):
 	## - Searchers
 	#####################
 	def search_viz_modes(self) -> list[ct.BLEnumElement]:
-		if self.input_info is not None:
+		if self.expr_info is not None:
 			return [
 				(
 					viz_mode,
@@ -260,7 +276,7 @@ class VizNode(base.MaxwellSimNode):
 					VizMode.to_icon(viz_mode),
 					i,
 				)
-				for i, viz_mode in enumerate(VizMode.valid_modes_for(self.input_info))
+				for i, viz_mode in enumerate(VizMode.valid_modes_for(self.expr_info))
 			]
 
 		return []
@@ -284,6 +300,12 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	## - UI
 	#####################
+	def draw_label(self):
+		if self.viz_mode is not None:
+			return 'Viz: ' + self.sim_node_name
+
+		return self.bl_label
+
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
 		col.prop(self, self.blfields['viz_mode'], text='')
 		col.prop(self, self.blfields['viz_target'], text='')
@@ -338,11 +360,23 @@ class VizNode(base.MaxwellSimNode):
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
 
-		self.input_info = bl_cache.Signal.InvalidateCache
-
 	#####################
 	## - Plotting
 	#####################
+	@events.computes_output_socket(
+		'Preview',
+		kind=ct.FlowKind.Value,
+		# Loaded
+		props={'viz_mode', 'viz_target', 'colormap'},
+		input_sockets={'Expr'},
+		input_socket_kinds={
+			'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info, ct.FlowKind.Params}
+		},
+		all_loose_input_sockets=True,
+	)
+	def compute_dummy_value(self, props, input_sockets, loose_input_sockets):
+		return ct.FlowSignal.NoFlow
+
 	@events.on_show_plot(
 		managed_objs={'plot'},
 		props={'viz_mode', 'viz_target', 'colormap'},

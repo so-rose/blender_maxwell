@@ -82,8 +82,8 @@ class TemporalShapeNode(base.MaxwellSimNode):
 				default_steps=100,
 			),
 			'Envelope': sockets.ExprSocketDef(
-				default_symbols=[sim_symbols.t_ps],
-				default_value=10 * sim_symbols.t_ps.sp_symbol,
+				default_symbols=[sim_symbols.t],
+				default_value=10 * sim_symbols.t.sp_symbol,
 			),
 		},
 	}

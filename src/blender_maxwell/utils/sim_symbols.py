@@ -204,9 +204,9 @@ class CommonSimSymbol(enum.StrEnum):
 	"""
 
 	X = enum.auto()
-	TimePS = enum.auto()
-	WavelengthNM = enum.auto()
-	FrequencyTHZ = enum.auto()
+	Time = enum.auto()
+	Wavelength = enum.auto()
+	Frequency = enum.auto()
 
 	@staticmethod
 	def to_name(v: typ.Self) -> str:
@@ -241,9 +241,9 @@ class CommonSimSymbol(enum.StrEnum):
 		CSS = CommonSimSymbol
 		return {
 			CSS.X: SSN.LowerX,
-			CSS.TimePS: SSN.LowerT,
-			CSS.WavelengthNM: SSN.Wavelength,
-			CSS.FrequencyTHZ: SSN.Frequency,
+			CSS.Time: SSN.LowerT,
+			CSS.Wavelength: SSN.Wavelength,
+			CSS.Frequency: SSN.Frequency,
 		}[self]
 
 	@property
@@ -260,7 +260,7 @@ class CommonSimSymbol(enum.StrEnum):
 				interval_inf=(True, True),
 				interval_closed=(False, False),
 			),
-			CSS.TimePS: SimSymbol(
+			CSS.Time: SimSymbol(
 				sim_node_name=self.sim_symbol_name,
 				mathtype=spux.MathType.Real,
 				physical_type=spux.PhysicalType.Time,
@@ -269,7 +269,7 @@ class CommonSimSymbol(enum.StrEnum):
 				interval_inf=(False, True),
 				interval_closed=(True, False),
 			),
-			CSS.WavelengthNM: SimSymbol(
+			CSS.Wavelength: SimSymbol(
 				sim_node_name=self.sim_symbol_name,
 				mathtype=spux.MathType.Real,
 				physical_type=spux.PhysicalType.Length,
@@ -278,11 +278,10 @@ class CommonSimSymbol(enum.StrEnum):
 				interval_inf=(False, True),
 				interval_closed=(False, False),
 			),
-			CSS.FrequencyTHZ: SimSymbol(
+			CSS.Frequency: SimSymbol(
 				sim_node_name=self.sim_symbol_name,
 				mathtype=spux.MathType.Real,
 				physical_type=spux.PhysicalType.Freq,
-				## TODO: Unit of THz
 				interval_finite=(0, sys.float_info.max),
 				interval_inf=(False, True),
 				interval_closed=(False, False),
@@ -294,6 +293,6 @@ class CommonSimSymbol(enum.StrEnum):
 # - Selected Direct Access
 ####################
 x = CommonSimSymbol.X.sim_symbol
-t_ps = CommonSimSymbol.TimePS.sim_symbol
-wl_nm = CommonSimSymbol.WavelengthNM.sim_symbol
-freq_thz = CommonSimSymbol.FrequencyTHZ.sim_symbol
+t = CommonSimSymbol.Time.sim_symbol
+wl = CommonSimSymbol.Wavelength.sim_symbol
+freq = CommonSimSymbol.Frequency.sim_symbol

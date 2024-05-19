@@ -20,6 +20,7 @@ import typing as typ
 
 import jaxtyping as jtyp
 import numpy as np
+import sympy as sp
 import sympy.physics.units as spu
 
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -110,3 +111,24 @@ class ArrayFlow:
 
 		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
 		raise ValueError(msg)
+
+	def rescale(
+		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
+	) -> typ.Self:
+		# Compile JAX-Compatible Rescale Function
+		a = sp.Symbol('a')
+		rescale_expr = (
+			spux.scale_to_unit(rescale_func(a * self.unit), new_unit)
+			if self.unit is not None
+			else rescale_func(a * self.unit)
+		)
+		log.critical([self.unit, new_unit, rescale_expr])
+		_rescale_func = sp.lambdify(a, rescale_expr, 'jax')
+		values = _rescale_func(self.values)
+
+		# Return ArrayFlow
+		return ArrayFlow(
+			values=values[::-1] if reverse else values,
+			unit=new_unit,
+			is_sorted=self.is_sorted,
+		)

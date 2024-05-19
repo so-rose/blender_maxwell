@@ -251,7 +251,8 @@ class BLInstance:
 			if prop_name in deps:
 				for dst_prop_name in deps[prop_name]:
 					log.debug(
-						'Property %s is invalidating %s',
+						'%s: "%s" is invalidating "%s"',
+						self.bl_label,
 						prop_name,
 						dst_prop_name,
 					)

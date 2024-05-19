@@ -31,7 +31,9 @@ log = logger.get(__name__)
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class InfoFlow:
-	# Dimension Information
+	####################
+	# - Covariant Input
+	####################
 	dim_names: list[str] = dataclasses.field(default_factory=list)
 	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = dataclasses.field(
 		default_factory=dict
@@ -67,6 +69,9 @@ class InfoFlow:
 			for dim_idx in self.dim_idx.values()
 		]
 
+	####################
+	# - Contravariant Output
+	####################
 	# Output Information
 	## TODO: Add PhysicalType
 	output_name: str = dataclasses.field(default_factory=list)
@@ -94,6 +99,28 @@ class InfoFlow:
 	####################
 	# - Methods
 	####################
+	def replace_dim(
+		self, old_dim_name: str, new_dim_idx: tuple[str, ArrayFlow | LazyArrayRangeFlow]
+	) -> typ.Self:
+		return InfoFlow(
+			# Dimensions
+			dim_names=[
+				dim_name if dim_name != old_dim_name else new_dim_idx[0]
+				for dim_name in self.dim_names
+			],
+			dim_idx={
+				(dim_name if dim_name != old_dim_name else new_dim_idx[0]): (
+					dim_idx if dim_name != old_dim_name else new_dim_idx[1]
+				)
+				for dim_name, dim_idx in self.dim_idx.items()
+			},
+			# Outputs
+			output_name=self.output_name,
+			output_shape=self.output_shape,
+			output_mathtype=self.output_mathtype,
+			output_unit=self.output_unit,
+		)
+
 	def rescale_dim_idxs(self, new_dim_idxs: dict[str, LazyArrayRangeFlow]) -> typ.Self:
 		return InfoFlow(
 			# Dimensions

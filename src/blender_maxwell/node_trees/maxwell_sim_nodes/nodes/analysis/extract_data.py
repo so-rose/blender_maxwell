@@ -566,7 +566,9 @@ class ExtractDataNode(base.MaxwellSimNode):
 				}
 				| {
 					c: ct.ArrayFlow(
-						values=xarr.get_index(c).values, unit=spu.radian, is_sorted=True
+						values=xarr.get_index(c).values,
+						unit=spu.radian,
+						is_sorted=True,
 					)
 					for c in ['r', 'theta', 'phi']
 				}

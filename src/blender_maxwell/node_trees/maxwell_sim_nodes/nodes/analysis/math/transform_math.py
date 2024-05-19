@@ -20,9 +20,12 @@ import enum
 import typing as typ
 
 import bpy
-import jax
+import jax.numpy as jnp
+import sympy as sp
+import sympy.physics.units as spu
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, logger, sci_constants, sim_symbols
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
 from .... import sockets
@@ -31,6 +34,164 @@ from ... import base, events
 log = logger.get(__name__)
 
 
+####################
+# - Operation Enum
+####################
+class TransformOperation(enum.StrEnum):
+	"""Valid operations for the `MapMathNode`.
+
+	Attributes:
+		FreqToVacWL: Transform frequency axes to be indexed by vacuum wavelength.
+		VacWLToFreq: Transform vacuum wavelength axes to be indexed by frequency.
+		FFT: Compute the fourier transform of the input expression.
+		InvFFT: Compute the inverse fourier transform of the input expression.
+	"""
+
+	# Index
+	FreqToVacWL = enum.auto()
+	VacWLToFreq = enum.auto()
+	# Fourier
+	FFT1D = enum.auto()
+	InvFFT1D = enum.auto()
+	# Affine
+	## TODO
+
+	####################
+	# - UI
+	####################
+	@staticmethod
+	def to_name(value: typ.Self) -> str:
+		TO = TransformOperation
+		return {
+			# By Number
+			TO.FreqToVacWL: '𝑓 → λᵥ',
+			TO.VacWLToFreq: 'λᵥ → 𝑓',
+			TO.FFT1D: 't → 𝑓',
+			TO.InvFFT1D: '𝑓 → t',
+		}[value]
+
+	@staticmethod
+	def to_icon(value: typ.Self) -> str:
+		return ''
+
+	def bl_enum_element(self, i: int) -> ct.BLEnumElement:
+		TO = TransformOperation
+		return (
+			str(self),
+			TO.to_name(self),
+			TO.to_name(self),
+			TO.to_icon(self),
+			i,
+		)
+
+	####################
+	# - Ops from Shape
+	####################
+	@staticmethod
+	def by_element_shape(info: ct.InfoFlow) -> list[typ.Self]:
+		TO = TransformOperation
+		operations = []
+
+		# Freq <-> VacWL
+		for dim_name in info.dim_names:
+			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
+				operations.append(TO.FreqToVacWL)
+
+			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
+				operations.append(TO.VacWLToFreq)
+
+		# 1D Fourier
+		if info.dim_names:
+			last_physical_type = info.dim_physical_types[info.dim_names[-1]]
+			if last_physical_type == spux.PhysicalType.Time:
+				operations.append(TO.FFT1D)
+			if last_physical_type == spux.PhysicalType.Freq:
+				operations.append(TO.InvFFT1D)
+
+		return operations
+
+	####################
+	# - Function Properties
+	####################
+	@property
+	def sp_func(self):
+		TO = TransformOperation
+		return {
+			# Index
+			TO.FreqToVacWL: lambda expr: expr,
+			TO.VacWLToFreq: lambda expr: expr,
+			# Fourier
+			TO.FFT1D: lambda expr: sp.fourier_transform(
+				expr, sim_symbols.t, sim_symbols.freq
+			),
+			TO.InvFFT1D: lambda expr: sp.fourier_transform(
+				expr, sim_symbols.freq, sim_symbols.t
+			),
+		}[self]
+
+	@property
+	def jax_func(self):
+		TO = TransformOperation
+		return {
+			# Index
+			TO.FreqToVacWL: lambda expr: expr,
+			TO.VacWLToFreq: lambda expr: expr,
+			# Fourier
+			TO.FFT1D: lambda expr: jnp.fft(expr),
+			TO.InvFFT1D: lambda expr: jnp.ifft(expr),
+		}[self]
+
+	def transform_info(self, info: ct.InfoFlow | None) -> ct.InfoFlow | None:
+		TO = TransformOperation
+		if not info.dim_names:
+			return None
+		return {
+			# Index
+			TO.FreqToVacWL: lambda: info.replace_dim(
+				(f_dim := info.dim_names[-1]),
+				[
+					'wl',
+					info.dim_idx[f_dim].rescale(
+						lambda el: sci_constants.vac_speed_of_light / el,
+						reverse=True,
+						new_unit=spu.nanometer,
+					),
+				],
+			),
+			TO.VacWLToFreq: lambda: info.replace_dim(
+				(wl_dim := info.dim_names[-1]),
+				[
+					'f',
+					info.dim_idx[wl_dim].rescale(
+						lambda el: sci_constants.vac_speed_of_light / el,
+						reverse=True,
+						new_unit=spux.THz,
+					),
+				],
+			),
+			# Fourier
+			TO.FFT1D: lambda: info.replace_dim(
+				info.dim_names[-1],
+				[
+					'f',
+					ct.LazyArrayRangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.hertz),
+				],
+			),
+			TO.InvFFT1D: info.replace_dim(
+				info.dim_names[-1],
+				[
+					't',
+					ct.LazyArrayRangeFlow(
+						start=0, stop=sp.oo, steps=0, unit=spu.second
+					),
+				],
+			),
+		}.get(self, lambda: info)()
+
+
+####################
+# - Node
+####################
 class TransformMathNode(base.MaxwellSimNode):
 	r"""Applies a function to the array as a whole, with arbitrary results.
 
@@ -48,125 +209,153 @@ class TransformMathNode(base.MaxwellSimNode):
 	bl_label = 'Transform Math'
 
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.DataSocketDef(format='jax'),
-	}
-	input_socket_sets: typ.ClassVar = {
-		'Fourier': {},
-		'Affine': {},
-		'Convolve': {},
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 	output_sockets: typ.ClassVar = {
-		'Data': sockets.DataSocketDef(format='jax'),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
 	}
 
 	####################
 	# - Properties
 	####################
-	operation: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_operations()
+	@events.on_value_changed(
+		socket_name={'Expr'},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		input_sockets_optional={'Expr': True},
+	)
+	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
+		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
+
+		info_pending = ct.FlowSignal.check_single(
+			input_sockets['Expr'], ct.FlowSignal.FlowPending
+		)
+
+		if has_info and not info_pending:
+			self.expr_info = bl_cache.Signal.InvalidateCache
+
+	@bl_cache.cached_bl_property()
+	def expr_info(self) -> ct.InfoFlow | None:
+		info = self._compute_input('Expr', kind=ct.FlowKind.Info, optional=True)
+		has_info = not ct.FlowSignal.check(info)
+		if has_info:
+			return info
+
+		return None
+
+	operation: TransformOperation = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_operations(),
+		cb_depends_on={'expr_info'},
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
-		if self.active_socket_set == 'Fourier':  # noqa: SIM114
-			items = []
-		elif self.active_socket_set == 'Affine':  # noqa: SIM114
-			items = []
-		elif self.active_socket_set == 'Convolve':
-			items = []
-		else:
-			msg = f'Active socket set {self.active_socket_set} is unknown'
-			raise RuntimeError(msg)
-
-		return [(*item, '', i) for i, item in enumerate(items)]
+		if self.expr_info is not None:
+			return [
+				operation.bl_enum_element(i)
+				for i, operation in enumerate(
+					TransformOperation.by_element_shape(self.expr_info)
+				)
+			]
+		return []
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
-	# - Events
+	# - UI
 	####################
-	@events.on_value_changed(
-		prop_name='active_socket_set',
-	)
-	def on_socket_set_changed(self):
-		self.operation = bl_cache.Signal.ResetEnumItems
+	def draw_label(self):
+		if self.operation is not None:
+			return 'Transform: ' + TransformOperation.to_name(self.operation)
+
+		return self.bl_label
+
+	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
 	# - Compute: LazyValueFunc / Array
 	####################
 	@events.computes_output_socket(
-		'Data',
-		kind=ct.FlowKind.LazyValueFunc,
-		props={'active_socket_set', 'operation'},
-		input_sockets={'Data'},
-		input_socket_kinds={
-			'Data': ct.FlowKind.LazyValueFunc,
-		},
+		'Expr',
+		kind=ct.FlowKind.Value,
+		props={'operation'},
+		input_sockets={'Expr'},
 	)
-	def compute_data(self, props: dict, input_sockets: dict):
-		has_data = not ct.FlowSignal.check(input_sockets['Data'])
-		if not has_data or props['operation'] == 'NONE':
-			return ct.FlowSignal.FlowPending
+	def compute_value(self, props, input_sockets) -> ct.ValueFlow | ct.FlowSignal:
+		operation = props['operation']
+		expr = input_sockets['Expr']
 
-		mapping_func: typ.Callable[[jax.Array], jax.Array] = {
-			'Fourier': {},
-			'Affine': {},
-			'Convolve': {},
-		}[props['active_socket_set']][props['operation']]
+		has_expr_value = not ct.FlowSignal.check(expr)
 
-		# Compose w/Lazy Root Function Data
-		return input_sockets['Data'].compose_within(
-			mapping_func,
-			supports_jax=True,
-		)
+		# Compute Sympy Function
+		## -> The operation enum directly provides the appropriate function.
+		if has_expr_value and operation is not None:
+			return operation.sp_func(expr)
+
+		return ct.Flowsignal.FlowPending
 
 	@events.computes_output_socket(
-		'Data',
-		kind=ct.FlowKind.Array,
-		output_sockets={'Data'},
-		output_socket_kinds={
-			'Data': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Params},
+		'Expr',
+		kind=ct.FlowKind.LazyValueFunc,
+		props={'operation'},
+		input_sockets={'Expr'},
+		input_socket_kinds={
+			'Expr': ct.FlowKind.LazyValueFunc,
 		},
 	)
-	def compute_array(self, output_sockets: dict) -> ct.ArrayFlow:
-		lazy_value_func = output_sockets['Data'][ct.FlowKind.LazyValueFunc]
-		params = output_sockets['Data'][ct.FlowKind.Params]
+	def compute_func(
+		self, props, input_sockets
+	) -> ct.LazyValueFuncFlow | ct.FlowSignal:
+		operation = props['operation']
+		expr = input_sockets['Expr']
 
-		if all(not ct.FlowSignal.check(inp) for inp in [lazy_value_func, params]):
-			return ct.ArrayFlow(
-				values=lazy_value_func.func_jax(
-					*params.func_args, **params.func_kwargs
-				),
-				unit=None,
+		has_expr = not ct.FlowSignal.check(expr)
+
+		if has_expr and operation is not None:
+			return expr.compose_within(
+				operation.jax_func,
+				supports_jax=True,
 			)
-
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - Compute Auxiliary: Info / Params
+	# - FlowKind.Info|Params
 	####################
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Info,
-		props={'active_socket_set', 'operation'},
-		input_sockets={'Data'},
-		input_socket_kinds={'Data': ct.FlowKind.Info},
+		props={'operation'},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_data_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
-		info = input_sockets['Data']
-		if ct.FlowSignal.check(info):
-			return ct.FlowSignal.FlowPending
+	def compute_info(
+		self, props: dict, input_sockets: dict
+	) -> ct.InfoFlow | typ.Literal[ct.FlowSignal.FlowPending]:
+		operation = props['operation']
+		info = input_sockets['Expr']
 
-		return info
+		has_info = not ct.FlowSignal.check(info)
+
+		if has_info and operation is not None:
+			transformed_info = operation.transform_info(info)
+			if transformed_info is None:
+				return ct.FlowSignal.FlowPending
+			return transformed_info
+
+		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
-		'Data',
+		'Expr',
 		kind=ct.FlowKind.Params,
-		input_sockets={'Data'},
-		input_socket_kinds={'Data': ct.FlowKind.Params},
+		input_sockets={'Expr'},
+		input_socket_kinds={'Expr': ct.FlowKind.Params},
 	)
-	def compute_data_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
-		return input_sockets['Data']
+	def compute_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
+		has_params = not ct.FlowSignal.check(input_sockets['Expr'])
+		if has_params:
+			return input_sockets['Expr']
+		return ct.FlowSignal.FlowPending
 
 
 ####################

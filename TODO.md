@@ -2,15 +2,15 @@
 - [x] Wave Constant
 - Sources
 	- [x] Temporal Shapes / Continuous Wave Temporal Shape
-	- [ ] Temporal Shapes / Symbolic Temporal Shape
-	- [ ] Plane Wave Source
+	- [x] Temporal Shapes / Symbolic Temporal Shape
+	- [x] Plane Wave Source
 	- [ ] TFSF Source
-	- [ ] Gaussian Beam Source
+	- [x] Gaussian Beam Source
 	- [ ] Astig. Gauss Beam
 - Monitors
 	- [x] EH Field
 	- [x] Power Flux
-	- [ ] Permittivity
+	- [x] Permittivity
 	- [ ] Diffraction
 - Tidy3D / Integration
 	- [ ] Exporter
@@ -23,7 +23,7 @@
 	- [ ] Uniform
 	- [ ] Data
 - Structures
-	- [ ] Cylinder
+	- [x] Cylinder
 	- [ ] Cylinder Array
 	- [ ] L-Cavity Cylinder
 	- [ ] H-Cavity Cylinder
@@ -31,10 +31,10 @@
 	- [ ] BCC Lattice
 	- [ ] Monkey
 - Expr Socket
-	- [ ] Array Mode
+	- [x] LVF Mode
 - Math Nodes
 	- [ ] Reduce Math
-	- [ ] Transform Math - reindex freq->wl
+	- [x] Transform Math - reindex freq->wl
 - Material Data Fitting
 	- [ ] Data File Import
 	- [ ] DataFit Medium
@@ -47,10 +47,10 @@
 	- [ ] Debye Medium
 	- [ ] Anisotropic Medium
 - Integration
-	- [ ] Simulation and Analysis of Maxim's Cavity
+	- [x] Simulation and Analysis of Maxim's Cavity
 - Constants
 	- [x] Number Constant
 	- [x] Vector Constant
 	- [x] Physical Constant
 
-- [ ] Fix many problems by persisting `_enum_cb_cache` and `_str_cb_cache`.
+- [x] Fix many problems by persisting `_enum_cb_cache` and `_str_cb_cache`.

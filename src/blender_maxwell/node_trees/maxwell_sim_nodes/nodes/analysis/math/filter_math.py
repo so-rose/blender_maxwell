@@ -48,7 +48,7 @@ class FilterOperation(enum.StrEnum):
 	Pin = enum.auto()
 	Swap = enum.auto()
 
-	# Interpret
+	# Fold
 	DimToVec = enum.auto()
 	DimsToMat = enum.auto()
 

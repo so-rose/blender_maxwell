@@ -787,7 +787,7 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		altered_socket_kinds = set()
 
 		# Invalidate Caches on DataChanged
-		if event == ct.FlowEvent.DataChanged:
+		if event is ct.FlowEvent.DataChanged:
 			input_socket_name = socket_name  ## Trigger direction is forwards
 
 			# Invalidate Input Socket Cache
@@ -861,8 +861,18 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			# )
 			event_method(self)
 
+		# DataChanged Propagation Stop: No Altered Socket Kinds
+		## -> If no FlowKinds were altered, then propagation makes no sense.
+		## -> Semantically, **nothing has changed** == no DataChanged!
+		if event is ct.FlowEvent.DataChanged and not altered_socket_kinds:
+			return
+
+		# Constrain ShowPlot to First Node: Workaround
+		if event is ct.FlowEvent.ShowPlot:
+			return
+
 		# Propagate Event to All Sockets in "Trigger Direction"
-		## The trigger chain goes node/socket/node/socket/...
+		## -> The trigger chain goes node/socket/socket/node/socket/...
 		if not stop_propagation:
 			direc = ct.FlowEvent.flow_direction[event]
 			triggered_sockets = self._bl_sockets(direc=direc)
