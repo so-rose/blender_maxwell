@@ -14,16 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# from . import file_exporters, viewer, web_exporters
-from . import viewer, web_exporters
+from . import file_exporters, viewer, web_exporters
 
 BL_REGISTER = [
 	*viewer.BL_REGISTER,
-	# *file_exporters.BL_REGISTER,
+	*file_exporters.BL_REGISTER,
 	*web_exporters.BL_REGISTER,
 ]
 BL_NODES = {
 	**viewer.BL_NODES,
-	# **file_exporters.BL_NODES,
+	**file_exporters.BL_NODES,
 	**web_exporters.BL_NODES,
 }

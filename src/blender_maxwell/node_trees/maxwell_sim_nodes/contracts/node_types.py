@@ -50,6 +50,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	# Outputs
 	Viewer = enum.auto()
 	## Outputs / File Exporters
+	DataFileExporter = enum.auto()
 	Tidy3DWebExporter = enum.auto()
 	## Outputs / Web Exporters
 	JSONFileExporter = enum.auto()

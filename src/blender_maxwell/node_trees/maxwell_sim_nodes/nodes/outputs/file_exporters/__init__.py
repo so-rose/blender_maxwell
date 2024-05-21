@@ -14,11 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import json_file_exporter
+from . import data_file_exporter
+
+# from . import json_file_exporter
 
 BL_REGISTER = [
-	*json_file_exporter.BL_REGISTER,
+	*data_file_exporter.BL_REGISTER,
+	# *json_file_exporter.BL_REGISTER,
 ]
 BL_NODES = {
-	**json_file_exporter.BL_NODES,
+	**data_file_exporter.BL_NODES,
+	# **json_file_exporter.BL_NODES,
 }

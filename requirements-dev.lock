@@ -123,6 +123,7 @@ pillow==10.2.0
     # via matplotlib
 platformdirs==4.2.1
     # via virtualenv
+polars==0.20.26
 pre-commit==3.7.0
 prompt-toolkit==3.0.36
     # via questionary

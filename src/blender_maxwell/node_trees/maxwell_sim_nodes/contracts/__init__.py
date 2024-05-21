@@ -59,6 +59,7 @@ from .mobj_types import ManagedObjType
 from .node_types import NodeType
 from .sim_types import (
 	BoundCondType,
+	DataFileFormat,
 	NewSimCloudTask,
 	SimAxisDir,
 	SimFieldPols,
@@ -103,6 +104,7 @@ __all__ = [
 	'BLSocketType',
 	'NodeType',
 	'BoundCondType',
+	'DataFileFormat',
 	'NewSimCloudTask',
 	'SimAxisDir',
 	'SimFieldPols',

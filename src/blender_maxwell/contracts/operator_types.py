@@ -41,6 +41,9 @@ class OperatorType(enum.StrEnum):
 	SocketCloudAuthenticate = enum.auto()
 	SocketReloadCloudFolderList = enum.auto()
 
+	# Node: ExportDataFile
+	NodeExportDataFile = enum.auto()
+
 	# Node: Tidy3DWebImporter
 	NodeLoadCloudSim = enum.auto()
 

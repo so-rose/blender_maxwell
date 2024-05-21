@@ -24,7 +24,25 @@ import sympy as sp
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
+from .flow_kinds import FlowKind
+from .info import InfoFlow
+
 log = logger.get(__name__)
+
+
+class ExprInfo(typ.TypedDict):
+	active_kind: FlowKind
+	size: spux.NumberSize1D
+	mathtype: spux.MathType
+	physical_type: spux.PhysicalType
+
+	# Value
+	default_value: spux.SympyExpr
+
+	# LazyArrayRange
+	default_min: spux.SympyExpr
+	default_max: spux.SympyExpr
+	default_steps: int
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -44,13 +62,24 @@ class ParamsFlow:
 		return sorted(self.symbols, key=lambda sym: sym.name)
 
 	####################
-	# - Scaled Func Args
+	# - Realize Arguments
 	####################
 	def scaled_func_args(
 		self,
 		unit_system: spux.UnitSystem,
 		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
 	):
+		"""Realize the function arguments contained in this `ParamsFlow`, making it ready for insertion into `LazyValueFunc.func()`.
+
+		For all `arg`s in `self.func_args`, the following operations are performed:
+		- **Unit System**: If `arg`
+
+
+		Notes:
+			This method is created for the purpose of being able to make this exact call in an `events.on_value_changed` method:
+
+		"""
+
 		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
 		if not all(sym in self.symbols for sym in symbol_values):
 			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
@@ -112,3 +141,54 @@ class ParamsFlow:
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			symbols=self.symbols | enclosing_symbols,
 		)
+
+	####################
+	# - Generate ExprSocketDef
+	####################
+	def sym_expr_infos(
+		self, info: InfoFlow, use_range: bool = False
+	) -> dict[str, ExprInfo]:
+		"""Generate all information needed to define expressions that realize all symbolic parameters in this `ParamsFlow`.
+
+		Many nodes need actual data, and as such, they require that the user select actual values for any symbols in the `ParamsFlow`.
+		The best way to do this is to create one `ExprSocket` for each symbol that needs realizing.
+
+		Notes:
+			This method is created for the purpose of being able to make this exact call in an `events.on_value_changed` method:
+			```
+			self.loose_input_sockets = {
+				sym_name: sockets.ExprSocketDef(**expr_info)
+				for sym_name, expr_info in params.sym_expr_infos(info).items()
+			}
+			```
+
+		Parameters:
+			info: The InfoFlow associated with the `Expr` being realized.
+				Each symbol in `self.symbols` **must** have an associated same-named dimension in `info`.
+			use_range: Causes the
+
+		The `ExprInfo`s can be directly defererenced `**expr_info`)
+		"""
+		return {
+			sym.name: {
+				# Declare Kind/Size
+				## -> Kind: Value prevents user-alteration of config.
+				## -> Size: Always scalar, since symbols are scalar (for now).
+				'active_kind': FlowKind.Value,
+				'size': spux.NumberSize1D.Scalar,
+				# Declare MathType/PhysicalType
+				## -> MathType: Lookup symbol name in info dimensions.
+				## -> PhysicalType: Same.
+				'mathtype': info.dim_mathtypes[sym.name],
+				'physical_type': info.dim_physical_types[sym.name],
+				# TODO: Default Values
+				# FlowKind.Value: Default Value
+				#'default_value':
+				# FlowKind.LazyArrayRange: Default Min/Max/Steps
+				#'default_min':
+				#'default_max':
+				#'default_steps':
+			}
+			for sym in self.sorted_symbols
+			if sym.name in info.dim_names
+		}

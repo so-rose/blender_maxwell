@@ -21,11 +21,12 @@ dependencies = [
     # Pin Blender 4.1.0-Compatible Versions
     ## The dependency resolver will report if anything is wonky.
     "urllib3==1.26.8",
-	#"requests==2.27.1",  ## Conflict with dev-dep commitizen
+    #"requests==2.27.1",  ## Conflict with dev-dep commitizen
     "numpy==1.24.3",
     "idna==3.3",
-	#"charset-normalizer==2.0.10",  ## Conflict with dev-dep commitizen
+    #"charset-normalizer==2.0.10",  ## Conflict with dev-dep commitizen
     "certifi==2021.10.8",
+    "polars>=0.20.26",
 ]
 ## When it comes to dev-dep conflicts:
 ## -> It's okay to leave Blender-pinned deps out of prod; Blender still has them.

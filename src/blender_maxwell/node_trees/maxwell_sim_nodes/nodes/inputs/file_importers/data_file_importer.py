@@ -14,15 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import enum
 import typing as typ
 from pathlib import Path
 
 import bpy
-import jax.numpy as jnp
-import jaxtyping as jtyp
-import numpy as np
-import pandas as pd
 import sympy as sp
 import tidy3d as td
 
@@ -34,112 +29,6 @@ from .... import sockets
 from ... import base, events
 
 log = logger.get(__name__)
-
-####################
-# - Data File Extensions
-####################
-_DATA_FILE_EXTS = {
-	'.txt',
-	'.txt.gz',
-	'.csv',
-	'.npy',
-}
-
-
-class DataFileExt(enum.StrEnum):
-	Txt = enum.auto()
-	TxtGz = enum.auto()
-	Csv = enum.auto()
-	Npy = enum.auto()
-
-	####################
-	# - Enum Elements
-	####################
-	@staticmethod
-	def to_name(v: typ.Self) -> str:
-		return DataFileExt(v).extension
-
-	@staticmethod
-	def to_icon(v: typ.Self) -> str:
-		return ''
-
-	####################
-	# - Computed Properties
-	####################
-	@property
-	def extension(self) -> str:
-		"""Map to the actual string extension."""
-		E = DataFileExt
-		return {
-			E.Txt: '.txt',
-			E.TxtGz: '.txt.gz',
-			E.Csv: '.csv',
-			E.Npy: '.npy',
-		}[self]
-
-	@property
-	def loader(self) -> typ.Callable[[Path], jtyp.Shaped[jtyp.Array, '...']]:
-		def load_txt(path: Path):
-			return jnp.asarray(np.loadtxt(path))
-
-		def load_csv(path: Path):
-			return jnp.asarray(pd.read_csv(path).values)
-
-		def load_npy(path: Path):
-			return jnp.load(path)
-
-		E = DataFileExt
-		return {
-			E.Txt: load_txt,
-			E.TxtGz: load_txt,
-			E.Csv: load_csv,
-			E.Npy: load_npy,
-		}[self]
-
-	@property
-	def loader_is_jax_compatible(self) -> bool:
-		E = DataFileExt
-		return {
-			E.Txt: True,
-			E.TxtGz: True,
-			E.Csv: False,
-			E.Npy: True,
-		}[self]
-
-	####################
-	# - Creation
-	####################
-	@staticmethod
-	def from_ext(ext: str) -> typ.Self | None:
-		return {
-			_ext: _data_file_ext
-			for _data_file_ext, _ext in {
-				k: k.extension for k in list(DataFileExt)
-			}.items()
-		}.get(ext)
-
-	@staticmethod
-	def from_path(path: Path) -> typ.Self | None:
-		if DataFileExt.is_path_compatible(path):
-			data_file_ext = DataFileExt.from_ext(''.join(path.suffixes))
-			if data_file_ext is not None:
-				return data_file_ext
-
-			msg = f'DataFileExt: Path "{path}" is compatible, but could not find valid extension'
-			raise RuntimeError(msg)
-
-		return None
-
-	####################
-	# - Compatibility
-	####################
-	@staticmethod
-	def is_ext_compatible(ext: str):
-		return ext in _DATA_FILE_EXTS
-
-	@staticmethod
-	def is_path_compatible(path: Path):
-		return path.is_file() and DataFileExt.is_ext_compatible(''.join(path.suffixes))
 
 
 ####################
@@ -168,10 +57,6 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_file_path = not ct.FlowSignal.check(input_sockets['File Path'])
 
-		has_file_path = ct.FlowSignal.check_single(
-			input_sockets['File Path'], ct.FlowSignal.FlowPending
-		)
-
 		if has_file_path:
 			self.file_path = bl_cache.Signal.InvalidateCache
 
@@ -188,10 +73,10 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		return None
 
 	@bl_cache.cached_bl_property(depends_on={'file_path'})
-	def data_file_ext(self) -> DataFileExt | None:
+	def data_file_format(self) -> ct.DataFileFormat | None:
 		"""Retrieve the file extension by concatenating all suffixes."""
 		if self.file_path is not None:
-			return DataFileExt.from_path(self.file_path)
+			return ct.DataFileFormat.from_path(self.file_path)
 		return None
 
 	####################
@@ -201,7 +86,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	def expr_info(self) -> ct.InfoFlow | None:
 		"""Retrieve the output expression's `InfoFlow`."""
 		info = self.compute_output('Expr', kind=ct.FlowKind.Info)
-		has_info = not ct.FlowKind.check(info)
+		has_info = not ct.FlowSignal.check(info)
 		if has_info:
 			return info
 		return None
@@ -216,13 +101,13 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			Called by Blender to determine the text to place in the node's header.
 		"""
 		if self.file_path is not None:
-			return 'Load File: ' + self.file_path.name
+			return 'Load: ' + self.file_path.name
 
 		return self.bl_label
 
 	def draw_info(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		"""Show information about the loaded file."""
-		if self.data_file_ext is not None:
+		if self.data_file_format is not None:
 			box = layout.box()
 			row = box.row()
 			row.alignment = 'CENTER'
@@ -233,16 +118,6 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			row.label(text=self.file_path.name)
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		pass
-
-	####################
-	# - Events
-	####################
-	@events.on_value_changed(
-		socket_name='File Path',
-		input_sockets={'File Path'},
-	)
-	def on_file_changed(self, input_sockets) -> None:
 		pass
 
 	####################
@@ -264,19 +139,19 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		has_file_path = not ct.FlowSignal.check(input_sockets['File Path'])
 
 		if has_file_path:
-			data_file_ext = DataFileExt.from_path(file_path)
-			if data_file_ext is not None:
+			data_file_format = ct.DataFileFormat.from_path(file_path)
+			if data_file_format is not None:
 				# Jax Compatibility: Lazy Data Loading
 				## -> Delay loading of data from file as long as we can.
-				if data_file_ext.loader_is_jax_compatible:
+				if data_file_format.loader_is_jax_compatible:
 					return ct.LazyValueFuncFlow(
-						func=lambda: data_file_ext.loader(file_path),
+						func=lambda: data_file_format.loader(file_path),
 						supports_jax=True,
 					)
 
 				# No Jax Compatibility: Eager Data Loading
 				## -> Load the data now and bind it.
-				data = data_file_ext.loader(file_path)
+				data = data_file_format.loader(file_path)
 				return ct.LazyValueFuncFlow(func=lambda: data, supports_jax=True)
 			return ct.FlowSignal.FlowPending
 		return ct.FlowSignal.FlowPending
