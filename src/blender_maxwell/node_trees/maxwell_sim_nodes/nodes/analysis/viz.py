@@ -38,7 +38,6 @@ class VizMode(enum.StrEnum):
 	**NOTE**: >1D output dimensions currently have no viz.
 
 	Plots for `() -> ℝ`:
-	- Hist1D: Bin-summed distribution.
 	- BoxPlot1D: Box-plot describing the distribution.
 
 	Plots for `(ℤ) -> ℝ`:
@@ -61,7 +60,6 @@ class VizMode(enum.StrEnum):
 	- Heatmap3D: Colormapped field with value at each voxel.
 	"""
 
-	Hist1D = enum.auto()
 	BoxPlot1D = enum.auto()
 
 	Curve2D = enum.auto()
@@ -78,41 +76,37 @@ class VizMode(enum.StrEnum):
 
 	@staticmethod
 	def valid_modes_for(info: ct.InfoFlow) -> list[typ.Self] | None:
-		EMPTY = ()
 		Z = spux.MathType.Integer
 		R = spux.MathType.Real
 		VM = VizMode
 
-		valid_viz_modes = {
-			(EMPTY, (None, R)): [VM.Hist1D, VM.BoxPlot1D],
-			((Z), (None, R)): [
-				VM.Hist1D,
+		return {
+			((Z), (1, 1, R)): [
 				VM.BoxPlot1D,
 			],
-			((R,), (None, R)): [
+			((R,), (1, 1, R)): [
 				VM.Curve2D,
 				VM.Points2D,
 				VM.Bar,
 			],
-			((R, Z), (None, R)): [
+			((R, Z), (1, 1, R)): [
 				VM.Curves2D,
 				VM.FilledCurves2D,
 			],
-			((R, R), (None, R)): [
+			((R, R), (1, 1, R)): [
 				VM.Heatmap2D,
 			],
-			((R, R, R), (None, R)): [VM.SqueezedHeatmap2D, VM.Heatmap3D],
+			((R, R, R), (1, 1, R)): [
+				VM.SqueezedHeatmap2D,
+				VM.Heatmap3D,
+			],
 		}.get(
 			(
-				tuple(info.dim_mathtypes.values()),
-				(info.output_shape, info.output_mathtype),
-			)
+				tuple([dim.mathtype for dim in info.dims.values()]),
+				(info.output.rows, info.output.cols, info.output.mathtype),
+			),
+			[],
 		)
-
-		if valid_viz_modes is None:
-			return []
-
-		return valid_viz_modes
 
 	@staticmethod
 	def to_plotter(
@@ -121,7 +115,6 @@ class VizMode(enum.StrEnum):
 		[jtyp.Float32[jtyp.Array, '...'], ct.InfoFlow, mpl_ax.Axis], None
 	]:
 		return {
-			VizMode.Hist1D: image_ops.plot_hist_1d,
 			VizMode.BoxPlot1D: image_ops.plot_box_plot_1d,
 			VizMode.Curve2D: image_ops.plot_curve_2d,
 			VizMode.Points2D: image_ops.plot_points_2d,
@@ -136,7 +129,6 @@ class VizMode(enum.StrEnum):
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
 		return {
-			VizMode.Hist1D: 'Histogram',
 			VizMode.BoxPlot1D: 'Box Plot',
 			VizMode.Curve2D: 'Curve',
 			VizMode.Points2D: 'Points',
@@ -164,7 +156,6 @@ class VizTarget(enum.StrEnum):
 	@staticmethod
 	def valid_targets_for(viz_mode: VizMode) -> list[typ.Self] | None:
 		return {
-			VizMode.Hist1D: [VizTarget.Plot2D],
 			VizMode.BoxPlot1D: [VizTarget.Plot2D],
 			VizMode.Curve2D: [VizTarget.Plot2D],
 			VizMode.Points2D: [VizTarget.Plot2D],
@@ -333,35 +324,20 @@ class VizNode(base.MaxwellSimNode):
 		## -> This happens if Params contains not-yet-realized symbols.
 		if has_info and has_params and params.symbols:
 			if set(self.loose_input_sockets) != {
-				sym.name for sym in params.symbols if sym.name in info.dim_names
+				dim.name for dim in params.symbols if dim in info.dims
 			}:
 				self.loose_input_sockets = {
-					sym.name: sockets.ExprSocketDef(
-						active_kind=ct.FlowKind.Range,
-						size=spux.NumberSize1D.Scalar,
-						mathtype=info.dim_mathtypes[sym.name],
-						physical_type=info.dim_physical_types[sym.name],
-						default_min=(
-							info.dim_idx[sym.name].start
-							if not sp.S(info.dim_idx[sym.name].start).is_infinite
-							else sp.S(0)
-						),
-						default_max=(
-							info.dim_idx[sym.name].start
-							if not sp.S(info.dim_idx[sym.name].stop).is_infinite
-							else sp.S(1)
-						),
-						default_steps=50,
-					)
-					for sym in params.sorted_symbols
-					if sym.name in info.dim_names
+					dim_name: sockets.ExprSocketDef(**expr_info)
+					for dim_name, expr_info in params.sym_expr_infos(
+						info, use_range=True
+					).items()
 				}
 
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
 
 	#####################
-	## - Plotting
+	## - FlowKind.Value
 	#####################
 	@events.computes_output_socket(
 		'Preview',
@@ -375,8 +351,12 @@ class VizNode(base.MaxwellSimNode):
 		all_loose_input_sockets=True,
 	)
 	def compute_dummy_value(self, props, input_sockets, loose_input_sockets):
+		"""Needed for the plot to regenerate in the viewer."""
 		return ct.FlowSignal.NoFlow
 
+	#####################
+	## - On Show Plot
+	#####################
 	@events.on_show_plot(
 		managed_objs={'plot'},
 		props={'viz_mode', 'viz_target', 'colormap'},
@@ -384,13 +364,12 @@ class VizNode(base.MaxwellSimNode):
 		input_socket_kinds={
 			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
 		},
-		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		all_loose_input_sockets=True,
 		stop_propagation=True,
 	)
 	def on_show_plot(
-		self, managed_objs, props, input_sockets, loose_input_sockets, unit_systems
-	):
+		self, managed_objs, props, input_sockets, loose_input_sockets
+	) -> None:
 		# Retrieve Inputs
 		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
@@ -399,8 +378,6 @@ class VizNode(base.MaxwellSimNode):
 		has_info = not ct.FlowSignal.check(info)
 		has_params = not ct.FlowSignal.check(params)
 
-		# Invalid Mode | Target
-		## -> To limit branching, return now if things aren't right.
 		if (
 			not has_info
 			or not has_params
@@ -410,53 +387,42 @@ class VizNode(base.MaxwellSimNode):
 			return
 
 		# Compute Ranges for Symbols from Loose Sockets
-		## -> These are the concrete values of the symbol for plotting.
 		## -> In a quite nice turn of events, all this is cached lookups.
 		## -> ...Unless something changed, in which case, well. It changed.
-		symbol_values = {
-			sym: (
-				loose_input_sockets[sym.name]
-				.realize_array.rescale_to_unit(info.dim_units[sym.name])
-				.values
+		symbol_array_values = {
+			sim_syms: (
+				loose_input_sockets[sim_syms]
+				.rescale_to_unit(sim_syms.unit)
+				.realize_array
 			)
-			for sym in params.sorted_symbols
+			for sim_syms in params.sorted_symbols
 		}
-
-		# Realize Func w/Symbolic Values, Unit System
-		## -> This gives us the actual plot data!
-		data = lazy_func.func_jax(
-			*params.scaled_func_args(
-				unit_systems['BlenderUnits'], symbol_values=symbol_values
-			),
-			**params.scaled_func_kwargs(
-				unit_systems['BlenderUnits'], symbol_values=symbol_values
-			),
-		)
+		data = lazy_func.realize(params, symbol_values=symbol_array_values)
 
 		# Replace InfoFlow Indices w/Realized Symbolic Ranges
 		## -> This ensures correct axis scaling.
 		if params.symbols:
-			info = info.rescale_dim_idxs(loose_input_sockets)
+			info = info.replace_dims(symbol_array_values)
 
-		# Visualize by-Target
-		if props['viz_target'] == VizTarget.Plot2D:
-			managed_objs['plot'].mpl_plot_to_image(
-				lambda ax: VizMode.to_plotter(props['viz_mode'])(data, info, ax),
-				bl_select=True,
-			)
+		match props['viz_target']:
+			case VizTarget.Plot2D:
+				managed_objs['plot'].mpl_plot_to_image(
+					lambda ax: VizMode.to_plotter(props['viz_mode'])(data, info, ax),
+					bl_select=True,
+				)
 
-		if props['viz_target'] == VizTarget.Pixels:
-			managed_objs['plot'].map_2d_to_image(
-				data,
-				colormap=props['colormap'],
-				bl_select=True,
-			)
+			case VizTarget.Pixels:
+				managed_objs['plot'].map_2d_to_image(
+					data,
+					colormap=props['colormap'],
+					bl_select=True,
+				)
 
-		if props['viz_target'] == VizTarget.PixelsPlane:
-			raise NotImplementedError
+			case VizTarget.PixelsPlane:
+				raise NotImplementedError
 
-		if props['viz_target'] == VizTarget.Voxels:
-			raise NotImplementedError
+			case VizTarget.Voxels:
+				raise NotImplementedError
 
 
 ####################

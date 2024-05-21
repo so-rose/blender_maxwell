@@ -98,29 +98,29 @@ class FilterOperation(enum.StrEnum):
 		operations = []
 
 		# Slice
-		if info.dim_names:
+		if info.dims:
 			operations.append(FO.SliceIdx)
 
 		# Pin
 		## PinLen1
 		## -> There must be a dimension with length 1.
-		if 1 in list(info.dim_lens.values()):
+		if 1 in [dim_idx for dim_idx in info.dims.values() if dim_idx is not None]:
 			operations.append(FO.PinLen1)
 
 		## Pin | PinIdx
 		## -> There must be a dimension, full stop.
-		if info.dim_names:
+		if info.dims:
 			operations += [FO.Pin, FO.PinIdx]
 
 		# Reinterpret
 		## Swap
 		## -> There must be at least two dimensions.
-		if len(info.dim_names) >= 2:  # noqa: PLR2004
+		if len(info.dims) >= 2:  # noqa: PLR2004
 			operations.append(FO.Swap)
 
 		## SetDim
 		## -> There must be a dimension to correct.
-		if info.dim_names:
+		if info.dims:
 			operations.append(FO.SetDim)
 
 		return operations
@@ -158,33 +158,33 @@ class FilterOperation(enum.StrEnum):
 	def valid_dims(self, info: ct.InfoFlow) -> list[typ.Self]:
 		FO = FilterOperation
 		match self:
-			case FO.SliceIdx:
-				return info.dim_names
+			case FO.SliceIdx | FO.Swap:
+				return info.dims
 
 			# PinLen1: Only allow dimensions with length=1.
 			case FO.PinLen1:
 				return [
-					dim_name
-					for dim_name in info.dim_names
-					if info.dim_lens[dim_name] == 1
+					dim
+					for dim, dim_idx in info.dims.items()
+					if dim_idx is not None and len(dim_idx) == 1
 				]
 
-			# Pin: Only allow dimensions with known indexing.
-			case FO.Pin:
+			# Pin: Only allow dimensions with discrete index.
+			## TODO: Shouldn't 'Pin' be allowed to index continuous indices too?
+			case FO.Pin | FO.PinIdx:
 				return [
-					dim_name
-					for dim_name in info.dim_names
-					if info.dim_has_coords[dim_name] != 0
+					dim
+					for dim, dim_idx in info.dims
+					if dim_idx is not None and len(dim_idx) > 0
 				]
-
-			case FO.PinIdx | FO.Swap:
-				return info.dim_names
 
 			case FO.SetDim:
 				return [
-					dim_name
-					for dim_name in info.dim_names
-					if info.dim_mathtypes[dim_name] == spux.MathType.Integer
+					dim
+					for dim, dim_idx in info.dims
+					if dim_idx is not None
+					and not isinstance(dim_idx, list)
+					and dim_idx.mathtype == spux.MathType.Integer
 				]
 
 		return []
@@ -224,22 +224,22 @@ class FilterOperation(enum.StrEnum):
 	def transform_info(
 		self,
 		info: ct.InfoFlow,
-		dim_0: str,
-		dim_1: str,
+		dim_0: sim_symbols.SimSymbol,
+		dim_1: sim_symbols.SimSymbol,
+		pin_idx: int | None = None,
 		slice_tuple: tuple[int, int, int] | None = None,
-		corrected_dim: tuple[str, tuple[str, ct.ArrayFlow | ct.RangeFlow]]
-		| None = None,
+		replaced_dim: tuple[str, tuple[str, ct.ArrayFlow | ct.RangeFlow]] | None = None,
 	):
 		FO = FilterOperation
 		return {
 			FO.SliceIdx: lambda: info.slice_dim(dim_0, slice_tuple),
 			# Pin
-			FO.PinLen1: lambda: info.delete_dimension(dim_0),
-			FO.Pin: lambda: info.delete_dimension(dim_0),
-			FO.PinIdx: lambda: info.delete_dimension(dim_0),
+			FO.PinLen1: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
+			FO.Pin: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
+			FO.PinIdx: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
 			# Reinterpret
 			FO.Swap: lambda: info.swap_dimensions(dim_0, dim_1),
-			FO.SetDim: lambda: info.replace_dim(*corrected_dim),
+			FO.SetDim: lambda: info.replace_dim(*replaced_dim),
 		}[self]()
 
 
@@ -318,11 +318,11 @@ class FilterMathNode(base.MaxwellSimNode):
 	####################
 	# - Properties: Dimension Selection
 	####################
-	dim_0: enum.StrEnum = bl_cache.BLField(
+	active_dim_0: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_dims(),
 		cb_depends_on={'operation', 'expr_info'},
 	)
-	dim_1: enum.StrEnum = bl_cache.BLField(
+	active_dim_1: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_dims(),
 		cb_depends_on={'operation', 'expr_info'},
 	)
@@ -335,39 +335,22 @@ class FilterMathNode(base.MaxwellSimNode):
 			]
 		return []
 
+	@bl_cache.cached_bl_property(depends_on={'active_dim_0'})
+	def dim_0(self) -> sim_symbols.SimSymbol | None:
+		if self.expr_info is not None and self.active_dim_0 is not None:
+			return self.expr_info.dim_by_name(self.active_dim_0)
+		return None
+
+	@bl_cache.cached_bl_property(depends_on={'active_dim_1'})
+	def dim_1(self) -> sim_symbols.SimSymbol | None:
+		if self.expr_info is not None and self.active_dim_1 is not None:
+			return self.expr_info.dim_by_name(self.active_dim_1)
+		return None
+
 	####################
 	# - Properties: Slice
 	####################
 	slice_tuple: tuple[int, int, int] = bl_cache.BLField([0, 1, 1])
-
-	####################
-	# - Properties: Unit
-	####################
-	set_dim_symbol: sim_symbols.CommonSimSymbol = bl_cache.BLField(
-		sim_symbols.CommonSimSymbol.X
-	)
-
-	set_dim_active_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_valid_units(),
-		cb_depends_on={'set_dim_symbol'},
-	)
-
-	def search_valid_units(self) -> list[ct.BLEnumElement]:
-		"""Compute Blender enum elements of valid units for the current `physical_type`."""
-		physical_type = self.set_dim_symbol.sim_symbol.physical_type
-		if physical_type is not spux.PhysicalType.NonPhysical:
-			return [
-				(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
-				for i, unit in enumerate(physical_type.valid_units)
-			]
-		return []
-
-	@bl_cache.cached_bl_property(depends_on={'set_dim_active_unit'})
-	def set_dim_unit(self) -> spux.Unit | None:
-		if self.set_dim_active_unit is not None:
-			return spux.unit_str_to_unit(self.set_dim_active_unit)
-
-		return None
 
 	####################
 	# - UI
@@ -378,27 +361,27 @@ class FilterMathNode(base.MaxwellSimNode):
 			# Slice
 			case FO.SliceIdx:
 				slice_str = ':'.join([str(v) for v in self.slice_tuple])
-				return f'Filter: {self.dim_0}[{slice_str}]'
+				return f'Filter: {self.active_dim_0}[{slice_str}]'
 
 			# Pin
 			case FO.PinLen1:
-				return f'Filter: Pin {self.dim_0}[0]'
+				return f'Filter: Pin {self.active_dim_0}[0]'
 			case FO.Pin:
-				return f'Filter: Pin {self.dim_0}[...]'
+				return f'Filter: Pin {self.active_dim_0}[...]'
 			case FO.PinIdx:
 				pin_idx_axis = self._compute_input(
 					'Axis', kind=ct.FlowKind.Value, optional=True
 				)
 				has_pin_idx_axis = not ct.FlowSignal.check(pin_idx_axis)
 				if has_pin_idx_axis:
-					return f'Filter: Pin {self.dim_0}[{pin_idx_axis}]'
+					return f'Filter: Pin {self.active_dim_0}[{pin_idx_axis}]'
 				return self.bl_label
 
 			# Reinterpret
 			case FO.Swap:
-				return f'Filter: Swap [{self.dim_0}]|[{self.dim_1}]'
+				return f'Filter: Swap [{self.active_dim_0}]|[{self.active_dim_1}]'
 			case FO.SetDim:
-				return f'Filter: Set [{self.dim_0}]'
+				return f'Filter: Set [{self.active_dim_0}]'
 
 			case _:
 				return self.bl_label
@@ -409,19 +392,14 @@ class FilterMathNode(base.MaxwellSimNode):
 		if self.operation is not None:
 			match self.operation.num_dim_inputs:
 				case 1:
-					layout.prop(self, self.blfields['dim_0'], text='')
+					layout.prop(self, self.blfields['active_dim_0'], text='')
 				case 2:
 					row = layout.row(align=True)
-					row.prop(self, self.blfields['dim_0'], text='')
-					row.prop(self, self.blfields['dim_1'], text='')
+					row.prop(self, self.blfields['active_dim_0'], text='')
+					row.prop(self, self.blfields['active_dim_1'], text='')
 
 			if self.operation is FilterOperation.SliceIdx:
 				layout.prop(self, self.blfields['slice_tuple'], text='')
-
-			if self.operation is FilterOperation.SetDim:
-				row = layout.row(align=True)
-				row.prop(self, self.blfields['set_dim_symbol'], text='')
-				row.prop(self, self.blfields['set_dim_active_unit'], text='')
 
 	####################
 	# - Events
@@ -450,50 +428,47 @@ class FilterMathNode(base.MaxwellSimNode):
 		if not has_info:
 			return
 
-		# Pin Dim by-Value: Synchronize Input Socket
-		## -> The user will be given a socket w/correct mathtype, unit, etc. .
-		## -> Internally, this value will map to a particular index.
-		if props['operation'] is FilterOperation.Pin and props['dim_0'] is not None:
-			# Deduce Pinned Information
-			pinned_unit = info.dim_units[props['dim_0']]
-			pinned_mathtype = info.dim_mathtypes[props['dim_0']]
-			pinned_physical_type = spux.PhysicalType.from_unit(pinned_unit)
-			wanted_mathtype = (
-				spux.MathType.Complex
-				if pinned_mathtype == spux.MathType.Complex
-				and spux.MathType.Complex in pinned_physical_type.valid_mathtypes
-				else spux.MathType.Real
-			)
+		dim_0 = props['dim_0']
 
-			# Get Current and Wanted Socket Defs
-			## -> 'Value' may already exist. If not, all is well.
+		# Loose Sockets: Pin Dim by-Value
+		## -> Works with continuous / discrete indexes.
+		## -> The user will be given a socket w/correct mathtype, unit, etc. .
+		if (
+			props['operation'] is FilterOperation.Pin
+			and dim_0 is not None
+			and (info.has_idx_cont(dim_0) or info.has_idx_discrete(dim_0))
+		):
+			dim = dim_0
 			current_bl_socket = self.loose_input_sockets.get('Value')
 
-			# Determine Whether to Construct
-			## -> If nothing needs to change, then nothing changes.
 			if (
 				current_bl_socket is None
+				or current_bl_socket.active_kind != ct.FlowKind.Value
 				or current_bl_socket.size is not spux.NumberSize1D.Scalar
-				or current_bl_socket.physical_type != pinned_physical_type
-				or current_bl_socket.mathtype != wanted_mathtype
+				or current_bl_socket.physical_type != dim.physical_type
+				or current_bl_socket.mathtype != dim.mathtype
 			):
 				self.loose_input_sockets = {
 					'Value': sockets.ExprSocketDef(
 						active_kind=ct.FlowKind.Value,
-						physical_type=pinned_physical_type,
-						mathtype=wanted_mathtype,
-						default_unit=pinned_unit,
+						physical_type=dim.physical_type,
+						mathtype=dim.mathtype,
+						default_unit=dim.unit,
 					),
 				}
 
-		# Pin Dim by-Index: Synchronize Input Socket
-		## -> The user will be given a simple integer socket.
+		# Loose Sockets: Pin Dim by-Value
+		## -> Works with discrete points / labelled integers.
 		elif (
-			props['operation'] is FilterOperation.PinIdx and props['dim_0'] is not None
+			props['operation'] is FilterOperation.PinIdx
+			and dim_0 is not None
+			and (info.has_idx_discrete(dim_0) or info.has_idx_labels(dim_0))
 		):
+			dim = dim_0
 			current_bl_socket = self.loose_input_sockets.get('Axis')
 			if (
 				current_bl_socket is None
+				or current_bl_socket.active_kind != ct.FlowKind.Value
 				or current_bl_socket.size is not spux.NumberSize1D.Scalar
 				or current_bl_socket.physical_type != spux.PhysicalType.NonPhysical
 				or current_bl_socket.mathtype != spux.MathType.Integer
@@ -505,28 +480,26 @@ class FilterMathNode(base.MaxwellSimNode):
 					)
 				}
 
-		# Set Dim: Synchronize Input Socket
+		# Loose Sockets: Set Dim
 		## -> The user must provide a (ℤ) -> ℝ array.
 		## -> It must be of identical length to the replaced axis.
-		elif (
-			props['operation'] is FilterOperation.SetDim
-			and props['dim_0'] is not None
-			and info.dim_mathtypes[props['dim_0']] is spux.MathType.Integer
-			and info.dim_physical_types[props['dim_0']] is spux.PhysicalType.NonPhysical
-		):
-			# Deduce Axis Information
+		elif props['operation'] is FilterOperation.SetDim and dim_0 is not None:
+			dim = dim_0
 			current_bl_socket = self.loose_input_sockets.get('Dim')
 			if (
 				current_bl_socket is None
 				or current_bl_socket.active_kind != ct.FlowKind.Func
-				or current_bl_socket.mathtype != spux.MathType.Real
-				or current_bl_socket.physical_type != spux.PhysicalType.NonPhysical
+				or current_bl_socket.size is not spux.NumberSize1D.Scalar
+				or current_bl_socket.mathtype != dim.mathtype
+				or current_bl_socket.physical_type != dim.physical_type
 			):
 				self.loose_input_sockets = {
 					'Dim': sockets.ExprSocketDef(
 						active_kind=ct.FlowKind.Func,
-						mathtype=spux.MathType.Real,
-						physical_type=spux.PhysicalType.NonPhysical,
+						physical_type=dim.physical_type,
+						mathtype=dim.mathtype,
+						default_unit=dim.unit,
+						show_func_ui=False,
 						show_info_columns=True,
 					)
 				}
@@ -553,25 +526,20 @@ class FilterMathNode(base.MaxwellSimNode):
 		has_lazy_func = not ct.FlowSignal.check(lazy_func)
 		has_info = not ct.FlowSignal.check(info)
 
-		# Dimension(s)
 		dim_0 = props['dim_0']
 		dim_1 = props['dim_1']
+		slice_tuple = props['slice_tuple']
 		if (
 			has_lazy_func
 			and has_info
 			and operation is not None
 			and operation.are_dims_valid(info, dim_0, dim_1)
 		):
-			axis_0 = info.dim_names.index(dim_0) if dim_0 is not None else None
-			axis_1 = info.dim_names.index(dim_1) if dim_1 is not None else None
-			slice_tuple = (
-				props['slice_tuple']
-				if self.operation is FilterOperation.SliceIdx
-				else None
-			)
+			axis_0 = info.dim_axis(dim_0) if dim_0 is not None else None
+			axis_1 = info.dim_axis(dim_1) if dim_1 is not None else None
 
 			return lazy_func.compose_within(
-				operation.jax_func(axis_0, axis_1, slice_tuple),
+				operation.jax_func(axis_0, axis_1, slice_tuple=slice_tuple),
 				enclosing_func_args=operation.func_args,
 				supports_jax=True,
 			)
@@ -588,8 +556,6 @@ class FilterMathNode(base.MaxwellSimNode):
 			'dim_1',
 			'operation',
 			'slice_tuple',
-			'set_dim_symbol',
-			'set_dim_active_unit',
 		},
 		input_sockets={'Expr', 'Dim'},
 		input_socket_kinds={
@@ -601,14 +567,15 @@ class FilterMathNode(base.MaxwellSimNode):
 	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
 		operation = props['operation']
 		info = input_sockets['Expr']
-		dim_coords = input_sockets['Dim'][ct.FlowKind.Func]
-		dim_params = input_sockets['Dim'][ct.FlowKind.Params]
-		dim_info = input_sockets['Dim'][ct.FlowKind.Info]
-		dim_symbol = props['set_dim_symbol']
-		dim_active_unit = props['set_dim_active_unit']
 
 		has_info = not ct.FlowSignal.check(info)
-		has_dim_coords = not ct.FlowSignal.check(dim_coords)
+
+		# Dim (Op.SetDim)
+		dim_func = input_sockets['Dim'][ct.FlowKind.Func]
+		dim_params = input_sockets['Dim'][ct.FlowKind.Params]
+		dim_info = input_sockets['Dim'][ct.FlowKind.Info]
+
+		has_dim_func = not ct.FlowSignal.check(dim_func)
 		has_dim_params = not ct.FlowSignal.check(dim_params)
 		has_dim_info = not ct.FlowSignal.check(dim_info)
 
@@ -619,44 +586,42 @@ class FilterMathNode(base.MaxwellSimNode):
 		if has_info and operation is not None:
 			# Set Dimension: Retrieve Array
 			if props['operation'] is FilterOperation.SetDim:
+				new_dim = (
+					next(dim_info.dims.keys()) if len(dim_info.dims) >= 1 else None
+				)
+
 				if (
 					dim_0 is not None
-					# Check Replaced Dimension
-					and has_dim_coords
-					and len(dim_coords.func_args) == 1
-					and dim_coords.func_args[0] is spux.MathType.Integer
-					and not dim_coords.func_kwargs
-					and dim_coords.supports_jax
-					# Check Params
-					and has_dim_params
-					and len(dim_params.func_args) == 1
-					and not dim_params.func_kwargs
-					# Check Info
+					and new_dim is not None
 					and has_dim_info
+					and has_dim_params
+					# Check New Dimension Index Array Sizing
+					and len(dim_info.dims) == 1
+					and dim_info.output.rows == 1
+					and dim_info.output.cols == 1
+					# Check Lack of Params Symbols
+					and not dim_params.symbols
+					# Check Expr Dim | New Dim Compatibility
+					and info.has_idx_discrete(dim_0)
+					and dim_info.has_idx_discrete(new_dim)
+					and len(info.dims[dim_0]) == len(dim_info.dims[new_dim])
 				):
 					# Retrieve Dimension Coordinate Array
 					## -> It must be strictly compatible.
-					values = dim_coords.func_jax(int(dim_params.func_args[0]))
-					if (
-						len(values.shape) != 1
-						or values.shape[0] != info.dim_lens[dim_0]
-					):
-						return ct.FlowSignal.FlowPending
+					values = dim_func.realize(dim_params, spux.UNITS_SI)
 
 					# Transform Info w/Corrected Dimension
 					## -> The existing dimension will be replaced.
-					if dim_active_unit is not None:
-						dim_unit = spux.unit_str_to_unit(dim_active_unit)
-					else:
-						dim_unit = None
-
 					new_dim_idx = ct.ArrayFlow(
 						values=values,
-						unit=dim_unit,
-					)
-					corrected_dim = [dim_0, (dim_symbol.name, new_dim_idx)]
+						unit=spux.convert_to_unit_system(
+							dim_info.output.unit, spux.UNITS_SI
+						),
+					).rescale_to_unit(dim_info.output.unit)
+
+					replaced_dim = [dim_0, (dim_info.output.name, new_dim_idx)]
 					return operation.transform_info(
-						info, dim_0, dim_1, corrected_dim=corrected_dim
+						info, dim_0, dim_1, replaced_dim=replaced_dim
 					)
 				return ct.FlowSignal.FlowPending
 			return operation.transform_info(info, dim_0, dim_1, slice_tuple=slice_tuple)
@@ -702,7 +667,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			# Pin by-Value: Compute Nearest IDX
 			## -> Presume a sorted index array to be able to use binary search.
 			if props['operation'] is FilterOperation.Pin and has_pinned_value:
-				nearest_idx_to_value = info.dim_idx[dim_0].nearest_idx_of(
+				nearest_idx_to_value = info.dims[dim_0].nearest_idx_of(
 					pinned_value, require_sorted=True
 				)
 

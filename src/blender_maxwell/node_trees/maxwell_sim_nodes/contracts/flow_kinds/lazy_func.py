@@ -24,6 +24,8 @@ import jax
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
+from .params import ParamsFlow
+
 log = logger.get(__name__)
 
 LazyFunction: typ.TypeAlias = typ.Callable[[typ.Any, ...], typ.Any]
@@ -306,6 +308,25 @@ class FuncFlow:
 
 		msg = 'Can\'t express FuncFlow as JAX function (using jax.jit), since "self.supports_jax" is False'
 		raise ValueError(msg)
+
+	####################
+	# - Realization
+	####################
+	def realize(
+		self,
+		params: ParamsFlow,
+		unit_system: spux.UnitSystem | None = None,
+		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
+	) -> typ.Self:
+		if self.supports_jax:
+			return self.func_jax(
+				*params.scaled_func_args(unit_system, symbol_values),
+				*params.scaled_func_kwargs(unit_system, symbol_values),
+			)
+		return self.func(
+			*params.scaled_func_args(unit_system, symbol_values),
+			*params.scaled_func_kwargs(unit_system, symbol_values),
+		)
 
 	####################
 	# - Composition Operations

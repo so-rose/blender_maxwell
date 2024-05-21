@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import enum
 import typing as typ
 from pathlib import Path
 
@@ -21,7 +22,7 @@ import bpy
 import sympy as sp
 import tidy3d as td
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, logger, sim_symbols
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
@@ -92,6 +93,88 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		return None
 
 	####################
+	# - Info Guides
+	####################
+	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(sim_symbols.SimSymbolName)
+	output_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	output_physical_type: spux.PhysicalType = bl_cache.BLField(
+		spux.PhysicalType.NonPhysical
+	)
+	output_unit: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_units(self.dim_0_physical_type),
+		cb_depends_on={'output_physical_type'},
+	)
+
+	dim_0_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerA
+	)
+	dim_0_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	dim_0_physical_type: spux.PhysicalType = bl_cache.BLField(
+		spux.PhysicalType.NonPhysical
+	)
+	dim_0_unit: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_units(self.dim_0_physical_type),
+		cb_depends_on={'dim_0_physical_type'},
+	)
+
+	dim_1_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerB
+	)
+	dim_1_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	dim_1_physical_type: spux.PhysicalType = bl_cache.BLField(
+		spux.PhysicalType.NonPhysical
+	)
+	dim_1_unit: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_units(self.dim_1_physical_type),
+		cb_depends_on={'dim_1_physical_type'},
+	)
+
+	dim_2_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerC
+	)
+	dim_2_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	dim_2_physical_type: spux.PhysicalType = bl_cache.BLField(
+		spux.PhysicalType.NonPhysical
+	)
+	dim_2_unit: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_units(self.dim_2_physical_type),
+		cb_depends_on={'dim_2_physical_type'},
+	)
+
+	dim_3_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerD
+	)
+	dim_3_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	dim_3_physical_type: spux.PhysicalType = bl_cache.BLField(
+		spux.PhysicalType.NonPhysical
+	)
+	dim_3_unit: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_units(self.dim_3_physical_type),
+		cb_depends_on={'dim_3_physical_type'},
+	)
+
+	def search_units(self, physical_type: spux.PhysicalType) -> list[ct.BLEnumElement]:
+		if physical_type is not spux.PhysicalType.NonPhysical:
+			return [
+				(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
+				for i, unit in enumerate(physical_type.valid_units)
+			]
+		return []
+
+	def dim(self, i: int):
+		dim_name = getattr(self, f'dim_{i}_name')
+		dim_mathtype = getattr(self, f'dim_{i}_mathtype')
+		dim_physical_type = getattr(self, f'dim_{i}_physical_type')
+		dim_unit = getattr(self, f'dim_{i}_unit')
+
+		return sim_symbols.SimSymbol(
+			sym_name=dim_name,
+			mathtype=dim_mathtype,
+			physical_type=dim_physical_type,
+			unit=spux.unit_str_to_unit(dim_unit),
+		)
+
+	####################
 	# - UI
 	####################
 	def draw_label(self):
@@ -118,7 +201,20 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			row.label(text=self.file_path.name)
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		pass
+		"""Draw loaded properties."""
+		for i in range(len(self.expr_info.dims)):
+			col = layout.column(align=True)
+			row = col.row(align=True)
+			row.alignment = 'CENTER'
+			row.label(text=f'Load Dim {i}')
+
+			row = col.row(align=True)
+			row.prop(self, self.blfields[f'dim_{i}_name'], text='')
+			row.prop(self, self.blfields[f'dim_{i}_mathtype'], text='')
+
+			row = col.row(align=True)
+			row.prop(self, self.blfields[f'dim_{i}_physical_type'], text='')
+			row.prop(self, self.blfields[f'dim_{i}_unit'], text='')
 
 	####################
 	# - FlowKind.Array|Func
@@ -174,10 +270,12 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Info,
+		# Loaded
+		props={'output_name', 'output_physical_type', 'output_unit'},
 		output_sockets={'Expr'},
 		output_socket_kinds={'Expr': ct.FlowKind.Func},
 	)
-	def compute_info(self, output_sockets) -> ct.InfoFlow:
+	def compute_info(self, props, output_sockets) -> ct.InfoFlow:
 		"""Declare an `InfoFlow` based on the data shape.
 
 		This currently requires computing the data.
@@ -196,26 +294,24 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			# Deduce Dimensionality
 			_shape = data.shape
 			shape = _shape if _shape is not None else ()
-			dim_names = [f'a{i}' for i in range(len(shape))]
+			dim_syms = [self.dim(i) for i in range(len(shape))]
 
 			# Return InfoFlow
-			## -> TODO: How to interpret the data should be user-defined.
-			## -> -- This may require those nice dynamic symbols.
 			return ct.InfoFlow(
-				dim_names=dim_names,  ## TODO: User
-				dim_idx={
-					dim_name: ct.RangeFlow(
-						start=sp.S(0),  ## TODO: User
-						stop=sp.S(shape[i] - 1),  ## TODO: User
-						steps=shape[dim_names.index(dim_name)],
-						unit=None,  ## TODO: User
+				dims={
+					dim_sym: ct.RangeFlow(
+						start=sp.S(0),
+						stop=sp.S(shape[i] - 1),
+						steps=shape[i],
+						unit=self.dim(i).unit,
 					)
-					for i, dim_name in enumerate(dim_names)
+					for i, dim_sym in enumerate(dim_syms)
 				},
-				output_name='_',
-				output_shape=None,
-				output_mathtype=spux.MathType.Real,  ## TODO: User
-				output_unit=None,  ## TODO: User
+				output=sim_symbols.SimSymbol(
+					sym_name=props['output_name'],
+					mathtype=props['output_mathtype'],
+					physical_type=props['output_physical_type'],
+				),
 			)
 		return ct.FlowSignal.FlowPending
 

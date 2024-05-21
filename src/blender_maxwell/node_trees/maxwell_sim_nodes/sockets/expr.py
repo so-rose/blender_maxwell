@@ -118,13 +118,15 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	physical_type: spux.PhysicalType = bl_cache.BLField(spux.PhysicalType.NonPhysical)
 
 	# Symbols
-	# active_symbols: list[sim_symbols.SimSymbol] = bl_cache.BLField([])
-	symbols: frozenset[sp.Symbol] = bl_cache.BLField(frozenset())
+	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.Expr
+	)
+	active_symbols: list[sim_symbols.SimSymbol] = bl_cache.BLField([])
 
-	# @property
-	# def symbols(self) -> set[sp.Symbol]:
-	# """Current symbols as an unordered set."""
-	# return {sim_symbol.sp_symbol for sim_symbol in self.active_symbols}
+	@property
+	def symbols(self) -> set[sp.Symbol]:
+		"""Current symbols as an unordered set."""
+		return {sim_symbol.sp_symbol for sim_symbol in self.active_symbols}
 
 	@bl_cache.cached_bl_property(depends_on={'symbols'})
 	def sorted_symbols(self) -> list[sp.Symbol]:
@@ -184,6 +186,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	)
 
 	# UI: Info
+	show_func_ui: bool = bl_cache.BLField(True)
 	show_info_columns: bool = bl_cache.BLField(False)
 	info_columns: set[InfoDisplayCol] = bl_cache.BLField(
 		{InfoDisplayCol.Length, InfoDisplayCol.MathType}
@@ -615,35 +618,24 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		Otherwise, only the output name/size/mathtype/unit corresponding to the socket is passed along.
 		"""
+		output_sim_sym = (
+			sim_symbols.SimSymbol(
+				sym_name=self.output_name,
+				mathtype=self.mathtype,
+				physical_type=self.physical_type,
+				unit=self.unit,
+				rows=self.size.rows,
+				cols=self.size.cols,
+			),
+		)
 		if self.symbols:
 			return ct.InfoFlow(
-				dim_names=[sym.name for sym in self.sorted_symbols],
-				dim_idx={
-					sym.name: ct.RangeFlow(
-						start=-sp.oo if _check_sym_oo(sym) else -sp.zoo,
-						stop=sp.oo if _check_sym_oo(sym) else sp.zoo,
-						steps=0,
-						unit=None,  ## Symbols alone are unitless.
-					)
-					## TODO: PhysicalTypes for symbols? Or nah?
-					## TODO: Can we parse some sp.Interval for explicit domains?
-					## -> We investigated sp.Symbol(..., domain=...).
-					## -> It's no good. We can't re-extract the interval given to domain.
-					for sym in self.sorted_symbols
-				},
-				output_name='_',  ## Use node:socket name? Or something? Ahh
-				output_shape=self.size.shape,
-				output_mathtype=self.mathtype,
-				output_unit=self.unit,
+				dims={sim_sym: None for sim_sym in self.active_symbols},
+				output=output_sim_sym,
 			)
 
 		# Constant
-		return ct.InfoFlow(
-			output_name='_',  ## Use node:socket name? Or something? Ahh
-			output_shape=self.size.shape,
-			output_mathtype=self.mathtype,
-			output_unit=self.unit,
-		)
+		return ct.InfoFlow(output=output_sim_sym)
 
 	####################
 	# - FlowKind: Capabilities
@@ -847,26 +839,31 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 			Uses `draw_value` to draw the base UI
 		"""
-		# Physical Type Selector
-		## -> Determines whether/which unit-dropdown will be shown.
-		col.prop(self, self.blfields['physical_type'], text='')
+		if self.show_func_ui:
+			# Output Name Selector
+			## -> The name of the output
+			col.prop(self, self.blfields['output_name'], text='')
 
-		# Non-Symbolic: Size/Mathtype Selector
-		## -> Symbols imply str expr input.
-		## -> For arbitrary str exprs, size/mathtype are derived from the expr.
-		## -> Otherwise, size/mathtype must be pre-specified for a nice UI.
-		if not self.symbols:
-			row = col.row(align=True)
-			row.prop(self, self.blfields['size'], text='')
-			row.prop(self, self.blfields['mathtype'], text='')
+			# Physical Type Selector
+			## -> Determines whether/which unit-dropdown will be shown.
+			col.prop(self, self.blfields['physical_type'], text='')
 
-		# Base UI
-		## -> Draws the UI appropriate for the above choice of constraints.
-		self.draw_value(col)
+			# Non-Symbolic: Size/Mathtype Selector
+			## -> Symbols imply str expr input.
+			## -> For arbitrary str exprs, size/mathtype are derived from the expr.
+			## -> Otherwise, size/mathtype must be pre-specified for a nice UI.
+			if not self.symbols:
+				row = col.row(align=True)
+				row.prop(self, self.blfields['size'], text='')
+				row.prop(self, self.blfields['mathtype'], text='')
 
-		# Symbol UI
-		## -> Draws the UI appropriate for the above choice of constraints.
-		## -> TODO
+			# Base UI
+			## -> Draws the UI appropriate for the above choice of constraints.
+			self.draw_value(col)
+
+			# Symbol UI
+			## -> Draws the UI appropriate for the above choice of constraints.
+			## -> TODO
 
 	####################
 	# - UI: InfoFlow
@@ -884,9 +881,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			)
 
 			# Dimensions
-			for dim_name in info.dim_names:
-				dim_idx = info.dim_idx[dim_name]
-				grid.label(text=dim_name)
+			for dim in info.dims:
+				dim_idx = info.dims[dim]
+				grid.label(text=dim.name_pretty)
 				if InfoDisplayCol.Length in self.info_columns:
 					grid.label(text=str(len(dim_idx)))
 				if InfoDisplayCol.MathType in self.info_columns:
@@ -895,27 +892,27 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					grid.label(text=spux.sp_to_str(dim_idx.unit))
 
 			# Outputs
-			grid.label(text=info.output_name)
+			grid.label(text=info.output.name_pretty)
 			if InfoDisplayCol.Length in self.info_columns:
 				grid.label(text='', icon=ct.Icon.DataSocketOutput)
 			if InfoDisplayCol.MathType in self.info_columns:
 				grid.label(
 					text=(
-						spux.MathType.to_str(info.output_mathtype)
+						spux.MathType.to_str(info.output.mathtype)
 						+ (
 							'ˣ'.join(
 								[
 									unicode_superscript(out_axis)
-									for out_axis in info.output_shape
+									for out_axis in info.output.shape
 								]
 							)
-							if info.output_shape
+							if info.output.shape
 							else ''
 						)
 					)
 				)
 			if InfoDisplayCol.Unit in self.info_columns:
-				grid.label(text=f'{spux.sp_to_str(info.output_unit)}')
+				grid.label(text=f'{spux.sp_to_str(info.output.unit)}')
 
 
 ####################
@@ -929,6 +926,7 @@ class ExprSocketDef(base.SocketDef):
 		ct.FlowKind.Array,
 		ct.FlowKind.Func,
 	] = ct.FlowKind.Value
+	output_name: sim_symbols.SimSymbolName = sim_symbols.SimSymbolName
 
 	# Socket Interface
 	size: spux.NumberSize1D = spux.NumberSize1D.Scalar
@@ -937,10 +935,6 @@ class ExprSocketDef(base.SocketDef):
 
 	default_unit: spux.Unit | None = None
 	default_symbols: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
-
-	@property
-	def symbols(self) -> set[sp.Symbol]:
-		return {sim_symbol.sp_symbol for sim_symbol in self.default_symbols}
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = 0
@@ -954,6 +948,7 @@ class ExprSocketDef(base.SocketDef):
 	default_scaling: ct.ScalingMode = ct.ScalingMode.Lin
 
 	# UI
+	show_func_ui: bool = True
 	show_info_columns: bool = False
 
 	####################
@@ -1153,6 +1148,14 @@ class ExprSocketDef(base.SocketDef):
 					msg = f'ExprSocket: Mathtype {dv_mathtype} of a default Range min or max expression {bound} (type {type(self.default_value)}) is incompatible with socket MathType {self.mathtype}'
 					raise ValueError(msg)
 
+			# Coerce from Infinite
+			if bound.is_infinite and self.mathtype is spux.MathType.Integer:
+				new_bounds[i] = sp.S(-1) if i == 0 else sp.S(1)
+			if bound.is_infinite and self.mathtype is spux.MathType.Rational:
+				new_bounds[i] = sp.Rational(-1, 1) if i == 0 else sp.Rational(1, 1)
+			if bound.is_infinite and self.mathtype is spux.MathType.Real:
+				new_bounds[i] = sp.S(-1.0) if i == 0 else sp.S(1.0)
+
 		if new_bounds[0] is not None:
 			self.default_min = new_bounds[0]
 		if new_bounds[1] is not None:
@@ -1217,13 +1220,14 @@ class ExprSocketDef(base.SocketDef):
 	####################
 	def init(self, bl_socket: ExprBLSocket) -> None:
 		bl_socket.active_kind = self.active_kind
+		bl_socket.output_name = self.output_name
 
 		# Socket Interface
 		## -> Recall that auto-updates are turned off during init()
 		bl_socket.size = self.size
 		bl_socket.mathtype = self.mathtype
 		bl_socket.physical_type = self.physical_type
-		bl_socket.symbols = self.symbols
+		bl_socket.active_symbols = self.symbols
 
 		# FlowKind.Value
 		## -> We must take units into account when setting bl_socket.value
@@ -1246,6 +1250,7 @@ class ExprSocketDef(base.SocketDef):
 		)
 
 		# UI
+		bl_socket.show_func_ui = self.show_func_ui
 		bl_socket.show_info_columns = self.show_info_columns
 
 		# Info Draw

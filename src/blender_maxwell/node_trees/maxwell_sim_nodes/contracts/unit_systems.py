@@ -48,7 +48,6 @@ UNITS_BLENDER: spux.UnitSystem = spux.UNITS_SI | {
 	# Electrodynamics
 	_PT.CurrentDensity: spu.ampere / spu.um**2,
 	_PT.Conductivity: spu.siemens / spu.um,
-	_PT.PoyntingVector: spu.watt / spu.um**2,
 	_PT.EField: spu.volt / spu.um,
 	_PT.HField: spu.ampere / spu.um,
 	# Mechanical
@@ -58,7 +57,6 @@ UNITS_BLENDER: spux.UnitSystem = spux.UNITS_SI | {
 	_PT.Force: spux.micronewton,
 	# Luminal
 	# Optics
-	_PT.PoyntingVector: spu.watt / spu.um**2,
 }  ## TODO: Load (dynamically?) from addon preferences
 
 UNITS_TIDY3D: spux.UnitSystem = spux.UNITS_SI | {
@@ -75,11 +73,9 @@ UNITS_TIDY3D: spux.UnitSystem = spux.UNITS_SI | {
 	# Electrodynamics
 	_PT.CurrentDensity: spu.ampere / spu.um**2,
 	_PT.Conductivity: spu.siemens / spu.um,
-	_PT.PoyntingVector: spu.watt / spu.um**2,
 	_PT.EField: spu.volt / spu.um,
 	_PT.HField: spu.ampere / spu.um,
 	# Luminal
 	# Optics
-	_PT.PoyntingVector: spu.watt / spu.um**2,
 	## NOTE: w/o source normalization, EField/HField/Modal amps are * 1/Hz
 }

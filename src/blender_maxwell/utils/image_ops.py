@@ -29,11 +29,13 @@ import matplotlib.axis as mpl_ax
 import matplotlib.backends.backend_agg
 import matplotlib.figure
 import matplotlib.style as mplstyle
+import seaborn as sns
 
 from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger
 
 mplstyle.use('fast')  ## TODO: Does this do anything?
+sns.set_theme()
 
 log = logger.get(__name__)
 
@@ -149,125 +151,98 @@ def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 ####################
 # - Plotters
 ####################
-# () -> ℝ
-def plot_hist_1d(
-	data: jtyp.Float32[jtyp.Array, ' size'], info, ax: mpl_ax.Axis
-) -> None:
-	y_name = info.output_name
-	y_unit = info.output_unit
-
-	ax.hist(data, bins=30, alpha=0.75)
-	ax.set_title('Histogram')
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
-
-
 # (ℤ) -> ℝ
 def plot_box_plot_1d(
 	data: jtyp.Float32[jtyp.Array, ' heights'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_name = info.dim_names[0]
-	y_name = info.output_name
-	y_unit = info.output_unit
+	x_sym = info.last_dim
+	y_sym = info.output
 
-	ax.boxplot(data)
-	ax.set_title('Box Plot')
-	ax.set_xlabel(f'{x_name}')
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
+	ax.boxplot([data])
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
+
+
+def plot_bar(data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis) -> None:
+	x_sym = info.last_dim
+	y_sym = info.output
+
+	p = ax.bar(info.dims[x_sym], data)
+	ax.bar_label(p, label_type='center')
+
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
 
 
 # (ℝ) -> ℝ
 def plot_curve_2d(
 	data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis
 ) -> None:
-	times = [time.perf_counter()]
+	x_sym = info.last_dim
+	y_sym = info.output
 
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.output_name
-	y_unit = info.output_unit
-
-	times.append(time.perf_counter() - times[0])
-	ax.plot(info.dim_idx_arrays[0], data)
-	times.append(time.perf_counter() - times[0])
-	ax.set_title('2D Curve')
-	times.append(time.perf_counter() - times[0])
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	times.append(time.perf_counter() - times[0])
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
-	times.append(time.perf_counter() - times[0])
-	# log.critical('Timing of Curve2D: %s', str(times))
+	ax.plot(info.dims[x_sym].realize_array.values, data)
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
 
 
 def plot_points_2d(
 	data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.output_name
-	y_unit = info.output_unit
+	x_sym = info.last_dim
+	y_sym = info.output
 
-	ax.scatter(info.dim_idx_arrays[0], data, alpha=0.6)
-	ax.set_title('2D Points')
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
-
-
-def plot_bar(data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis) -> None:
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.output_name
-	y_unit = info.output_unit
-
-	ax.bar(info.dim_idx_arrays[0], data, alpha=0.7)
-	ax.set_title('2D Bar')
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
+	ax.scatter(x_sym.realize_array.values, data)
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
 
 
 # (ℝ, ℤ) -> ℝ
 def plot_curves_2d(
 	data: jtyp.Float32[jtyp.Array, 'x_size categories'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.output_name
-	y_unit = info.output_unit
+	x_sym = info.first_dim
+	y_sym = info.output
 
-	for category in range(data.shape[1]):
-		ax.plot(info.dim_idx_arrays[0], data[:, category])
+	for i, category in enumerate(info.dims[info.last_dim]):
+		ax.plot(info.dims[x_sym], data[:, i], label=category)
 
-	ax.set_title('2D Curves')
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
 	ax.legend()
 
 
 def plot_filled_curves_2d(
 	data: jtyp.Float32[jtyp.Array, 'x_size 2'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.output_name
-	y_unit = info.output_unit
+	x_sym = info.first_dim
+	y_sym = info.output
 
-	shared_x_idx = info.dim_idx_arrays[0]
+	shared_x_idx = info.dims[info.last_dim]
 	ax.fill_between(shared_x_idx, data[:, 0], shared_x_idx, data[:, 1])
-	ax.set_title('2D Filled Curves')
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
+	ax.legend()
 
 
 # (ℝ, ℝ) -> ℝ
 def plot_heatmap_2d(
 	data: jtyp.Float32[jtyp.Array, 'x_size y_size'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_name = info.dim_names[0]
-	x_unit = info.dim_units[x_name]
-	y_name = info.dim_names[1]
-	y_unit = info.dim_units[y_name]
+	x_sym = info.first_dim
+	y_sym = info.last_dim
+	c_sym = info.output
 
-	heatmap = ax.imshow(data, aspect='auto', interpolation='none')
-	# ax.figure.colorbar(heatmap, ax=ax)
-	ax.set_title('Heatmap')
-	ax.set_xlabel(f'{x_name}' + (f'({x_unit})' if x_unit is not None else ''))
-	ax.set_ylabel(f'{y_name}' + (f'({y_unit})' if y_unit is not None else ''))
+	heatmap = ax.imshow(data, aspect='equal', interpolation='none')
+	ax.figure.colorbar(heatmap, cax=ax)
+
+	ax.set_title(f'({x_sym.name_pretty}, {y_sym.name_pretty}) -> {c_sym.plot_label}')
+	ax.set_xlabel(x_sym.plot_label)
+	ax.set_xlabel(y_sym.plot_label)
+	ax.legend()

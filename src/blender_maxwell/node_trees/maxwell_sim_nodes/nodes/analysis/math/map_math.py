@@ -23,7 +23,7 @@ import bpy
 import jax.numpy as jnp
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, logger, sim_symbols
 from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
@@ -153,40 +153,38 @@ class MapOperation(enum.StrEnum):
 	# - Ops from Shape
 	####################
 	@staticmethod
-	def by_element_shape(shape: tuple[int, ...] | None) -> list[typ.Self]:
+	def by_expr_info(info: ct.InfoFlow) -> list[typ.Self]:
+		## TODO: By info, not shape.
+		## TODO: Check valid domains/mathtypes for some functions.
 		MO = MapOperation
+		element_ops = [
+			MO.Real,
+			MO.Imag,
+			MO.Abs,
+			MO.Sq,
+			MO.Sqrt,
+			MO.InvSqrt,
+			MO.Cos,
+			MO.Sin,
+			MO.Tan,
+			MO.Acos,
+			MO.Asin,
+			MO.Atan,
+			MO.Sinc,
+		]
 
-		match shape:
-			case 'noshape':
-				return []
+		match (info.output.rows, info.output.cols):
+			case (1, 1):
+				return element_ops
 
-			# By Number
-			case None:
-				return [
-					MO.Real,
-					MO.Imag,
-					MO.Abs,
-					MO.Sq,
-					MO.Sqrt,
-					MO.InvSqrt,
-					MO.Cos,
-					MO.Sin,
-					MO.Tan,
-					MO.Acos,
-					MO.Asin,
-					MO.Atan,
-					MO.Sinc,
-				]
+			case (_, 1):
+				return [*element_ops, MO.Norm2]
 
-		match len(shape):
-			# By Vector
-			case 1:
+			case (rows, cols) if rows == cols:
+				## TODO: Check hermitian/posdef for cholesky.
+				## - Can we even do this with just the output symbol approach?
 				return [
-					MO.Norm2,
-				]
-			# By Matrix
-			case 2:
-				return [
+					*element_ops,
 					MO.Det,
 					MO.Cond,
 					MO.NormFro,
@@ -198,6 +196,18 @@ class MapOperation(enum.StrEnum):
 					MO.Tra,
 					MO.Qr,
 					MO.Chol,
+					MO.Svd,
+				]
+
+			case (rows, cols):
+				return [
+					*element_ops,
+					MO.Cond,
+					MO.NormFro,
+					MO.Rank,
+					MO.SvdVals,
+					MO.Inv,
+					MO.Tra,
 					MO.Svd,
 				]
 
@@ -288,41 +298,76 @@ class MapOperation(enum.StrEnum):
 
 	def transform_info(self, info: ct.InfoFlow):
 		MO = MapOperation
+
 		return {
 			# By Number
-			MO.Real: lambda: info.set_output_mathtype(spux.MathType.Real),
-			MO.Imag: lambda: info.set_output_mathtype(spux.MathType.Real),
-			MO.Abs: lambda: info.set_output_mathtype(spux.MathType.Real),
+			MO.Real: lambda: info.update_output(mathtype=spux.MathType.Real),
+			MO.Imag: lambda: info.update_output(mathtype=spux.MathType.Real),
+			MO.Abs: lambda: info.update_output(mathtype=spux.MathType.Real),
+			MO.Sq: lambda: info,
+			MO.Sqrt: lambda: info,
+			MO.InvSqrt: lambda: info,
+			MO.Cos: lambda: info,
+			MO.Sin: lambda: info,
+			MO.Tan: lambda: info,
+			MO.Acos: lambda: info,
+			MO.Asin: lambda: info,
+			MO.Atan: lambda: info,
+			MO.Sinc: lambda: info,
 			# By Vector
-			MO.Norm2: lambda: info.collapse_output(
-				collapsed_name=MO.to_name(self).replace('v', info.output_name),
-				collapsed_mathtype=spux.MathType.Real,
-				collapsed_unit=info.output_unit,
+			MO.Norm2: lambda: info.update_output(
+				mathtype=spux.MathType.Real,
+				rows=1,
+				cols=1,
+				# Interval
+				interval_finite_re=(0, sim_symbols.float_max),
+				interval_inf=(False, True),
+				interval_closed=(True, False),
 			),
 			# By Matrix
-			MO.Det: lambda: info.collapse_output(
-				collapsed_name=MO.to_name(self).replace('V', info.output_name),
-				collapsed_mathtype=info.output_mathtype,
-				collapsed_unit=info.output_unit,
+			MO.Det: lambda: info.update_output(
+				rows=1,
+				cols=1,
 			),
-			MO.Cond: lambda: info.collapse_output(
-				collapsed_name=MO.to_name(self).replace('V', info.output_name),
-				collapsed_mathtype=spux.MathType.Real,
-				collapsed_unit=None,
+			MO.Cond: lambda: info.update_output(
+				mathtype=spux.MathType.Real,
+				rows=1,
+				cols=1,
+				physical_type=spux.PhysicalType.NonPhysical,
+				unit=None,
 			),
-			MO.NormFro: lambda: info.collapse_output(
-				collapsed_name=MO.to_name(self).replace('V', info.output_name),
-				collapsed_mathtype=spux.MathType.Real,
-				collapsed_unit=info.output_unit,
+			MO.NormFro: lambda: info.update_output(
+				mathtype=spux.MathType.Real,
+				rows=1,
+				cols=1,
+				# Interval
+				interval_finite_re=(0, sim_symbols.float_max),
+				interval_inf=(False, True),
+				interval_closed=(True, False),
 			),
-			MO.Rank: lambda: info.collapse_output(
-				collapsed_name=MO.to_name(self).replace('V', info.output_name),
-				collapsed_mathtype=spux.MathType.Integer,
-				collapsed_unit=None,
+			MO.Rank: lambda: info.update_output(
+				mathtype=spux.MathType.Integer,
+				rows=1,
+				cols=1,
+				physical_type=spux.PhysicalType.NonPhysical,
+				unit=None,
+				# Interval
+				interval_finite_re=(0, sim_symbols.int_max),
+				interval_inf=(False, True),
+				interval_closed=(True, False),
 			),
-			## TODO: Matrix -> Vec
-			## TODO: Matrix -> Matrices
-		}.get(self, lambda: info)()
+			# Matrix -> Vector  ## TODO: ALL OF THESE
+			MO.Diag: lambda: info,
+			MO.EigVals: lambda: info,
+			MO.SvdVals: lambda: info,
+			# Matrix -> Matrix  ## TODO: ALL OF THESE
+			MO.Inv: lambda: info,
+			MO.Tra: lambda: info,
+			# Matrix -> Matrices  ## TODO: ALL OF THESE
+			MO.Qr: lambda: info,
+			MO.Chol: lambda: info,
+			MO.Svd: lambda: info,
+		}[self]()
 
 
 ####################
@@ -435,29 +480,26 @@ class MapMathNode(base.MaxwellSimNode):
 		)
 
 		if has_info and not info_pending:
-			self.expr_output_shape = bl_cache.Signal.InvalidateCache
+			self.expr_info = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
-	def expr_output_shape(self) -> ct.InfoFlow | None:
+	def expr_info(self) -> ct.InfoFlow | None:
 		info = self._compute_input('Expr', kind=ct.FlowKind.Info, optional=True)
 		has_info = not ct.FlowSignal.check(info)
 		if has_info:
-			return info.output_shape
-
-		return 'noshape'
+			return info
+		return None
 
 	operation: MapOperation = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_operations(),
-		cb_depends_on={'expr_output_shape'},
+		cb_depends_on={'expr_info'},
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
-		if self.expr_output_shape != 'noshape':
+		if self.info is not None:
 			return [
 				operation.bl_enum_element(i)
-				for i, operation in enumerate(
-					MapOperation.by_element_shape(self.expr_output_shape)
-				)
+				for i, operation in enumerate(MapOperation.by_expr_info(self.expr_info))
 			]
 		return []
 
@@ -474,7 +516,7 @@ class MapMathNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
-	# - FlowKind.Value|Func
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -495,6 +537,9 @@ class MapMathNode(base.MaxwellSimNode):
 
 		return ct.FlowSignal.FlowPending
 
+	####################
+	# - FlowKind.Func
+	####################
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Func,
@@ -518,7 +563,7 @@ class MapMathNode(base.MaxwellSimNode):
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - FlowKind.Info|Params
+	# - FlowKind.Info
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -538,6 +583,9 @@ class MapMathNode(base.MaxwellSimNode):
 
 		return ct.FlowSignal.FlowPending
 
+	####################
+	# - FlowKind.Params
+	####################
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Params,

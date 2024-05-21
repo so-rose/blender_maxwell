@@ -61,7 +61,6 @@ SympyType = (
 class MathType(enum.StrEnum):
 	"""Type identifiers that encompass common sets of mathematical objects."""
 
-	Bool = enum.auto()
 	Integer = enum.auto()
 	Rational = enum.auto()
 	Real = enum.auto()
@@ -77,8 +76,6 @@ class MathType(enum.StrEnum):
 			return MathType.Rational
 		if MathType.Integer in mathtypes:
 			return MathType.Integer
-		if MathType.Bool in mathtypes:
-			return MathType.Bool
 
 		msg = f"Can't combine mathtypes {mathtypes}"
 		raise ValueError(msg)
@@ -88,7 +85,6 @@ class MathType(enum.StrEnum):
 		return (
 			other
 			in {
-				MT.Bool: [MT.Bool],
 				MT.Integer: [MT.Integer],
 				MT.Rational: [MT.Integer, MT.Rational],
 				MT.Real: [MT.Integer, MT.Rational, MT.Real],
@@ -98,11 +94,9 @@ class MathType(enum.StrEnum):
 
 	def coerce_compatible_pyobj(
 		self, pyobj: bool | int | Fraction | float | complex
-	) -> bool | int | Fraction | float | complex:
+	) -> int | Fraction | float | complex:
 		MT = MathType
 		match self:
-			case MT.Bool:
-				return pyobj
 			case MT.Integer:
 				return int(pyobj)
 			case MT.Rational if isinstance(pyobj, int):
@@ -123,8 +117,6 @@ class MathType(enum.StrEnum):
 				*[MathType.from_expr(v) for v in sp.flatten(sp_obj)]
 			)
 
-		if isinstance(sp_obj, sp.logic.boolalg.Boolean):
-			return MathType.Bool
 		if sp_obj.is_integer:
 			return MathType.Integer
 		if sp_obj.is_rational:
@@ -146,7 +138,6 @@ class MathType(enum.StrEnum):
 	@staticmethod
 	def from_pytype(dtype: type) -> type:
 		return {
-			bool: MathType.Bool,
 			int: MathType.Integer,
 			Fraction: MathType.Rational,
 			float: MathType.Real,
@@ -166,7 +157,6 @@ class MathType(enum.StrEnum):
 	def pytype(self) -> type:
 		MT = MathType
 		return {
-			MT.Bool: bool,
 			MT.Integer: int,
 			MT.Rational: Fraction,
 			MT.Real: float,
@@ -177,17 +167,25 @@ class MathType(enum.StrEnum):
 	def symbolic_set(self) -> type:
 		MT = MathType
 		return {
-			MT.Bool: sp.Set([sp.S(False), sp.S(True)]),
 			MT.Integer: sp.Integers,
 			MT.Rational: sp.Rationals,
 			MT.Real: sp.Reals,
 			MT.Complex: sp.Complexes,
 		}[self]
 
+	@property
+	def sp_symbol_a(self) -> type:
+		MT = MathType
+		return {
+			MT.Integer: sp.Symbol('a', integer=True),
+			MT.Rational: sp.Symbol('a', rational=True),
+			MT.Real: sp.Symbol('a', real=True),
+			MT.Complex: sp.Symbol('a', complex=True),
+		}[self]
+
 	@staticmethod
 	def to_str(value: typ.Self) -> type:
 		return {
-			MathType.Bool: 'T|F',
 			MathType.Integer: 'ℤ',
 			MathType.Rational: 'ℚ',
 			MathType.Real: 'ℝ',
@@ -212,6 +210,9 @@ class MathType(enum.StrEnum):
 		)
 
 
+####################
+# - Size: 1D
+####################
 class NumberSize1D(enum.StrEnum):
 	"""Valid 1D-constrained shape."""
 
@@ -279,6 +280,20 @@ class NumberSize1D(enum.StrEnum):
 		}[shape]
 
 	@property
+	def rows(self):
+		NS = NumberSize1D
+		return {
+			NS.Scalar: 1,
+			NS.Vec2: 2,
+			NS.Vec3: 3,
+			NS.Vec4: 4,
+		}[self]
+
+	@property
+	def cols(self):
+		return 1
+
+	@property
 	def shape(self):
 		NS = NumberSize1D
 		return {
@@ -295,6 +310,30 @@ def symbol_range(sym: sp.Symbol) -> str:
 		if sym.is_complex
 		else ('ℝ' if sym.is_real else ('ℤ' if sym.is_integer else '?'))
 	)
+
+
+####################
+# - Symbol Sizes
+####################
+class SimpleSize2D(enum.StrEnum):
+	"""Simple subset of sizes for rank-2 tensors."""
+
+	Scalar = enum.auto()
+
+	# Vectors
+	Vec2 = enum.auto()  ## 2x1
+	Vec3 = enum.auto()  ## 3x1
+	Vec4 = enum.auto()  ## 4x1
+
+	# Covectors
+	CoVec2 = enum.auto()  ## 1x2
+	CoVec3 = enum.auto()  ## 1x3
+	CoVec4 = enum.auto()  ## 1x4
+
+	# Square Matrices
+	Mat22 = enum.auto()  ## 2x2
+	Mat33 = enum.auto()  ## 3x3
+	Mat44 = enum.auto()  ## 4x4
 
 
 ####################
@@ -381,6 +420,8 @@ hectopascal.set_global_relative_scale_factor(spu.hecto, spu.pascal)
 UNIT_BY_SYMBOL: dict[sp.Symbol, spu.Quantity] = {
 	unit.name: unit for unit in spu.__dict__.values() if isinstance(unit, spu.Quantity)
 } | {unit.name: unit for unit in globals().values() if isinstance(unit, spu.Quantity)}
+
+UNIT_TO_1: dict[spu.Quantity, 1] = {unit: 1 for unit in UNIT_BY_SYMBOL.values()}
 
 
 ####################
@@ -907,10 +948,6 @@ class PhysicalType(enum.StrEnum):
 	LumIntensity = enum.auto()
 	LumFlux = enum.auto()
 	Illuminance = enum.auto()
-	# Optics
-	OrdinaryWaveVector = enum.auto()
-	AngularWaveVector = enum.auto()
-	PoyntingVector = enum.auto()
 
 	@functools.cached_property
 	def unit_dim(self):
@@ -956,10 +993,6 @@ class PhysicalType(enum.StrEnum):
 			PT.LumIntensity: Dims.luminous_intensity,
 			PT.LumFlux: Dims.luminous_intensity * spu.steradian.dimension,
 			PT.Illuminance: Dims.luminous_intensity / Dims.length**2,
-			# Optics
-			PT.OrdinaryWaveVector: Dims.frequency,
-			PT.AngularWaveVector: Dims.angle * Dims.frequency,
-			PT.PoyntingVector: Dims.power / Dims.length**2,
 		}[self]
 
 	@functools.cached_property
@@ -1196,10 +1229,6 @@ class PhysicalType(enum.StrEnum):
 			PT.HField: [None, (2,), (3,)],
 			# Luminal
 			PT.LumFlux: [None, (2,), (3,)],
-			# Optics
-			PT.OrdinaryWaveVector: [None, (2,), (3,)],
-			PT.AngularWaveVector: [None, (2,), (3,)],
-			PT.PoyntingVector: [None, (2,), (3,)],
 		}
 
 		return overrides.get(self, [None])
@@ -1222,7 +1251,6 @@ class PhysicalType(enum.StrEnum):
 			- **Charge**: Generally, it is real.
 				However, an imaginary phase term seems to have research applications when dealing with high-order harmonics in high-energy pulsed lasers: <https://iopscience.iop.org/article/10.1088/1361-6455/aac787>
 			- **Conductance**: The imaginary part represents the extinction, in the Drude-model sense.
-			- **Poynting**: The imaginary part represents the oscillation in the power flux over time.
 
 		"""
 		MT = MathType
@@ -1249,10 +1277,6 @@ class PhysicalType(enum.StrEnum):
 			PT.EField: [MT.Real, MT.Complex],  ## Im -> Phase
 			PT.HField: [MT.Real, MT.Complex],  ## Im -> Phase
 			# Luminal
-			# Optics
-			PT.OrdinaryWaveVector: [MT.Real, MT.Complex],  ## Im -> Phase
-			PT.AngularWaveVector: [MT.Real, MT.Complex],  ## Im -> Phase
-			PT.PoyntingVector: [MT.Real, MT.Complex],  ## Im -> Reactive Power
 		}
 
 		return overrides.get(self, [MT.Real])
@@ -1323,10 +1347,6 @@ UNITS_SI: UnitSystem = {
 	_PT.LumIntensity: spu.candela,
 	_PT.LumFlux: lumen,
 	_PT.Illuminance: spu.lux,
-	# Optics
-	_PT.OrdinaryWaveVector: spu.hertz,
-	_PT.AngularWaveVector: spu.radian * spu.hertz,
-	_PT.PoyntingVector: spu.watt / spu.meter**2,
 }
 
 
@@ -1380,15 +1400,20 @@ def sympy_to_python(
 ####################
 # - Convert to Unit System
 ####################
-def convert_to_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
+def convert_to_unit_system(
+	sp_obj: SympyExpr, unit_system: UnitSystem | None
+) -> SympyExpr:
 	"""Convert an expression to the units of a given unit system, with appropriate scaling."""
+	if unit_system is None:
+		return sp_obj
+
 	return spu.convert_to(
 		sp_obj,
 		{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
 	)
 
 
-def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
+def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem | None) -> SympyExpr:
 	"""Strip units occurring in the given unit system from the expression.
 
 	Unit stripping is a "dumb" operation: "Substitute any `sympy` object in `unit_system.values()` with `1`".
@@ -1397,11 +1422,13 @@ def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem) -> SympyExpr:
 	Notes:
 		You should probably use `scale_to_unit_system()` or `convert_to_unit_system()`.
 	"""
+	if unit_system is None:
+		return sp_obj.subs(UNIT_TO_1)
 	return sp_obj.subs({unit: 1 for unit in unit_system.values() if unit is not None})
 
 
 def scale_to_unit_system(
-	sp_obj: SympyExpr, unit_system: UnitSystem, use_jax_array: bool = False
+	sp_obj: SympyExpr, unit_system: UnitSystem | None, use_jax_array: bool = False
 ) -> int | float | complex | tuple | jax.Array:
 	"""Convert an expression to the units of a given unit system, then strip all units of the unit system.
 

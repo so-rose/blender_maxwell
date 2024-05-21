@@ -28,13 +28,20 @@ from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
 from .array import ArrayFlow
-from .flow_kinds import FlowKind
 from .lazy_func import FuncFlow
 
 log = logger.get(__name__)
 
 
 class ScalingMode(enum.StrEnum):
+	"""Identifier for how to space steps between two boundaries.
+
+	Attributes:
+		Lin: Uniform spacing between two endpoints.
+		Geom: Log spacing between two endpoints, given as values.
+		Log: Log spacing between two endpoints, given as powers of a common base.
+	"""
+
 	Lin = enum.auto()
 	Geom = enum.auto()
 	Log = enum.auto()
@@ -55,36 +62,20 @@ class ScalingMode(enum.StrEnum):
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class RangeFlow:
-	r"""Represents a linearly/logarithmically spaced array using symbolic boundary expressions, with support for units and lazy evaluation.
+	r"""Represents a spaced array using symbolic boundary expressions.
 
-	# Advantages
 	Whenever an array can be represented like this, the advantages over an `ArrayFlow` are numerous.
 
-	## Memory
+	# Memory Scaling
 	`ArrayFlow` generally has a memory scaling of $O(n)$.
 	Naturally, `RangeFlow` is always constant, since only the boundaries and steps are stored.
 
-	## Symbolic
-	Both boundary points are symbolic expressions, within which pre-defined `sp.Symbol`s can participate in a constrained manner (ex. an integer symbol).
+	# Symbolic Bounds
+	`self.start` and `self.stop` boundary points are symbolic expressions, within which any element of `self.symbols` can participate.
 
-	One need not know the value of the symbols immediately - such decisions can be deferred until later in the computational flow.
+	**It is the user's responsibility** to ensure that `self.start < self.stop`.
 
-	## Performant Unit-Aware Operations
-	While `ArrayFlow`s are also unit-aware, the time-cost of _any_ unit-scaling operation scales with $O(n)$.
-	`RangeFlow`, by contrast, scales as $O(1)$.
-
-	As a result, more complicated operations (like symbolic or unit-based) that might be difficult to perform interactively in real-time on an `ArrayFlow` will work perfectly with this object, even with added complexity
-
-	## High-Performance Composition and Gradiant
-	With `self.as_func`, a `jax` function is produced that generates the array according to the symbolic `start`, `stop` and `steps`.
-	There are two nice things about this:
-
-	- **Gradient**: The gradient of the output array, with respect to any symbols used to define the input bounds, can easily be found using `jax.grad` over `self.as_func`.
-	- **JIT**: When `self.as_func` is composed with other `jax` functions, and `jax.jit` is run to optimize the entire thing, the "cost of array generation" _will often be optimized away significantly or entirely_.
-
-	Thus, as part of larger computations, the performance properties of `RangeFlow` is extremely favorable.
-
-	## Numerical Properties
+	# Numerical Properties
 	Since the bounds support exact (ex. rational) calculations and symbolic manipulations (_by virtue of being symbolic expressions_), the opportunities for certain kinds of numerical instability are mitigated.
 
 	Attributes:
@@ -108,8 +99,11 @@ class RangeFlow:
 
 	unit: spux.Unit | None = None
 
-	symbols: frozenset[spux.IntSymbol] = frozenset()
+	symbols: frozenset[spux.Symbol] = frozenset()
 
+	####################
+	# - Computed Properties
+	####################
 	@functools.cached_property
 	def sorted_symbols(self) -> list[sp.Symbol]:
 		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
@@ -120,6 +114,19 @@ class RangeFlow:
 			All symbols valid for use in the expression.
 		"""
 		return sorted(self.symbols, key=lambda sym: sym.name)
+
+	@property
+	def is_symbolic(self) -> bool:
+		"""Whether the `RangeFlow` has unrealized symbols."""
+		return len(self.symbols) > 0
+
+	def __len__(self) -> int:
+		"""Compute the length of the array that would be realized.
+
+		Returns:
+			The number of steps.
+		"""
+		return self.steps
 
 	@functools.cached_property
 	def mathtype(self) -> spux.MathType:
@@ -156,13 +163,206 @@ class RangeFlow:
 		)
 		return combined_mathtype
 
-	def __len__(self):
-		"""Compute the length of the array to be realized.
+	####################
+	# - Methods
+	####################
+	def rescale(
+		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
+	) -> typ.Self:
+		"""Apply an order-preserving function to each bound, then (optionally) transform the result w/new unit and/or order.
+
+		An optimized expression will be built and applied to `self.values` using `sympy.lambdify()`.
+
+		Parameters:
+			rescale_func: An **order-preserving** function to apply to each array element.
+			reverse: Whether to reverse the order of the result.
+			new_unit: An (optional) new unit to scale the result to.
+		"""
+		new_pre_start = self.start if not reverse else self.stop
+		new_pre_stop = self.stop if not reverse else self.start
+
+		new_start = rescale_func(new_pre_start * self.unit)
+		new_stop = rescale_func(new_pre_stop * self.unit)
+
+		return RangeFlow(
+			start=(
+				spux.scale_to_unit(new_start, new_unit)
+				if new_unit is not None
+				else new_start
+			),
+			stop=(
+				spux.scale_to_unit(new_stop, new_unit)
+				if new_unit is not None
+				else new_stop
+			),
+			steps=self.steps,
+			scaling=self.scaling,
+			unit=new_unit,
+			symbols=self.symbols,
+		)
+
+	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
+		raise NotImplementedError
+
+	####################
+	# - Exporters
+	####################
+	@functools.cached_property
+	def array_generator(
+		self,
+	) -> typ.Callable[
+		[int | float | complex, int | float | complex, int],
+		jtyp.Inexact[jtyp.Array, ' steps'],
+	]:
+		"""Compute the correct `jnp.*space` array generator, where `*` is one of the supported scaling methods.
 
 		Returns:
-			The number of steps.
+			A `jax` function that takes a valid `start`, `stop`, and `steps`, and returns a 1D `jax` array.
 		"""
-		return self.steps
+		jnp_nspace = {
+			ScalingMode.Lin: jnp.linspace,
+			ScalingMode.Geom: jnp.geomspace,
+			ScalingMode.Log: jnp.logspace,
+		}.get(self.scaling)
+
+		if jnp_nspace is None:
+			msg = f'ArrayFlow scaling method {self.scaling} is unsupported'
+			raise RuntimeError(msg)
+		return jnp_nspace
+
+	@functools.cached_property
+	def as_func(
+		self,
+	) -> typ.Callable[[int | float | complex, ...], jtyp.Inexact[jtyp.Array, ' steps']]:
+		"""Create a function that can compute the non-lazy output array as a function of the symbols in the expressions for `start` and `stop`.
+
+		Notes:
+			The ordering of the symbols is identical to `self.symbols`, which is guaranteed to be a deterministically sorted list of symbols.
+
+		Returns:
+			A `FuncFlow` that, given the input symbols defined in `self.symbols`,
+		"""
+		# Compile JAX Functions for Start/End Expressions
+		## -> FYI, JAX-in-JAX works perfectly fine.
+		start_jax = sp.lambdify(self.sorted_symbols, self.start, 'jax')
+		stop_jax = sp.lambdify(self.sorted_symbols, self.stop, 'jax')
+
+		# Compile ArrayGen Function
+		def gen_array(
+			*args: list[int | float | complex],
+		) -> jtyp.Inexact[jtyp.Array, ' steps']:
+			return self.array_generator(start_jax(*args), stop_jax(*args), self.steps)
+
+		# Return ArrayGen Function
+		return gen_array
+
+	@functools.cached_property
+	def as_lazy_func(self) -> FuncFlow:
+		"""Creates a `FuncFlow` using the output of `self.as_func`.
+
+		This is useful for ex. parameterizing the first array in the node graph, without binding an entire computed array.
+
+		Notes:
+			The the function enclosed in the `FuncFlow` is identical to the one returned by `self.as_func`.
+
+		Returns:
+			A `FuncFlow` containing `self.as_func`, as well as appropriate supporting settings.
+		"""
+		return FuncFlow(
+			func=self.as_func,
+			func_args=[(spux.MathType.from_expr(sym)) for sym in self.symbols],
+			supports_jax=True,
+		)
+
+	####################
+	# - Realization
+	####################
+	def realize_start(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> int | float | complex:
+		"""Realize the start-bound by inserting particular values for each symbol."""
+		return spux.sympy_to_python(
+			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
+
+	def realize_stop(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> int | float | complex:
+		"""Realize the stop-bound by inserting particular values for each symbol."""
+		return spux.sympy_to_python(
+			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
+		)
+
+	def realize_step_size(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> int | float | complex:
+		"""Realize the stop-bound by inserting particular values for each symbol."""
+		if self.scaling is not ScalingMode.Lin:
+			raise NotImplementedError('Non-linear scaling mode not yet suported')
+
+		raw_step_size = (self.realize_stop() - self.realize_start() + 1) / self.steps
+
+		if self.mathtype is spux.MathType.Integer and raw_step_size.is_integer():
+			return int(raw_step_size)
+		return raw_step_size
+
+	def realize(
+		self,
+		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
+	) -> ArrayFlow:
+		"""Realize the array represented by this `RangeFlow` by realizing each bound, then generating all intermediate values as an array.
+
+		Parameters:
+			symbol_values: The particular values for each symbol, which will be inserted into the expression of each bound to realize them.
+
+		Returns:
+			An `ArrayFlow` containing this realized `RangeFlow`.
+		"""
+		## TODO: Check symbol values for coverage.
+
+		return ArrayFlow(
+			values=self.as_func(*[symbol_values[sym] for sym in self.sorted_symbols]),
+			unit=self.unit,
+			is_sorted=True,
+		)
+
+	@functools.cached_property
+	def realize_array(self) -> ArrayFlow:
+		"""Standardized access to `self.realize()` when there are no symbols."""
+		return self.realize()
+
+	def __getitem__(self, subscript: slice):
+		"""Implement indexing and slicing in a sane way.
+
+		- **Integer Index**: Not yet implemented.
+		- **Slice**: Return the `RangeFlow` that creates the same `ArrayFlow` as would be created by computing `self.realize_array`, then slicing that.
+		"""
+		if isinstance(subscript, slice) and self.scaling == ScalingMode.Lin:
+			# Parse Slice
+			start = subscript.start if subscript.start is not None else 0
+			stop = subscript.stop if subscript.stop is not None else self.steps
+			step = subscript.step if subscript.step is not None else 1
+
+			slice_steps = (stop - start + step - 1) // step
+
+			# Compute New Start/Stop
+			step_size = self.realize_step_size()
+			new_start = step_size * start
+			new_stop = new_start + step_size * slice_steps
+
+			return RangeFlow(
+				start=sp.S(new_start),
+				stop=sp.S(new_stop),
+				steps=slice_steps,
+				scaling=self.scaling,
+				unit=self.unit,
+				symbols=self.symbols,
+			)
+
+		raise NotImplementedError
 
 	####################
 	# - Units
@@ -264,231 +464,3 @@ class RangeFlow:
 			f'Tried to rescale unitless LazyDataValueRange to unit system {unit_system}'
 		)
 		raise ValueError(msg)
-
-	####################
-	# - Bound Operations
-	####################
-	def rescale(
-		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
-	) -> typ.Self:
-		new_pre_start = self.start if not reverse else self.stop
-		new_pre_stop = self.stop if not reverse else self.start
-
-		new_start = rescale_func(new_pre_start * self.unit)
-		new_stop = rescale_func(new_pre_stop * self.unit)
-
-		return RangeFlow(
-			start=(
-				spux.scale_to_unit(new_start, new_unit)
-				if new_unit is not None
-				else new_start
-			),
-			stop=(
-				spux.scale_to_unit(new_stop, new_unit)
-				if new_unit is not None
-				else new_stop
-			),
-			steps=self.steps,
-			scaling=self.scaling,
-			unit=new_unit,
-			symbols=self.symbols,
-		)
-
-	def rescale_bounds(
-		self,
-		rescale_func: typ.Callable[
-			[spux.ScalarUnitlessComplexExpr], spux.ScalarUnitlessComplexExpr
-		],
-		reverse: bool = False,
-	) -> typ.Self:
-		"""Apply a function to the bounds, effectively rescaling the represented array.
-
-		Notes:
-			**It is presumed that the bounds are scaled with the same factor**.
-			Breaking this presumption may have unexpected results.
-
-			The scalar, unitless, complex-valuedness of the bounds must also be respected; additionally, new symbols must not be introduced.
-
-		Parameters:
-			scaler: The function that scales each bound.
-			reverse: Whether to reverse the bounds after running the `scaler`.
-
-		Returns:
-			A rescaled `RangeFlow`.
-		"""
-		return RangeFlow(
-			start=rescale_func(self.start if not reverse else self.stop),
-			stop=rescale_func(self.stop if not reverse else self.start),
-			steps=self.steps,
-			scaling=self.scaling,
-			unit=self.unit,
-			symbols=self.symbols,
-		)
-
-	####################
-	# - Lazy Representation
-	####################
-	@functools.cached_property
-	def array_generator(
-		self,
-	) -> typ.Callable[
-		[int | float | complex, int | float | complex, int],
-		jtyp.Inexact[jtyp.Array, ' steps'],
-	]:
-		"""Compute the correct `jnp.*space` array generator, where `*` is one of the supported scaling methods.
-
-		Returns:
-			A `jax` function that takes a valid `start`, `stop`, and `steps`, and returns a 1D `jax` array.
-		"""
-		jnp_nspace = {
-			ScalingMode.Lin: jnp.linspace,
-			ScalingMode.Geom: jnp.geomspace,
-			ScalingMode.Log: jnp.logspace,
-		}.get(self.scaling)
-		if jnp_nspace is None:
-			msg = f'ArrayFlow scaling method {self.scaling} is unsupported'
-			raise RuntimeError(msg)
-
-		return jnp_nspace
-
-	@functools.cached_property
-	def as_func(
-		self,
-	) -> typ.Callable[[int | float | complex, ...], jtyp.Inexact[jtyp.Array, ' steps']]:
-		"""Create a function that can compute the non-lazy output array as a function of the symbols in the expressions for `start` and `stop`.
-
-		Notes:
-			The ordering of the symbols is identical to `self.symbols`, which is guaranteed to be a deterministically sorted list of symbols.
-
-		Returns:
-			A `FuncFlow` that, given the input symbols defined in `self.symbols`,
-		"""
-		# Compile JAX Functions for Start/End Expressions
-		## FYI, JAX-in-JAX works perfectly fine.
-		start_jax = sp.lambdify(self.symbols, self.start, 'jax')
-		stop_jax = sp.lambdify(self.symbols, self.stop, 'jax')
-
-		# Compile ArrayGen Function
-		def gen_array(
-			*args: list[int | float | complex],
-		) -> jtyp.Inexact[jtyp.Array, ' steps']:
-			return self.array_generator(start_jax(*args), stop_jax(*args), self.steps)
-
-		# Return ArrayGen Function
-		return gen_array
-
-	@functools.cached_property
-	def as_lazy_func(self) -> FuncFlow:
-		"""Creates a `FuncFlow` using the output of `self.as_func`.
-
-		This is useful for ex. parameterizing the first array in the node graph, without binding an entire computed array.
-
-		Notes:
-			The the function enclosed in the `FuncFlow` is identical to the one returned by `self.as_func`.
-
-		Returns:
-			A `FuncFlow` containing `self.as_func`, as well as appropriate supporting settings.
-		"""
-		return FuncFlow(
-			func=self.as_func,
-			func_args=[(spux.MathType.from_expr(sym)) for sym in self.symbols],
-			supports_jax=True,
-		)
-
-	####################
-	# - Realization
-	####################
-	def realize_start(
-		self,
-		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | FuncFlow:
-		return spux.sympy_to_python(
-			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
-		)
-
-	def realize_stop(
-		self,
-		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | FuncFlow:
-		return spux.sympy_to_python(
-			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
-		)
-
-	def realize_step_size(
-		self,
-		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | FuncFlow:
-		raw_step_size = (self.realize_stop() - self.realize_start() + 1) / self.steps
-
-		if self.mathtype is spux.MathType.Integer and raw_step_size.is_integer():
-			return int(raw_step_size)
-		return raw_step_size
-
-	def realize(
-		self,
-		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-		kind: typ.Literal[FlowKind.Array, FlowKind.Func] = FlowKind.Array,
-	) -> ArrayFlow | FuncFlow:
-		"""Apply a function to the bounds, effectively rescaling the represented array.
-
-		Notes:
-			**It is presumed that the bounds are scaled with the same factor**.
-			Breaking this presumption may have unexpected results.
-
-			The scalar, unitless, complex-valuedness of the bounds must also be respected; additionally, new symbols must not be introduced.
-
-		Parameters:
-			scaler: The function that scales each bound.
-			reverse: Whether to reverse the bounds after running the `scaler`.
-
-		Returns:
-			A rescaled `RangeFlow`.
-		"""
-		if not set(self.symbols).issubset(set(symbol_values.keys())):
-			msg = f'Provided symbols ({set(symbol_values.keys())}) do not provide values for all expression symbols ({self.symbols}) that may be found in the boundary expressions (start={self.start}, end={self.end})'
-			raise ValueError(msg)
-
-		# Realize Symbols
-		realized_start = self.realize_start(symbol_values)
-		realized_stop = self.realize_stop(symbol_values)
-
-		# Return Linspace / Logspace
-		def gen_array() -> jtyp.Inexact[jtyp.Array, ' steps']:
-			return self.array_generator(realized_start, realized_stop, self.steps)
-
-		if kind == FlowKind.Array:
-			return ArrayFlow(values=gen_array(), unit=self.unit, is_sorted=True)
-		if kind == FlowKind.Func:
-			return FuncFlow(func=gen_array, supports_jax=True)
-
-		msg = f'Invalid kind: {kind}'
-		raise TypeError(msg)
-
-	@functools.cached_property
-	def realize_array(self) -> ArrayFlow:
-		return self.realize()
-
-	def __getitem__(self, subscript: slice):
-		if isinstance(subscript, slice) and self.scaling == ScalingMode.Lin:
-			# Parse Slice
-			start = subscript.start if subscript.start is not None else 0
-			stop = subscript.stop if subscript.stop is not None else self.steps
-			step = subscript.step if subscript.step is not None else 1
-
-			slice_steps = (stop - start + step - 1) // step
-
-			# Compute New Start/Stop
-			step_size = self.realize_step_size()
-			new_start = step_size * start
-			new_stop = new_start + step_size * slice_steps
-
-			return RangeFlow(
-				start=sp.S(new_start),
-				stop=sp.S(new_stop),
-				steps=slice_steps,
-				scaling=self.scaling,
-				unit=self.unit,
-				symbols=self.symbols,
-			)
-
-		raise NotImplementedError

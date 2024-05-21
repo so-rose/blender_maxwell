@@ -229,11 +229,11 @@ class DataFileExporterNode(base.MaxwellSimNode):
 		## -> Only happens if Params contains not-yet-realized symbols.
 		if has_info and has_params and params.symbols:
 			if set(self.loose_input_sockets) != {
-				sym.name for sym in params.symbols if sym.name in info.dim_names
+				dim.name for dim in params.symbols if dim in info.dims
 			}:
 				self.loose_input_sockets = {
-					sym_name: sockets.ExprSocketDef(**expr_info)
-					for sym_name, expr_info in params.sym_expr_infos(info).items()
+					dim_name: sockets.ExprSocketDef(**expr_info)
+					for dim_name, expr_info in params.sym_expr_infos(info).items()
 				}
 
 		elif self.loose_input_sockets:

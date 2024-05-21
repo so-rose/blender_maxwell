@@ -27,6 +27,7 @@ dependencies = [
     #"charset-normalizer==2.0.10",  ## Conflict with dev-dep commitizen
     "certifi==2021.10.8",
     "polars>=0.20.26",
+    "seaborn[stats]>=0.13.2",
 ]
 ## When it comes to dev-dep conflicts:
 ## -> It's okay to leave Blender-pinned deps out of prod; Blender still has them.

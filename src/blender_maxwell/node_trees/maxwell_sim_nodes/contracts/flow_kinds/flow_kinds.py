@@ -19,6 +19,7 @@ import typing as typ
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils.staticproperty import staticproperty
 
 log = logger.get(__name__)
 
@@ -51,16 +52,71 @@ class FlowKind(enum.StrEnum):
 	Capabilities = enum.auto()
 
 	# Values
-	Value = enum.auto()
-	Array = enum.auto()
+	Value = enum.auto()  ## 'value'
+	Array = enum.auto()  ## 'array'
 
 	# Lazy
-	Func = enum.auto()
-	Range = enum.auto()
+	Func = enum.auto()  ## 'lazy_func'
+	Range = enum.auto()  ## 'lazy_range'
 
 	# Auxiliary
-	Params = enum.auto()
-	Info = enum.auto()
+	Params = enum.auto()  ## 'params'
+	Info = enum.auto()  ## 'info'
+
+	####################
+	# - UI
+	####################
+	@staticmethod
+	def to_name(v: typ.Self) -> str:
+		return {
+			FlowKind.Capabilities: 'Capabilities',
+			# Values
+			FlowKind.Value: 'Value',
+			FlowKind.Array: 'Array',
+			# Lazy
+			FlowKind.Range: 'Range',
+			FlowKind.Func: 'Func',
+			# Auxiliary
+			FlowKind.Params: 'Params',
+			FlowKind.Info: 'Info',
+		}[v]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		return ''
+
+	####################
+	# - Static Properties
+	####################
+	@staticproperty
+	def active_kinds() -> list[typ.Self]:
+		"""Return a list of `FlowKind`s that are able to be considered "active".
+
+		"Active" `FlowKind`s are considered the primary data type of a socket's flow.
+		For example, for sockets to be linkeable, their active `FlowKind` must generally match.
+		"""
+		return [
+			FlowKind.Value,
+			FlowKind.Array,
+			FlowKind.Range,
+			FlowKind.Func,
+		]
+
+	@property
+	def socket_shape(self) -> str:
+		"""Return the socket shape associated with this `FlowKind`.
+
+		**ONLY** valid for `FlowKind`s that can be considered "active".
+
+		Raises:
+			ValueError: If this `FlowKind` cannot ever be considered "active".
+		"""
+		return {
+			FlowKind.Value: 'CIRCLE',
+			FlowKind.Array: 'SQUARE',
+			FlowKind.Range: 'SQUARE',
+			FlowKind.Func: 'DIAMOND',
+		}[self]
 
 	####################
 	# - Class Methods
@@ -69,7 +125,7 @@ class FlowKind(enum.StrEnum):
 	def scale_to_unit_system(
 		cls,
 		kind: typ.Self,
-		flow_obj,
+		flow_obj: spux.SympyExpr,
 		unit_system: spux.UnitSystem,
 	):
 		# log.debug('%s: Scaling "%s" to Unit System', kind, str(flow_obj))
@@ -87,43 +143,3 @@ class FlowKind(enum.StrEnum):
 
 		msg = 'Tried to scale unknown kind'
 		raise ValueError(msg)
-
-	####################
-	# - Computed
-	####################
-	@property
-	def flow_kind(self) -> str:
-		return {
-			FlowKind.Value: FlowKind.Value,
-			FlowKind.Array: FlowKind.Array,
-			FlowKind.Func: FlowKind.Func,
-			FlowKind.Range: FlowKind.Range,
-		}[self]
-
-	@property
-	def socket_shape(self) -> str:
-		return {
-			FlowKind.Value: 'CIRCLE',
-			FlowKind.Array: 'SQUARE',
-			FlowKind.Range: 'SQUARE',
-			FlowKind.Func: 'DIAMOND',
-		}[self]
-
-	####################
-	# - Blender Enum
-	####################
-	@staticmethod
-	def to_name(v: typ.Self) -> str:
-		return {
-			FlowKind.Capabilities: 'Capabilities',
-			FlowKind.Value: 'Value',
-			FlowKind.Array: 'Array',
-			FlowKind.Range: 'Range',
-			FlowKind.Func: 'Func',
-			FlowKind.Params: 'Parameters',
-			FlowKind.Info: 'Information',
-		}[v]
-
-	@staticmethod
-	def to_icon(_: typ.Self) -> str:
-		return ''

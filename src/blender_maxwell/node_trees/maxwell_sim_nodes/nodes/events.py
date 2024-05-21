@@ -67,7 +67,7 @@ ManagedObjName: typ.TypeAlias = str
 PropName: typ.TypeAlias = str
 
 
-def event_decorator(
+def event_decorator(  # noqa: PLR0913
 	event: ct.FlowEvent,
 	callback_info: EventCallbackInfo | None,
 	stop_propagation: bool = False,
@@ -91,31 +91,42 @@ def event_decorator(
 	scale_input_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
 	scale_output_sockets: dict[ct.SocketName, UnitSystemID] = MappingProxyType({}),
 ):
-	"""Returns a decorator for a method of `MaxwellSimNode`, declaring it as able respond to events passing through a node.
+	"""Low-level decorator declaring a special "event method" of `MaxwellSimNode`, which is able to handle `ct.FlowEvent`s passing through.
+
+	Should generally be used via a high-level decorator such as `on_value_changed`.
+
+	For more about how event methods are actually registered and run, please refer to the documentation of `MaxwellSimNode`.
 
 	Parameters:
 		event: A name describing which event the decorator should respond to.
-			Set to `return_method.event`
 		callback_info: A dictionary that provides the caller with additional per-`event` information.
 			This might include parameters to help select the most appropriate method(s) to respond to an event with, or events to take after running the callback.
-		props: Set of `props` to compute, then pass to the decorated method.
 		stop_propagation: Whether or stop propagating the event through the graph after encountering this method.
 			Other methods defined on the same node will still run.
 		managed_objs: Set of `managed_objs` to retrieve, then pass to the decorated method.
+		props: Set of `props` to compute, then pass to the decorated method.
 		input_sockets: Set of `input_sockets` to compute, then pass to the decorated method.
+		input_sockets_optional: Whether an input socket is required to exist.
+			When True, lack of socket will produce `ct.FlowSignal.NoFlow`, instead of throwing an error.
 		input_socket_kinds: The `ct.FlowKind` to compute per-input-socket.
 			If an input socket isn't specified, it defaults to `ct.FlowKind.Value`.
 		output_sockets: Set of `output_sockets` to compute, then pass to the decorated method.
+		output_sockets_optional: Whether an output socket is required to exist.
+			When True, lack of socket will produce `ct.FlowSignal.NoFlow`, instead of throwing an error.
+		output_socket_kinds: The `ct.FlowKind` to compute per-output-socket.
+			If an output socket isn't specified, it defaults to `ct.FlowKind.Value`.
 		all_loose_input_sockets: Whether to compute all loose input sockets and pass them to the decorated method.
 			Used when the names of the loose input sockets are unknown, but all of their values are needed.
 		all_loose_output_sockets: Whether to compute all loose output sockets and pass them to the decorated method.
 			Used when the names of the loose output sockets are unknown, but all of their values are needed.
+		unit_systems: String identifiers under which to load a unit system, made available to the method.
+		scale_input_sockets: A mapping of input sockets to unit system string idenfiers, which causes the output of that input socket to be scaled to the given unit system.
+			This greatly simplifies the conformance of particular sockets to particular unit systems, when the socket value must be used in a unit-unaware manner.
+		scale_output_sockets: A mapping of output sockets to unit system string idenfiers, which causes the output of that input socket to be scaled to the given unit system.
+			This greatly simplifies the conformance of particular sockets to particular unit systems, when the socket value must be used in a unit-unaware manner.
 
 	Returns:
-		A decorator, which can be applied to a method of `MaxwellSimNode`.
-		When a `MaxwellSimNode` subclass initializes, such a decorated method will be picked up on.
-
-		When `event` passes through the node, then `callback_info` is used to determine
+		A decorator, which can be applied to a method of `MaxwellSimNode` to make it an "event method".
 	"""
 	req_params = (
 		{'self'}
@@ -375,7 +386,6 @@ def on_value_changed(
 	)
 
 
-## TODO: Change name to 'on_output_requested'
 def computes_output_socket(
 	output_socket_name: ct.SocketName | None,
 	kind: ct.FlowKind = ct.FlowKind.Value,

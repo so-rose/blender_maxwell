@@ -489,11 +489,11 @@ class DataFileFormat(enum.StrEnum):
 		E = DataFileFormat
 		match self:
 			case E.Csv:
-				return len(info.dim_names) + info.output_shape_len <= 2
+				return len(info.dims) + info.output.rows + info.output.cols - 1 <= 2
 			case E.Npy:
 				return True
 			case E.Txt | E.TxtGz:
-				return len(info.dim_names) + info.output_shape_len <= 2
+				return len(info.dims) + info.output.rows + info.output.cols - 1 <= 2
 
 	@property
 	def saver(
@@ -510,9 +510,9 @@ class DataFileFormat(enum.StrEnum):
 
 			# Extract Input Coordinates
 			dim_columns = {
-				dim_name: np.array(info.dim_idx_arrays[i])
-				for i, dim_name in enumerate(info.dim_names)
-			}
+				dim.name: np.array(dim_idx.realize_array)
+				for i, (dim, dim_idx) in enumerate(info.dims)
+			}  ## TODO: realize_array might not be defined on some index arrays
 
 			# Declare Function to Extract Output Values
 			output_columns = {}
@@ -524,14 +524,14 @@ class DataFileFormat(enum.StrEnum):
 				output_idx_str = f'[{output_idx}]' if use_output_idx else ''
 				if bool(np.any(np.iscomplex(data_col))):
 					output_columns |= {
-						f'{info.output_name}{output_idx_str}_re': np.real(data_col),
-						f'{info.output_name}{output_idx_str}_im': np.imag(data_col),
+						f'{info.output.name}{output_idx_str}_re': np.real(data_col),
+						f'{info.output.name}{output_idx_str}_im': np.imag(data_col),
 					}
 
 				# Else: Use Array Directly
 				else:
 					output_columns |= {
-						f'{info.output_name}{output_idx_str}': data_col,
+						f'{info.output.name}{output_idx_str}': data_col,
 					}
 
 				## TODO: Maybe a check to ensure dtype!=object?
@@ -605,11 +605,11 @@ class DataFileFormat(enum.StrEnum):
 		E = DataFileFormat
 		match self:
 			case E.Csv:
-				return len(info.dim_names) + (info.output_shape_len + 1) <= 2
+				return len(info.dims) + (info.output.rows + input.outputs.cols - 1) <= 2
 			case E.Npy:
 				return True
 			case E.Txt | E.TxtGz:
-				return len(info.dim_names) + (info.output_shape_len + 1) <= 2
+				return len(info.dims) + (info.output.rows + info.output.cols - 1) <= 2
 
 	def supports_metadata(self) -> bool:
 		E = DataFileFormat

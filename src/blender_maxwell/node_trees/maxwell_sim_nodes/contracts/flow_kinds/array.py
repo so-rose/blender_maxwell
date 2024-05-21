@@ -29,9 +29,12 @@ from blender_maxwell.utils import logger
 log = logger.get(__name__)
 
 
+# TODO: Our handling of 'is_sorted' is sloppy and probably wrong.
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class ArrayFlow:
-	"""A simple, flat array of values with an optionally-attached unit.
+	"""A homogeneous, realized array of numerical values with an optionally-attached unit and sort-tracking.
+
+	While the principle is simple, arrays-with-units ends up being a powerful basis for derived and computed features/methods/processing.
 
 	Attributes:
 		values: An ND array-like object of arbitrary numerical type.
@@ -44,12 +47,96 @@ class ArrayFlow:
 
 	is_sorted: bool = False
 
+	####################
+	# - Computed Properties
+	####################
+	@property
+	def is_symbolic(self) -> bool:
+		"""Always False, as ArrayFlows are never unrealized."""
+		return False
+
 	def __len__(self) -> int:
+		"""Outer length of the contained array."""
 		return len(self.values)
 
 	@functools.cached_property
 	def mathtype(self) -> spux.MathType:
+		"""Deduce the `spux.MathType` of the first element of the contained array.
+
+		This is generally a heuristic, but because `jax` enforces homogeneous arrays, this is actually a well-defined approach.
+		"""
 		return spux.MathType.from_pytype(type(self.values.item(0)))
+
+	@functools.cached_property
+	def physical_type(self) -> spux.MathType:
+		"""Deduce the `spux.PhysicalType` of the unit."""
+		return spux.PhysicalType.from_unit(self.unit)
+
+	####################
+	# - Array Features
+	####################
+	@property
+	def realize_array(self) -> jtyp.Shaped[jtyp.Array, '...']:
+		"""Standardized access to `self.values`."""
+		return self.values
+
+	@functools.cached_property
+	def shape(self) -> int:
+		"""Shape of the contained array."""
+		return self.values.shape
+
+	def __getitem__(self, subscript: slice) -> typ.Self | spux.SympyExpr:
+		"""Implement indexing and slicing in a sane way.
+
+		- **Integer Index**: For scalar output, return a `sympy` expression of the scalar multiplied by the unit, else just a sympy expression of the value.
+		- **Slice**: Slice the internal array directly, and wrap the result in a new `ArrayFlow`.
+		"""
+		if isinstance(subscript, slice):
+			return ArrayFlow(
+				values=self.values[subscript],
+				unit=self.unit,
+				is_sorted=self.is_sorted,
+			)
+
+		if isinstance(subscript, int):
+			value = self.values[subscript]
+			if len(value.shape) == 0:
+				return value * self.unit if self.unit is not None else sp.S(value)
+			return ArrayFlow(values=value, unit=self.unit, is_sorted=self.is_sorted)
+
+		raise NotImplementedError
+
+	####################
+	# - Methods
+	####################
+	def rescale(
+		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
+	) -> typ.Self:
+		"""Apply an order-preserving function to each element of the array, then (optionally) transform the result w/new unit and/or order.
+
+		An optimized expression will be built and applied to `self.values` using `sympy.lambdify()`.
+
+		Parameters:
+			rescale_func: An **order-preserving** function to apply to each array element.
+			reverse: Whether to reverse the order of the result.
+			new_unit: An (optional) new unit to scale the result to.
+		"""
+		# Compile JAX-Compatible Rescale Function
+		a = self.mathtype.sp_symbol_a
+		rescale_expr = (
+			spux.scale_to_unit(rescale_func(a * self.unit), new_unit)
+			if self.unit is not None
+			else rescale_func(a)
+		)
+		_rescale_func = sp.lambdify(a, rescale_expr, 'jax')
+		values = _rescale_func(self.values)
+
+		# Return ArrayFlow
+		return ArrayFlow(
+			values=values[::-1] if reverse else values,
+			unit=new_unit,
+			is_sorted=self.is_sorted,
+		)
 
 	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
 		"""Find the index of the value that is closest to the given value.
@@ -88,56 +175,26 @@ class ArrayFlow:
 
 		return right_idx
 
-	def correct_unit(self, corrected_unit: spu.Quantity) -> typ.Self:
-		if self.unit is not None:
-			return ArrayFlow(
-				values=self.values, unit=corrected_unit, is_sorted=self.is_sorted
-			)
+	####################
+	# - Unit Transforms
+	####################
+	def correct_unit(self, unit: spux.Unit) -> typ.Self:
+		"""Simply replace the existing unit with the given one.
 
-		msg = f'Tried to correct unit of unitless LazyDataValueRange "{corrected_unit}"'
-		raise ValueError(msg)
+		Parameters:
+			corrected_unit: The new unit to insert.
+				**MUST** be associable with a well-defined `PhysicalType`.
+		"""
+		return ArrayFlow(values=self.values, unit=unit, is_sorted=self.is_sorted)
 
-	def rescale_to_unit(self, unit: spu.Quantity | None) -> typ.Self:
-		## TODO: Cache by unit would be a very nice speedup for Viz node.
-		if self.unit is not None:
-			return ArrayFlow(
-				values=float(spux.scaling_factor(self.unit, unit)) * self.values,
-				unit=unit,
-				is_sorted=self.is_sorted,
-			)
+	def rescale_to_unit(self, new_unit: spux.Unit | None) -> typ.Self:
+		"""Rescale the `ArrayFlow` to be expressed in the given unit.
 
-		if unit is None:
-			return self
+		Parameters:
+			corrected_unit: The new unit to insert.
+				**MUST** be associable with a well-defined `PhysicalType`.
+		"""
+		return self.rescale(lambda v: v, new_unit=new_unit)
 
-		msg = f'Tried to rescale unitless LazyDataValueRange to unit {unit}'
-		raise ValueError(msg)
-
-	def rescale(
-		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
-	) -> typ.Self:
-		# Compile JAX-Compatible Rescale Function
-		a = sp.Symbol('a')
-		rescale_expr = (
-			spux.scale_to_unit(rescale_func(a * self.unit), new_unit)
-			if self.unit is not None
-			else rescale_func(a * self.unit)
-		)
-		_rescale_func = sp.lambdify(a, rescale_expr, 'jax')
-		values = _rescale_func(self.values)
-
-		# Return ArrayFlow
-		return ArrayFlow(
-			values=values[::-1] if reverse else values,
-			unit=new_unit,
-			is_sorted=self.is_sorted,
-		)
-
-	def __getitem__(self, subscript: slice):
-		if isinstance(subscript, slice):
-			return ArrayFlow(
-				values=self.values[subscript],
-				unit=self.unit,
-				is_sorted=self.is_sorted,
-			)
-
+	def rescale_to_unit_system(self, unit_system: spux.Unit) -> typ.Self:
 		raise NotImplementedError

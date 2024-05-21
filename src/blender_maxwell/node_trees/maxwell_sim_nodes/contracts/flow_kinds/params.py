@@ -22,27 +22,14 @@ from types import MappingProxyType
 import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import logger, sim_symbols
 
+from .expr_info import ExprInfo
 from .flow_kinds import FlowKind
-from .info import InfoFlow
+
+# from .info import InfoFlow
 
 log = logger.get(__name__)
-
-
-class ExprInfo(typ.TypedDict):
-	active_kind: FlowKind
-	size: spux.NumberSize1D
-	mathtype: spux.MathType
-	physical_type: spux.PhysicalType
-
-	# Value
-	default_value: spux.SympyExpr
-
-	# Range
-	default_min: spux.SympyExpr
-	default_max: spux.SympyExpr
-	default_steps: int
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -50,7 +37,7 @@ class ParamsFlow:
 	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
 	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
 
-	symbols: frozenset[spux.Symbol] = frozenset()
+	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
 
 	@functools.cached_property
 	def sorted_symbols(self) -> list[sp.Symbol]:
@@ -66,21 +53,18 @@ class ParamsFlow:
 	####################
 	def scaled_func_args(
 		self,
-		unit_system: spux.UnitSystem,
-		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
+		unit_system: spux.UnitSystem | None = None,
+		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
+			{}
+		),
 	):
 		"""Realize the function arguments contained in this `ParamsFlow`, making it ready for insertion into `Func.func()`.
 
-		For all `arg`s in `self.func_args`, the following operations are performed:
-		- **Unit System**: If `arg`
-
+		For all `arg`s in `self.func_args`, the following operations are performed.
 
 		Notes:
 			This method is created for the purpose of being able to make this exact call in an `events.on_value_changed` method:
-
 		"""
-
-		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
 		if not all(sym in self.symbols for sym in symbol_values):
 			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
 			raise ValueError(msg)
@@ -97,7 +81,7 @@ class ParamsFlow:
 
 	def scaled_func_kwargs(
 		self,
-		unit_system: spux.UnitSystem,
+		unit_system: spux.UnitSystem | None = None,
 		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
 	):
 		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
@@ -145,9 +129,7 @@ class ParamsFlow:
 	####################
 	# - Generate ExprSocketDef
 	####################
-	def sym_expr_infos(
-		self, info: InfoFlow, use_range: bool = False
-	) -> dict[str, ExprInfo]:
+	def sym_expr_infos(self, info, use_range: bool = False) -> dict[str, ExprInfo]:
 		"""Generate all information needed to define expressions that realize all symbolic parameters in this `ParamsFlow`.
 
 		Many nodes need actual data, and as such, they require that the user select actual values for any symbols in the `ParamsFlow`.
@@ -169,26 +151,35 @@ class ParamsFlow:
 
 		The `ExprInfo`s can be directly defererenced `**expr_info`)
 		"""
+		for sim_sym in self.sorted_symbols:
+			if use_range and sim_sym.mathtype is spux.MathType.Complex:
+				msg = 'No support for complex range in ExprInfo'
+				raise NotImplementedError(msg)
+			if use_range and (sim_sym.rows > 1 or sim_sym.cols > 1):
+				msg = 'No support for non-scalar elements of range in ExprInfo'
+				raise NotImplementedError(msg)
+			if sim_sym.rows > 3 or sim_sym.cols > 1:
+				msg = 'No support for >Vec3 / Matrix values in ExprInfo'
+				raise NotImplementedError(msg)
 		return {
-			sym.name: {
+			sim_sym.name: {
 				# Declare Kind/Size
 				## -> Kind: Value prevents user-alteration of config.
 				## -> Size: Always scalar, since symbols are scalar (for now).
-				'active_kind': FlowKind.Value,
+				'active_kind': FlowKind.Value if not use_range else FlowKind.Range,
 				'size': spux.NumberSize1D.Scalar,
 				# Declare MathType/PhysicalType
 				## -> MathType: Lookup symbol name in info dimensions.
 				## -> PhysicalType: Same.
-				'mathtype': info.dim_mathtypes[sym.name],
-				'physical_type': info.dim_physical_types[sym.name],
-				# TODO: Default Values
+				'mathtype': self.dims[sim_sym].mathtype,
+				'physical_type': self.dims[sim_sym].physical_type,
+				# TODO: Default Value
 				# FlowKind.Value: Default Value
 				#'default_value':
 				# FlowKind.Range: Default Min/Max/Steps
-				#'default_min':
-				#'default_max':
-				#'default_steps':
+				'default_min': sim_sym.domain.start,
+				'default_max': sim_sym.domain.end,
+				'default_steps': 50,
 			}
-			for sym in self.sorted_symbols
-			if sym.name in info.dim_names
+			for sim_sym in self.sorted_symbols
 		}

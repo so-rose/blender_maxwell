@@ -107,32 +107,31 @@ class TransformOperation(enum.StrEnum):
 
 		# Covariant Transform
 		## Freq <-> VacWL
-		for dim_name in info.dim_names:
-			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
+		for dim in info.dims:
+			if dim.physical_type == spux.PhysicalType.Freq:
 				operations.append(TO.FreqToVacWL)
 
-			if info.dim_physical_types[dim_name] == spux.PhysicalType.Freq:
+			if dim.physical_type == spux.PhysicalType.Freq:
 				operations.append(TO.VacWLToFreq)
 
 		# Fold
 		## (Last) Int Dim (=2) to Complex
-		if len(info.dim_names) >= 1:
-			last_dim_name = info.dim_names[-1]
-			if info.dim_lens[last_dim_name] == 2:  # noqa: PLR2004
+		if len(info.dims) >= 1:
+			if not info.has_idx_labels(info.last_dim) and len(info.last_dim) == 2:  # noqa: PLR2004
 				operations.append(TO.IntDimToComplex)
 
 		## To Vector
-		if len(info.dim_names) >= 1:
+		if len(info.dims) >= 1:
 			operations.append(TO.DimToVec)
 
 		## To Matrix
-		if len(info.dim_names) >= 2:  # noqa: PLR2004
+		if len(info.dims) >= 2:  # noqa: PLR2004
 			operations.append(TO.DimsToMat)
 
 		# Fourier
 		## 1D Fourier
-		if info.dim_names:
-			last_physical_type = info.dim_physical_types[info.dim_names[-1]]
+		if info.dims:
+			last_physical_type = info.last_dim.physical_type
 			if last_physical_type == spux.PhysicalType.Time:
 				operations.append(TO.FFT1D)
 			if last_physical_type == spux.PhysicalType.Freq:
@@ -188,15 +187,15 @@ class TransformOperation(enum.StrEnum):
 		unit: spux.Unit | None = None,
 	) -> ct.InfoFlow | None:
 		TO = TransformOperation
-		if not info.dim_names:
+		if not info.dims:
 			return None
 		return {
-			# Index
+			# Covariant Transform
 			TO.FreqToVacWL: lambda: info.replace_dim(
-				(f_dim := info.dim_names[-1]),
+				(f_dim := info.last_dim),
 				[
-					'wl',
-					info.dim_idx[f_dim].rescale(
+					sim_symbols.wl(spu.nanometer),
+					info.dims[f_dim].rescale(
 						lambda el: sci_constants.vac_speed_of_light / el,
 						reverse=True,
 						new_unit=spu.nanometer,
@@ -204,10 +203,10 @@ class TransformOperation(enum.StrEnum):
 				],
 			),
 			TO.VacWLToFreq: lambda: info.replace_dim(
-				(wl_dim := info.dim_names[-1]),
+				(wl_dim := info.last_dim),
 				[
-					'f',
-					info.dim_idx[wl_dim].rescale(
+					sim_symbols.freq(spux.THz),
+					info.dims[wl_dim].rescale(
 						lambda el: sci_constants.vac_speed_of_light / el,
 						reverse=True,
 						new_unit=spux.THz,
@@ -215,24 +214,24 @@ class TransformOperation(enum.StrEnum):
 				],
 			),
 			# Fold
-			TO.IntDimToComplex: lambda: info.delete_dimension(
-				info.dim_names[-1]
-			).set_output_mathtype(spux.MathType.Complex),
-			TO.DimToVec: lambda: info.shift_last_input,
-			TO.DimsToMat: lambda: info.shift_last_input.shift_last_input,
+			TO.IntDimToComplex: lambda: info.delete_dim(info.last_dim).update_output(
+				mathtype=spux.MathType.Complex
+			),
+			TO.DimToVec: lambda: info.fold_last_input(),
+			TO.DimsToMat: lambda: info.fold_last_input().fold_last_input(),
 			# Fourier
 			TO.FFT1D: lambda: info.replace_dim(
-				info.dim_names[-1],
+				info.last_dim,
 				[
-					'f',
-					ct.RangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.hertz),
+					sim_symbols.freq(spux.THz),
+					None,
 				],
 			),
 			TO.InvFFT1D: info.replace_dim(
-				info.dim_names[-1],
+				info.last_dim,
 				[
-					't',
-					ct.RangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.second),
+					sim_symbols.t(spu.second),
+					None,
 				],
 			),
 		}.get(self, lambda: info)()

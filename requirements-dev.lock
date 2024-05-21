@@ -81,6 +81,7 @@ locket==1.0.0
 markupsafe==2.1.5
     # via jinja2
 matplotlib==3.8.3
+    # via seaborn
     # via tidy3d
 ml-dtypes==0.4.0
     # via jax
@@ -102,8 +103,11 @@ numpy==1.24.3
     # via ml-dtypes
     # via numba
     # via opt-einsum
+    # via patsy
     # via scipy
+    # via seaborn
     # via shapely
+    # via statsmodels
     # via tidy3d
     # via trimesh
     # via xarray
@@ -114,11 +118,16 @@ packaging==24.0
     # via dask
     # via h5netcdf
     # via matplotlib
+    # via statsmodels
     # via xarray
 pandas==2.2.1
+    # via seaborn
+    # via statsmodels
     # via xarray
 partd==1.4.1
     # via dask
+patsy==0.5.6
+    # via statsmodels
 pillow==10.2.0
     # via matplotlib
 platformdirs==4.2.1
@@ -167,13 +176,19 @@ s3transfer==0.5.2
 scipy==1.12.0
     # via jax
     # via jaxlib
+    # via seaborn
+    # via statsmodels
     # via tidy3d
+seaborn==0.13.2
 setuptools==69.5.1
     # via nodeenv
 shapely==2.0.3
     # via tidy3d
 six==1.16.0
+    # via patsy
     # via python-dateutil
+statsmodels==0.14.2
+    # via seaborn
 sympy==1.12
 termcolor==2.4.0
     # via commitizen
