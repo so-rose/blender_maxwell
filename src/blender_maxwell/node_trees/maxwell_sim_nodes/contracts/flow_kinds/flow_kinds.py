@@ -42,7 +42,7 @@ class FlowKind(enum.StrEnum):
 			However, for any other array-like variants (or sockets that only represent array-like objects), `Array` should be defined manually.
 		LazyValueFunc: A composable function.
 			Can be used to represent computations for which all data is not yet known, or for which just-in-time compilation can drastically increase performance.
-		LazyArrayRange: An object that generates an `Array` from range information (start/stop/step/spacing).
+		Range: An object that generates an `Array` from range information (start/stop/step/spacing).
 			This should be used instead of `Array` whenever possible.
 		Param: A dictionary providing particular parameters for a lazy value.
 		Info: An dictionary providing extra context about any aspect of flow.
@@ -56,7 +56,7 @@ class FlowKind(enum.StrEnum):
 
 	# Lazy
 	LazyValueFunc = enum.auto()
-	LazyArrayRange = enum.auto()
+	Range = enum.auto()
 
 	# Auxiliary
 	Params = enum.auto()
@@ -79,7 +79,7 @@ class FlowKind(enum.StrEnum):
 				flow_obj,
 				unit_system,
 			)
-		if kind == FlowKind.LazyArrayRange:
+		if kind == FlowKind.Range:
 			return flow_obj.rescale_to_unit_system(unit_system)
 
 		if kind == FlowKind.Params:
@@ -97,7 +97,7 @@ class FlowKind(enum.StrEnum):
 			FlowKind.Value: FlowKind.Value,
 			FlowKind.Array: FlowKind.Array,
 			FlowKind.LazyValueFunc: FlowKind.LazyValueFunc,
-			FlowKind.LazyArrayRange: FlowKind.LazyArrayRange,
+			FlowKind.Range: FlowKind.Range,
 		}[self]
 
 	@property
@@ -105,7 +105,7 @@ class FlowKind(enum.StrEnum):
 		return {
 			FlowKind.Value: 'CIRCLE',
 			FlowKind.Array: 'SQUARE',
-			FlowKind.LazyArrayRange: 'SQUARE',
+			FlowKind.Range: 'SQUARE',
 			FlowKind.LazyValueFunc: 'DIAMOND',
 		}[self]
 
@@ -118,7 +118,7 @@ class FlowKind(enum.StrEnum):
 			FlowKind.Capabilities: 'Capabilities',
 			FlowKind.Value: 'Value',
 			FlowKind.Array: 'Array',
-			FlowKind.LazyArrayRange: 'Range',
+			FlowKind.Range: 'Range',
 			FlowKind.LazyValueFunc: 'Func',
 			FlowKind.Params: 'Parameters',
 			FlowKind.Info: 'Information',

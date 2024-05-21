@@ -115,11 +115,11 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	output_sockets: typ.ClassVar = {
 		'Medium': sockets.MaxwellMediumSocketDef(),
 		'Valid Freqs': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyArrayRange,
+			active_kind=ct.FlowKind.Range,
 			physical_type=spux.PhysicalType.Freq,
 		),
 		'Valid WLs': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyArrayRange,
+			active_kind=ct.FlowKind.Range,
 			physical_type=spux.PhysicalType.Length,
 		),
 	}
@@ -254,11 +254,11 @@ class LibraryMediumNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Valid Freqs',
-		kind=ct.FlowKind.LazyArrayRange,
+		kind=ct.FlowKind.Range,
 		props={'freq_range'},
 	)
 	def compute_valid_freqs_lazy(self, props) -> sp.Expr:
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=props['freq_range'][0] / spux.THz,
 			stop=props['freq_range'][1] / spux.THz,
 			steps=0,
@@ -268,11 +268,11 @@ class LibraryMediumNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Valid WLs',
-		kind=ct.FlowKind.LazyArrayRange,
+		kind=ct.FlowKind.Range,
 		props={'wl_range'},
 	)
 	def compute_valid_wls_lazy(self, props) -> sp.Expr:
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=props['wl_range'][0] / spu.nm,
 			stop=props['wl_range'][0] / spu.nm,
 			steps=0,

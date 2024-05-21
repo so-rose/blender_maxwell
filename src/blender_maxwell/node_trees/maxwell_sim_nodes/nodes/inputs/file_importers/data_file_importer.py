@@ -204,7 +204,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			return ct.InfoFlow(
 				dim_names=dim_names,  ## TODO: User
 				dim_idx={
-					dim_name: ct.LazyArrayRangeFlow(
+					dim_name: ct.RangeFlow(
 						start=sp.S(0),  ## TODO: User
 						stop=sp.S(shape[i] - 1),  ## TODO: User
 						steps=shape[dim_names.index(dim_name)],

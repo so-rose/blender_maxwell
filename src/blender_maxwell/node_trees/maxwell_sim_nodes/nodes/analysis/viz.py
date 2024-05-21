@@ -337,7 +337,7 @@ class VizNode(base.MaxwellSimNode):
 			}:
 				self.loose_input_sockets = {
 					sym.name: sockets.ExprSocketDef(
-						active_kind=ct.FlowKind.LazyArrayRange,
+						active_kind=ct.FlowKind.Range,
 						size=spux.NumberSize1D.Scalar,
 						mathtype=info.dim_mathtypes[sym.name],
 						physical_type=info.dim_physical_types[sym.name],
@@ -409,7 +409,7 @@ class VizNode(base.MaxwellSimNode):
 		):
 			return
 
-		# Compute LazyArrayRanges for Symbols from Loose Sockets
+		# Compute Ranges for Symbols from Loose Sockets
 		## -> These are the concrete values of the symbol for plotting.
 		## -> In a quite nice turn of events, all this is cached lookups.
 		## -> ...Unless something changed, in which case, well. It changed.

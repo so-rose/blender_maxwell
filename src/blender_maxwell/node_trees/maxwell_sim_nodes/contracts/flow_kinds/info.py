@@ -24,7 +24,7 @@ from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
 from .array import ArrayFlow
-from .lazy_array_range import LazyArrayRangeFlow
+from .lazy_range import RangeFlow
 
 log = logger.get(__name__)
 
@@ -35,7 +35,7 @@ class InfoFlow:
 	# - Covariant Input
 	####################
 	dim_names: list[str] = dataclasses.field(default_factory=list)
-	dim_idx: dict[str, ArrayFlow | LazyArrayRangeFlow] = dataclasses.field(
+	dim_idx: dict[str, ArrayFlow | RangeFlow] = dataclasses.field(
 		default_factory=dict
 	)  ## TODO: Rename to dim_idxs
 
@@ -43,7 +43,7 @@ class InfoFlow:
 	def dim_has_coords(self) -> dict[str, int]:
 		return {
 			dim_name: not (
-				isinstance(dim_idx, LazyArrayRangeFlow)
+				isinstance(dim_idx, RangeFlow)
 				and (dim_idx.start.is_infinite or dim_idx.stop.is_infinite)
 			)
 			for dim_name, dim_idx in self.dim_idx.items()
@@ -74,7 +74,7 @@ class InfoFlow:
 	def dim_idx_arrays(self) -> list[jax.Array]:
 		return [
 			dim_idx.realize().values
-			if isinstance(dim_idx, LazyArrayRangeFlow)
+			if isinstance(dim_idx, RangeFlow)
 			else dim_idx.values
 			for dim_idx in self.dim_idx.values()
 		]
@@ -129,7 +129,7 @@ class InfoFlow:
 		)
 
 	def replace_dim(
-		self, old_dim_name: str, new_dim_idx: tuple[str, ArrayFlow | LazyArrayRangeFlow]
+		self, old_dim_name: str, new_dim_idx: tuple[str, ArrayFlow | RangeFlow]
 	) -> typ.Self:
 		"""Replace a dimension (and its indexing) with a new name and index array/range."""
 		return InfoFlow(
@@ -151,7 +151,7 @@ class InfoFlow:
 			output_unit=self.output_unit,
 		)
 
-	def rescale_dim_idxs(self, new_dim_idxs: dict[str, LazyArrayRangeFlow]) -> typ.Self:
+	def rescale_dim_idxs(self, new_dim_idxs: dict[str, RangeFlow]) -> typ.Self:
 		"""Replace several dimensional indices with new index arrays/ranges."""
 		return InfoFlow(
 			# Dimensions

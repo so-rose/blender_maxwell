@@ -100,30 +100,26 @@ class WaveConstantNode(base.MaxwellSimNode):
 		run_on_init=True,
 	)
 	def on_use_range_changed(self, props: dict) -> None:
-		"""Synchronize the `active_kind` of input/output sockets, to either produce a `ct.FlowKind.Value` or a `ct.FlowKind.LazyArrayRange`."""
+		"""Synchronize the `active_kind` of input/output sockets, to either produce a `ct.FlowKind.Value` or a `ct.FlowKind.Range`."""
 		if self.inputs.get('WL') is not None:
 			active_input = self.inputs['WL']
 		else:
 			active_input = self.inputs['Freq']
 
 		# Modify Active Kind(s)
-		## Input active_kind -> Value/LazyArrayRange
-		active_input_uses_range = active_input.active_kind == ct.FlowKind.LazyArrayRange
+		## Input active_kind -> Value/Range
+		active_input_uses_range = active_input.active_kind == ct.FlowKind.Range
 		if active_input_uses_range != props['use_range']:
 			active_input.active_kind = (
-				ct.FlowKind.LazyArrayRange if props['use_range'] else ct.FlowKind.Value
+				ct.FlowKind.Range if props['use_range'] else ct.FlowKind.Value
 			)
 
-		## Output active_kind -> Value/LazyArrayRange
+		## Output active_kind -> Value/Range
 		for active_output in self.outputs.values():
-			active_output_uses_range = (
-				active_output.active_kind == ct.FlowKind.LazyArrayRange
-			)
+			active_output_uses_range = active_output.active_kind == ct.FlowKind.Range
 			if active_output_uses_range != props['use_range']:
 				active_output.active_kind = (
-					ct.FlowKind.LazyArrayRange
-					if props['use_range']
-					else ct.FlowKind.Value
+					ct.FlowKind.Range if props['use_range'] else ct.FlowKind.Value
 				)
 
 	####################
@@ -161,11 +157,11 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.FlowKind.LazyArrayRange,
+		kind=ct.FlowKind.Range,
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
-			'WL': ct.FlowKind.LazyArrayRange,
-			'Freq': ct.FlowKind.LazyArrayRange,
+			'WL': ct.FlowKind.Range,
+			'Freq': ct.FlowKind.Range,
 		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
@@ -176,7 +172,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 			return input_sockets['WL']
 
 		freq = input_sockets['Freq']
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=spux.scale_to_unit(
 				sci_constants.vac_speed_of_light / (freq.stop * freq.unit), spu.um
 			),
@@ -190,11 +186,11 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.FlowKind.LazyArrayRange,
+		kind=ct.FlowKind.Range,
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
-			'WL': ct.FlowKind.LazyArrayRange,
-			'Freq': ct.FlowKind.LazyArrayRange,
+			'WL': ct.FlowKind.Range,
+			'Freq': ct.FlowKind.Range,
 		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
@@ -205,7 +201,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 			return input_sockets['Freq']
 
 		wl = input_sockets['WL']
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=spux.scale_to_unit(
 				sci_constants.vac_speed_of_light / (wl.stop * wl.unit), spux.THz
 			),

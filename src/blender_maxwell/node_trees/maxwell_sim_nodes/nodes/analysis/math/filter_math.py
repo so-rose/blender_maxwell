@@ -227,7 +227,7 @@ class FilterOperation(enum.StrEnum):
 		dim_0: str,
 		dim_1: str,
 		slice_tuple: tuple[int, int, int] | None = None,
-		corrected_dim: tuple[str, tuple[str, ct.ArrayFlow | ct.LazyArrayRangeFlow]]
+		corrected_dim: tuple[str, tuple[str, ct.ArrayFlow | ct.RangeFlow]]
 		| None = None,
 	):
 		FO = FilterOperation

@@ -39,7 +39,7 @@ class ExprInfo(typ.TypedDict):
 	# Value
 	default_value: spux.SympyExpr
 
-	# LazyArrayRange
+	# Range
 	default_min: spux.SympyExpr
 	default_max: spux.SympyExpr
 	default_steps: int
@@ -184,7 +184,7 @@ class ParamsFlow:
 				# TODO: Default Values
 				# FlowKind.Value: Default Value
 				#'default_value':
-				# FlowKind.LazyArrayRange: Default Min/Max/Steps
+				# FlowKind.Range: Default Min/Max/Steps
 				#'default_min':
 				#'default_max':
 				#'default_steps':

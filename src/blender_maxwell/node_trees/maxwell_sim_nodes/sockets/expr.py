@@ -169,7 +169,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)), float_prec=4
 	)
 
-	# UI: LazyArrayRange
+	# UI: Range
 	steps: int = bl_cache.BLField(2, soft_min=2, abs_min=0)
 	scaling: ct.ScalingMode = bl_cache.BLField(ct.ScalingMode.Lin)
 	## Expression
@@ -248,7 +248,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				and not self.symbols
 			):
 				self.value = self.value.subs({self.unit: prev_unit})
-				self.lazy_array_range = self.lazy_array_range.correct_unit(prev_unit)
+				self.lazy_range = self.lazy_range.correct_unit(prev_unit)
 
 			self.prev_unit = self.active_unit
 
@@ -454,20 +454,20 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					)
 
 	####################
-	# - FlowKind: LazyArrayRange
+	# - FlowKind: Range
 	####################
 	@property
-	def lazy_array_range(self) -> ct.LazyArrayRangeFlow:
+	def lazy_range(self) -> ct.RangeFlow:
 		"""Return the not-yet-computed uniform array defined by the socket.
 
 		Notes:
-			Called to compute the internal `FlowKind.LazyArrayRange` of this socket.
+			Called to compute the internal `FlowKind.Range` of this socket.
 
 		Return:
 			The range of lengths, which uses no symbols.
 		"""
 		if self.symbols:
-			return ct.LazyArrayRangeFlow(
+			return ct.RangeFlow(
 				start=self.raw_min_sp,
 				stop=self.raw_max_sp,
 				steps=self.steps,
@@ -493,7 +493,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			],
 		}[self.mathtype]()
 
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=min_bound,
 			stop=max_bound,
 			steps=self.steps,
@@ -501,12 +501,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			unit=self.unit,
 		)
 
-	@lazy_array_range.setter
-	def lazy_array_range(self, value: ct.LazyArrayRangeFlow) -> None:
+	@lazy_range.setter
+	def lazy_range(self, value: ct.RangeFlow) -> None:
 		"""Set the not-yet-computed uniform array defined by the socket.
 
 		Notes:
-			Called to compute the internal `FlowKind.LazyArrayRange` of this socket.
+			Called to compute the internal `FlowKind.Range` of this socket.
 		"""
 		self.steps = value.steps
 		self.scaling = value.scaling
@@ -609,7 +609,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		The output name/size/mathtype/unit corresponds directly the `ExprSocket`.
 
-		If `self.symbols` has entries, then these will propagate as dimensions with unresolvable `LazyArrayRangeFlow` index descriptions.
+		If `self.symbols` has entries, then these will propagate as dimensions with unresolvable `RangeFlow` index descriptions.
 		The index range will be $(-\infty,\infty)$, with $0$ steps and no unit.
 		The order/naming matches `self.params` and `self.lazy_value_func`.
 
@@ -619,7 +619,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			return ct.InfoFlow(
 				dim_names=[sym.name for sym in self.sorted_symbols],
 				dim_idx={
-					sym.name: ct.LazyArrayRangeFlow(
+					sym.name: ct.RangeFlow(
 						start=-sp.oo if _check_sym_oo(sym) else -sp.zoo,
 						stop=sp.oo if _check_sym_oo(sym) else sp.zoo,
 						steps=0,
@@ -805,13 +805,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			for sym in self.symbols:
 				col.label(text=spux.pretty_symbol(sym))
 
-	def draw_lazy_array_range(self, col: bpy.types.UILayout) -> None:
+	def draw_lazy_range(self, col: bpy.types.UILayout) -> None:
 		"""Draw the socket body for a simple, uniform range of values between two values/expressions.
 
-		Drawn when `self.active_kind == FlowKind.LazyArrayRange`.
+		Drawn when `self.active_kind == FlowKind.Range`.
 
 		Notes:
-			If `self.steps == 0`, then the `LazyArrayRange` is considered to have a to-be-determined number of steps.
+			If `self.steps == 0`, then the `Range` is considered to have a to-be-determined number of steps.
 			As such, `self.steps` won't be exposed in the UI.
 		"""
 		if self.symbols:
@@ -925,7 +925,7 @@ class ExprSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.Expr
 	active_kind: typ.Literal[
 		ct.FlowKind.Value,
-		ct.FlowKind.LazyArrayRange,
+		ct.FlowKind.Range,
 		ct.FlowKind.Array,
 		ct.FlowKind.LazyValueFunc,
 	] = ct.FlowKind.Value
@@ -947,7 +947,7 @@ class ExprSocketDef(base.SocketDef):
 	abs_min: spux.SympyExpr | None = None
 	abs_max: spux.SympyExpr | None = None
 
-	# FlowKind: LazyArrayRange
+	# FlowKind: Range
 	default_min: spux.SympyExpr = 0
 	default_max: spux.SympyExpr = 1
 	default_steps: int = 2
@@ -1107,7 +1107,7 @@ class ExprSocketDef(base.SocketDef):
 		return self
 
 	####################
-	# - Parse FlowKind.LazyArrayRange
+	# - Parse FlowKind.Range
 	####################
 	@pyd.field_validator('default_steps')
 	@classmethod
@@ -1120,8 +1120,8 @@ class ExprSocketDef(base.SocketDef):
 		return v
 
 	@pyd.model_validator(mode='after')
-	def parse_default_lazy_array_range_numbers(self) -> typ.Self:
-		"""Guarantees that the default `ct.LazyArrayRange` bounds are sympy expressions.
+	def parse_default_lazy_range_numbers(self) -> typ.Self:
+		"""Guarantees that the default `ct.Range` bounds are sympy expressions.
 
 		If `self.default_value` is a scalar Python type, it will be coerced into the corresponding Sympy type using `sp.S`.
 
@@ -1150,7 +1150,7 @@ class ExprSocketDef(base.SocketDef):
 			if mathtype_guide == 'expr':
 				dv_mathtype = spux.MathType.from_expr(bound)
 				if not self.mathtype.is_compatible(dv_mathtype):
-					msg = f'ExprSocket: Mathtype {dv_mathtype} of a default LazyArrayRange min or max expression {bound} (type {type(self.default_value)}) is incompatible with socket MathType {self.mathtype}'
+					msg = f'ExprSocket: Mathtype {dv_mathtype} of a default Range min or max expression {bound} (type {type(self.default_value)}) is incompatible with socket MathType {self.mathtype}'
 					raise ValueError(msg)
 
 		if new_bounds[0] is not None:
@@ -1161,8 +1161,8 @@ class ExprSocketDef(base.SocketDef):
 		return self
 
 	@pyd.model_validator(mode='after')
-	def parse_default_lazy_array_range_size(self) -> typ.Self:
-		"""Guarantees that the default `ct.LazyArrayRange` bounds are unshaped.
+	def parse_default_lazy_range_size(self) -> typ.Self:
+		"""Guarantees that the default `ct.Range` bounds are unshaped.
 
 		Raises:
 			ValueError: If `self.default_min` or `self.default_max` are shaped.
@@ -1170,16 +1170,16 @@ class ExprSocketDef(base.SocketDef):
 		# Check ActiveKind and Size
 		## -> NOTE: This doesn't protect against dynamic changes to either.
 		if (
-			self.active_kind == ct.FlowKind.LazyArrayRange
+			self.active_kind == ct.FlowKind.Range
 			and self.size is not spux.NumberSize1D.Scalar
 		):
-			msg = "Can't have a non-Scalar size when LazyArrayRange is set as the active kind."
+			msg = "Can't have a non-Scalar size when Range is set as the active kind."
 			raise ValueError(msg)
 
 		# Check that Bounds are Shapeless
 		for bound in [self.default_min, self.default_max]:
 			if hasattr(bound, 'shape'):
-				msg = f'ExprSocket: A default bound {bound} (type {type(bound)}) has a shape, but LazyArrayRange supports no shape in ExprSockets.'
+				msg = f'ExprSocket: A default bound {bound} (type {type(bound)}) has a shape, but Range supports no shape in ExprSockets.'
 				raise ValueError(msg)
 
 		return self
@@ -1235,9 +1235,9 @@ class ExprSocketDef(base.SocketDef):
 
 		bl_socket.prev_unit = bl_socket.active_unit
 
-		# FlowKind.LazyArrayRange
+		# FlowKind.Range
 		## -> We can directly pass None to unit.
-		bl_socket.lazy_array_range = ct.LazyArrayRangeFlow(
+		bl_socket.lazy_range = ct.RangeFlow(
 			start=self.default_min,
 			stop=self.default_max,
 			steps=self.default_steps,

@@ -74,11 +74,11 @@ class SceneNode(base.MaxwellSimNode):
 		return bpy.context.scene.frame_current
 
 	@property
-	def scene_frame_range(self) -> ct.LazyArrayRangeFlow:
+	def scene_frame_range(self) -> ct.RangeFlow:
 		"""Retrieve the current start/end frame of the scene, with `steps` corresponding to single-frame steps."""
 		frame_start = bpy.context.scene.frame_start
 		frame_stop = bpy.context.scene.frame_end
-		return ct.LazyArrayRangeFlow(
+		return ct.RangeFlow(
 			start=frame_start,
 			stop=frame_stop,
 			steps=frame_stop - frame_start + 1,

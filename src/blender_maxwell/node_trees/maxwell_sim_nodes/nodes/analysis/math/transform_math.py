@@ -225,16 +225,14 @@ class TransformOperation(enum.StrEnum):
 				info.dim_names[-1],
 				[
 					'f',
-					ct.LazyArrayRangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.hertz),
+					ct.RangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.hertz),
 				],
 			),
 			TO.InvFFT1D: info.replace_dim(
 				info.dim_names[-1],
 				[
 					't',
-					ct.LazyArrayRangeFlow(
-						start=0, stop=sp.oo, steps=0, unit=spu.second
-					),
+					ct.RangeFlow(start=0, stop=sp.oo, steps=0, unit=spu.second),
 				],
 			),
 		}.get(self, lambda: info)()

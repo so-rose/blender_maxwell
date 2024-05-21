@@ -58,7 +58,7 @@ class PermittivityMonitorNode(base.MaxwellSimNode):
 			abs_min=0,
 		),
 		'Freqs': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyArrayRange,
+			active_kind=ct.FlowKind.Range,
 			physical_type=spux.PhysicalType.Freq,
 			default_unit=spux.THz,
 			default_min=374.7406,  ## 800nm
@@ -87,7 +87,7 @@ class PermittivityMonitorNode(base.MaxwellSimNode):
 			'Freqs',
 		},
 		input_socket_kinds={
-			'Freqs': ct.FlowKind.LazyArrayRange,
+			'Freqs': ct.FlowKind.Range,
 		},
 		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
 		scale_input_sockets={

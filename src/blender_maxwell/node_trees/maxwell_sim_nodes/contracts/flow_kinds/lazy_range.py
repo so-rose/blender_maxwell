@@ -54,7 +54,7 @@ class ScalingMode(enum.StrEnum):
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class LazyArrayRangeFlow:
+class RangeFlow:
 	r"""Represents a linearly/logarithmically spaced array using symbolic boundary expressions, with support for units and lazy evaluation.
 
 	# Advantages
@@ -62,7 +62,7 @@ class LazyArrayRangeFlow:
 
 	## Memory
 	`ArrayFlow` generally has a memory scaling of $O(n)$.
-	Naturally, `LazyArrayRangeFlow` is always constant, since only the boundaries and steps are stored.
+	Naturally, `RangeFlow` is always constant, since only the boundaries and steps are stored.
 
 	## Symbolic
 	Both boundary points are symbolic expressions, within which pre-defined `sp.Symbol`s can participate in a constrained manner (ex. an integer symbol).
@@ -71,7 +71,7 @@ class LazyArrayRangeFlow:
 
 	## Performant Unit-Aware Operations
 	While `ArrayFlow`s are also unit-aware, the time-cost of _any_ unit-scaling operation scales with $O(n)$.
-	`LazyArrayRangeFlow`, by contrast, scales as $O(1)$.
+	`RangeFlow`, by contrast, scales as $O(1)$.
 
 	As a result, more complicated operations (like symbolic or unit-based) that might be difficult to perform interactively in real-time on an `ArrayFlow` will work perfectly with this object, even with added complexity
 
@@ -82,7 +82,7 @@ class LazyArrayRangeFlow:
 	- **Gradient**: The gradient of the output array, with respect to any symbols used to define the input bounds, can easily be found using `jax.grad` over `self.as_func`.
 	- **JIT**: When `self.as_func` is composed with other `jax` functions, and `jax.jit` is run to optimize the entire thing, the "cost of array generation" _will often be optimized away significantly or entirely_.
 
-	Thus, as part of larger computations, the performance properties of `LazyArrayRangeFlow` is extremely favorable.
+	Thus, as part of larger computations, the performance properties of `RangeFlow` is extremely favorable.
 
 	## Numerical Properties
 	Since the bounds support exact (ex. rational) calculations and symbolic manipulations (_by virtue of being symbolic expressions_), the opportunities for certain kinds of numerical instability are mitigated.
@@ -174,7 +174,7 @@ class LazyArrayRangeFlow:
 			corrected_unit: The unit to replace the current unit with.
 
 		Returns:
-			A new `LazyArrayRangeFlow` with replaced unit.
+			A new `RangeFlow` with replaced unit.
 
 		Raises:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
@@ -185,7 +185,7 @@ class LazyArrayRangeFlow:
 				self,
 				corrected_unit,
 			)
-			return LazyArrayRangeFlow(
+			return RangeFlow(
 				start=self.start,
 				stop=self.stop,
 				steps=self.steps,
@@ -204,7 +204,7 @@ class LazyArrayRangeFlow:
 			unit: The unit to convert the bounds to.
 
 		Returns:
-			A new `LazyArrayRangeFlow` with replaced unit.
+			A new `RangeFlow` with replaced unit.
 
 		Raises:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
@@ -215,7 +215,7 @@ class LazyArrayRangeFlow:
 				self,
 				unit,
 			)
-			return LazyArrayRangeFlow(
+			return RangeFlow(
 				start=spux.scale_to_unit(self.start * self.unit, unit),
 				stop=spux.scale_to_unit(self.stop * self.unit, unit),
 				steps=self.steps,
@@ -234,7 +234,7 @@ class LazyArrayRangeFlow:
 			unit: The unit to convert the bounds to.
 
 		Returns:
-			A new `LazyArrayRangeFlow` with replaced unit.
+			A new `RangeFlow` with replaced unit.
 
 		Raises:
 			ValueError: If the existing unit is `None`, indicating that there is no unit to correct.
@@ -245,7 +245,7 @@ class LazyArrayRangeFlow:
 				self,
 				unit_system[spux.PhysicalType.from_unit(self.unit)],
 			)
-			return LazyArrayRangeFlow(
+			return RangeFlow(
 				start=spux.strip_unit_system(
 					spux.convert_to_unit_system(self.start * self.unit, unit_system),
 					unit_system,
@@ -277,7 +277,7 @@ class LazyArrayRangeFlow:
 		new_start = rescale_func(new_pre_start * self.unit)
 		new_stop = rescale_func(new_pre_stop * self.unit)
 
-		return LazyArrayRangeFlow(
+		return RangeFlow(
 			start=(
 				spux.scale_to_unit(new_start, new_unit)
 				if new_unit is not None
@@ -314,9 +314,9 @@ class LazyArrayRangeFlow:
 			reverse: Whether to reverse the bounds after running the `scaler`.
 
 		Returns:
-			A rescaled `LazyArrayRangeFlow`.
+			A rescaled `RangeFlow`.
 		"""
-		return LazyArrayRangeFlow(
+		return RangeFlow(
 			start=rescale_func(self.start if not reverse else self.stop),
 			stop=rescale_func(self.stop if not reverse else self.start),
 			steps=self.steps,
@@ -442,7 +442,7 @@ class LazyArrayRangeFlow:
 			reverse: Whether to reverse the bounds after running the `scaler`.
 
 		Returns:
-			A rescaled `LazyArrayRangeFlow`.
+			A rescaled `RangeFlow`.
 		"""
 		if not set(self.symbols).issubset(set(symbol_values.keys())):
 			msg = f'Provided symbols ({set(symbol_values.keys())}) do not provide values for all expression symbols ({self.symbols}) that may be found in the boundary expressions (start={self.start}, end={self.end})'
@@ -482,7 +482,7 @@ class LazyArrayRangeFlow:
 			new_start = step_size * start
 			new_stop = new_start + step_size * slice_steps
 
-			return LazyArrayRangeFlow(
+			return RangeFlow(
 				start=sp.S(new_start),
 				stop=sp.S(new_stop),
 				steps=slice_steps,

@@ -74,7 +74,7 @@ class TemporalShapeNode(base.MaxwellSimNode):
 		},
 		'Symbolic': {
 			't Range': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.LazyArrayRange,
+				active_kind=ct.FlowKind.Range,
 				physical_type=spux.PhysicalType.Time,
 				default_unit=spu.picosecond,
 				default_min=0,
@@ -132,7 +132,7 @@ class TemporalShapeNode(base.MaxwellSimNode):
 			'Envelope',
 		},
 		input_socket_kinds={
-			't Range': ct.FlowKind.LazyArrayRange,
+			't Range': ct.FlowKind.Range,
 			'Envelope': ct.FlowKind.LazyValueFunc,
 		},
 		input_sockets_optional={
