@@ -318,12 +318,12 @@ class DataFileFormat(enum.StrEnum):
 	"""Abstraction of a data file format, providing a regularized way of interacting with filesystem data.
 
 	Import/export interacts closely with the `Expr` socket's `FlowKind` semantics:
-	- `FlowKind.LazyValueFunc`: Generally realized on-import/export.
+	- `FlowKind.Func`: Generally realized on-import/export.
 		- **Import**: Loading data is generally eager, but memory-mapped file loading would be manageable using this interface.
 		- **Export**: The function is realized and only the array is inserted into the file.
 	- `FlowKind.Params`: Generally consumed.
 		- **Import**: A new, empty `ParamsFlow` object is created.
-		- **Export**: The `ParamsFlow` is consumed when realizing the `LazyValueFunc`.
+		- **Export**: The `ParamsFlow` is consumed when realizing the `Func`.
 	- `FlowKind.Info`: As the most important element, it is kept in an (optional) sidecar metadata file.
 		- **Import**: The sidecar file is loaded, checked, and used, if it exists. A warning about further processing may show if it doesn't.
 		- **Export**: The sidecar file is written next to the canonical data file, in such a manner that it can be both read and loaded.

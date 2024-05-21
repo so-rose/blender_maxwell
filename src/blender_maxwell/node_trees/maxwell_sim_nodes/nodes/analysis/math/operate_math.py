@@ -261,12 +261,12 @@ class OperateMathNode(base.MaxwellSimNode):
 	bl_label = 'Operate Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
-		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 	output_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyValueFunc, show_info_columns=True
+			active_kind=ct.FlowKind.Func, show_info_columns=True
 		),
 	}
 
@@ -344,7 +344,7 @@ class OperateMathNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
-	# - FlowKind.Value|LazyValueFunc
+	# - FlowKind.Value|Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -373,12 +373,12 @@ class OperateMathNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		props={'operation'},
 		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
-			'Expr L': ct.FlowKind.LazyValueFunc,
-			'Expr R': ct.FlowKind.LazyValueFunc,
+			'Expr L': ct.FlowKind.Func,
+			'Expr R': ct.FlowKind.Func,
 		},
 	)
 	def compose_func(self, props: dict, input_sockets: dict):

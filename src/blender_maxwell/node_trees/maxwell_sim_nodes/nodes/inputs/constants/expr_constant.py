@@ -29,12 +29,12 @@ class ExprConstantNode(base.MaxwellSimNode):
 
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyValueFunc,
+			active_kind=ct.FlowKind.Func,
 		),
 	}
 	output_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyValueFunc,
+			active_kind=ct.FlowKind.Func,
 			show_info_columns=True,
 		),
 	}
@@ -58,12 +58,12 @@ class ExprConstantNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		# Trigger
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		# Loaded
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.LazyValueFunc},
+		input_socket_kinds={'Expr': ct.FlowKind.Func},
 	)
-	def compute_lazy_value_func(self, input_sockets: dict) -> typ.Any:
+	def compute_lazy_func(self, input_sockets: dict) -> typ.Any:
 		return input_sockets['Expr']
 
 	####################

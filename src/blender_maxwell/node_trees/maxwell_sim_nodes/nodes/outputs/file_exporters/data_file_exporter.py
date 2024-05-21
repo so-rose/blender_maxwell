@@ -66,7 +66,7 @@ class DataFileExporterNode(base.MaxwellSimNode):
 	bl_label = 'Data File Importer'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 		'File Path': sockets.FilePathSocketDef(),
 	}
 
@@ -95,8 +95,8 @@ class DataFileExporterNode(base.MaxwellSimNode):
 
 	@property
 	def expr_data(self) -> typ.Any | None:
-		"""Retrieve the input expression's data by evaluating its `LazyValueFunc`."""
-		func = self._compute_input('Expr', kind=ct.FlowKind.LazyValueFunc)
+		"""Retrieve the input expression's data by evaluating its `Func`."""
+		func = self._compute_input('Expr', kind=ct.FlowKind.Func)
 		params = self._compute_input('Expr', kind=ct.FlowKind.Params)
 
 		has_func = not ct.FlowSignal.check(func)

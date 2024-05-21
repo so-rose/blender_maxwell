@@ -525,9 +525,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Array", but socket does not define it'
 		raise NotImplementedError(msg)
 
-	# LazyValueFunc
+	# Func
 	@property
-	def lazy_value_func(self) -> ct.LazyValueFuncFlow:
+	def lazy_func(self) -> ct.FuncFlow:
 		"""Throws a descriptive error.
 
 		Notes:
@@ -538,8 +538,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		"""
 		return ct.FlowSignal.NoFlow
 
-	@lazy_value_func.setter
-	def lazy_value_func(self, lazy_value_func: ct.LazyValueFuncFlow) -> None:
+	@lazy_func.setter
+	def lazy_func(self, lazy_func: ct.FuncFlow) -> None:
 		"""Throws a descriptive error.
 
 		Notes:
@@ -548,7 +548,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.LazyValueFunc", but socket does not define it'
+		msg = f'Socket {self.bl_label} {self.socket_type}): Tried to set "ct.FlowKind.Func", but socket does not define it'
 		raise NotImplementedError(msg)
 
 	# Range
@@ -595,7 +595,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		kind_data_map = {
 			ct.FlowKind.Value: lambda: self.value,
 			ct.FlowKind.Array: lambda: self.array,
-			ct.FlowKind.LazyValueFunc: lambda: self.lazy_value_func,
+			ct.FlowKind.Func: lambda: self.lazy_func,
 			ct.FlowKind.Range: lambda: self.lazy_range,
 			ct.FlowKind.Params: lambda: self.params,
 			ct.FlowKind.Info: lambda: self.info,
@@ -784,7 +784,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 				ct.FlowKind.Value: self.draw_value,
 				ct.FlowKind.Array: self.draw_array,
 				ct.FlowKind.Range: self.draw_lazy_range,
-				ct.FlowKind.LazyValueFunc: self.draw_lazy_value_func,
+				ct.FlowKind.Func: self.draw_lazy_func,
 			}[self.active_kind](col)
 
 		# Info Drawing
@@ -914,11 +914,11 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			col: Target for defining UI elements.
 		"""
 
-	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
+	def draw_lazy_func(self, col: bpy.types.UILayout) -> None:
 		"""Draws the socket lazy value function UI on its own line.
 
 		Notes:
-			Should be overriden by individual socket classes, if they have an editable `FlowKind.LazyValueFunc`.
+			Should be overriden by individual socket classes, if they have an editable `FlowKind.Func`.
 
 		Parameters:
 			col: Target for defining UI elements.

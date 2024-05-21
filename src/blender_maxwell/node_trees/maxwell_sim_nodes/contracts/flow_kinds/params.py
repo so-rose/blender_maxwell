@@ -69,7 +69,7 @@ class ParamsFlow:
 		unit_system: spux.UnitSystem,
 		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
 	):
-		"""Realize the function arguments contained in this `ParamsFlow`, making it ready for insertion into `LazyValueFunc.func()`.
+		"""Realize the function arguments contained in this `ParamsFlow`, making it ready for insertion into `Func.func()`.
 
 		For all `arg`s in `self.func_args`, the following operations are performed:
 		- **Unit System**: If `arg`
@@ -121,7 +121,7 @@ class ParamsFlow:
 	):
 		"""Combine two function parameter lists, such that the LHS will be concatenated with the RHS.
 
-		Just like its neighbor in `LazyValueFunc`, this effectively combines two functions with unique parameters.
+		Just like its neighbor in `Func`, this effectively combines two functions with unique parameters.
 		The next composed function will receive a tuple of two arrays, instead of just one, allowing binary operations to occur.
 		"""
 		return ParamsFlow(

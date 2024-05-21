@@ -100,7 +100,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			When active, `self.active_unit` can be used via the UI to select valid unit of the given `self.physical_type`, and `self.unit` works.
 			The enum itself can be dynamically altered, ex. via its UI dropdown support.
 		symbols: The symbolic variables valid in the context of the expression.
-			Various features, including `LazyValueFunc` support, become available when symbols are in use.
+			Various features, including `Func` support, become available when symbols are in use.
 			The presence of symbols forces fallback to a string-based `sympy` expression UI.
 
 		active_unit: The currently active unit, as a dropdown.
@@ -544,20 +544,20 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				]
 
 	####################
-	# - FlowKind: LazyValueFunc (w/Params if Constant)
+	# - FlowKind: Func (w/Params if Constant)
 	####################
 	@property
-	def lazy_value_func(self) -> ct.LazyValueFuncFlow:
+	def lazy_func(self) -> ct.FuncFlow:
 		"""Returns a lazy value that computes the expression returned by `self.value`.
 
-		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be the arguments of the `LazyValueFuncFlow`.
+		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be the arguments of the `FuncFlow`.
 		Otherwise, the returned lazy value function will be a simple excuse for `self.params` to pass the verbatim `self.value`.
 		"""
 		# Symbolic
 		## -> `self.value` is guaranteed to be an expression with unknowns.
 		## -> The function computes `self.value` with unknowns as arguments.
 		if self.symbols:
-			return ct.LazyValueFuncFlow(
+			return ct.FuncFlow(
 				func=sp.lambdify(
 					self.sorted_symbols,
 					spux.scale_to_unit(self.value, self.unit),
@@ -572,7 +572,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## -> ("Dummy" as in returns the same argument that it takes).
 		## -> This is an excuse to let `ParamsFlow` pass `self.value` verbatim.
 		## -> Generally only useful for operations with other expressions.
-		return ct.LazyValueFuncFlow(
+		return ct.FuncFlow(
 			func=lambda v: v,
 			func_args=[
 				self.physical_type if self.physical_type is not None else self.mathtype
@@ -582,7 +582,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 	@property
 	def params(self) -> ct.ParamsFlow:
-		"""Returns parameter symbols/values to accompany `self.lazy_value_func`.
+		"""Returns parameter symbols/values to accompany `self.lazy_func`.
 
 		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be passed into `ParamsFlow`, which will thus be parameterized (and require realization before use).
 		Otherwise, `self.value` is passed verbatim as the only `ParamsFlow.func_arg`.
@@ -605,13 +605,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 	@property
 	def info(self) -> ct.ArrayFlow:
-		r"""Returns parameter symbols/values to accompany `self.lazy_value_func`.
+		r"""Returns parameter symbols/values to accompany `self.lazy_func`.
 
 		The output name/size/mathtype/unit corresponds directly the `ExprSocket`.
 
 		If `self.symbols` has entries, then these will propagate as dimensions with unresolvable `RangeFlow` index descriptions.
 		The index range will be $(-\infty,\infty)$, with $0$ steps and no unit.
-		The order/naming matches `self.params` and `self.lazy_value_func`.
+		The order/naming matches `self.params` and `self.lazy_func`.
 
 		Otherwise, only the output name/size/mathtype/unit corresponding to the socket is passed along.
 		"""
@@ -835,13 +835,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		if self.steps != 0:
 			col.prop(self, self.blfields['steps'], text='')
 
-	def draw_lazy_value_func(self, col: bpy.types.UILayout) -> None:
+	def draw_lazy_func(self, col: bpy.types.UILayout) -> None:
 		"""Draw the socket body for a single flexible value/expression, for down-chain lazy evaluation.
 
 		This implements the most flexible variant of the `ExprSocket` UI, providing the user with full runtime-configuration of the exact `self.size`, `self.mathtype`, `self.physical_type`, and `self.symbols` of the expression.
 
 		Notes:
-			Drawn when `self.active_kind == FlowKind.LazyValueFunc`.
+			Drawn when `self.active_kind == FlowKind.Func`.
 
 			This is an ideal choice for ex. math nodes that need to accept arbitrary expressions as inputs, with an eye towards lazy evaluation of ex. symbolic terms.
 
@@ -872,7 +872,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	# - UI: InfoFlow
 	####################
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
-		if self.active_kind == ct.FlowKind.LazyValueFunc and self.show_info_columns:
+		if self.active_kind == ct.FlowKind.Func and self.show_info_columns:
 			row = col.row()
 			box = row.box()
 			grid = box.grid_flow(
@@ -927,7 +927,7 @@ class ExprSocketDef(base.SocketDef):
 		ct.FlowKind.Value,
 		ct.FlowKind.Range,
 		ct.FlowKind.Array,
-		ct.FlowKind.LazyValueFunc,
+		ct.FlowKind.Func,
 	] = ct.FlowKind.Value
 
 	# Socket Interface

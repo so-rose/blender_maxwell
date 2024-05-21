@@ -42,7 +42,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		'File Path': sockets.FilePathSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	####################
@@ -121,11 +121,11 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		pass
 
 	####################
-	# - FlowKind.Array|LazyValueFunc
+	# - FlowKind.Array|Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		input_sockets={'File Path'},
 	)
 	def compute_func(self, input_sockets: dict) -> td.Simulation:
@@ -144,7 +144,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 				# Jax Compatibility: Lazy Data Loading
 				## -> Delay loading of data from file as long as we can.
 				if data_file_format.loader_is_jax_compatible:
-					return ct.LazyValueFuncFlow(
+					return ct.FuncFlow(
 						func=lambda: data_file_format.loader(file_path),
 						supports_jax=True,
 					)
@@ -152,7 +152,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 				# No Jax Compatibility: Eager Data Loading
 				## -> Load the data now and bind it.
 				data = data_file_format.loader(file_path)
-				return ct.LazyValueFuncFlow(func=lambda: data, supports_jax=True)
+				return ct.FuncFlow(func=lambda: data, supports_jax=True)
 			return ct.FlowSignal.FlowPending
 		return ct.FlowSignal.FlowPending
 
@@ -175,7 +175,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		'Expr',
 		kind=ct.FlowKind.Info,
 		output_sockets={'Expr'},
-		output_socket_kinds={'Expr': ct.FlowKind.LazyValueFunc},
+		output_socket_kinds={'Expr': ct.FlowKind.Func},
 	)
 	def compute_info(self, output_sockets) -> ct.InfoFlow:
 		"""Declare an `InfoFlow` based on the data shape.

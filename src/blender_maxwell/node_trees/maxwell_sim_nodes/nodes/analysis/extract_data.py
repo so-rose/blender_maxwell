@@ -57,9 +57,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 	}
 	output_socket_sets: typ.ClassVar = {
 		'Sim Data': {'Monitor Data': sockets.MaxwellMonitorDataSocketDef()},
-		'Monitor Data': {
-			'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc)
-		},
+		'Monitor Data': {'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func)},
 	}
 
 	####################
@@ -349,7 +347,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		return ct.FlowSignal.FlowPending
 
 	####################
-	# - FlowKind.Array|LazyValueFunc: Monitor Data -> Expr
+	# - FlowKind.Array|Func: Monitor Data -> Expr
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -384,16 +382,14 @@ class ExtractDataNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		# Trigger
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		# Loaded
 		output_sockets={'Expr'},
 		output_socket_kinds={'Expr': ct.FlowKind.Array},
 		output_sockets_optional={'Expr': True},
 	)
-	def compute_extracted_data_lazy(
-		self, output_sockets: dict
-	) -> ct.LazyValueFuncFlow | None:
-		"""Declare `Expr:LazyValueFunc` by creating a simple function that directly wraps `Expr:Array`.
+	def compute_extracted_data_lazy(self, output_sockets: dict) -> ct.FuncFlow | None:
+		"""Declare `Expr:Func` by creating a simple function that directly wraps `Expr:Array`.
 
 		Returns:
 			The composable function array, if available, else `ct.FlowSignal.FlowPending`.
@@ -402,9 +398,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		has_output_expr = not ct.FlowSignal.check(output_expr)
 
 		if has_output_expr:
-			return ct.LazyValueFuncFlow(
-				func=lambda: output_expr.values, supports_jax=True
-			)
+			return ct.FuncFlow(func=lambda: output_expr.values, supports_jax=True)
 
 		return ct.FlowSignal.FlowPending
 
@@ -441,7 +435,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		"""Declare `Data:Info` by manually selecting appropriate axes, units, etc. for each monitor type.
 
 		Returns:
-			Information describing the `Data:LazyValueFunc`, if available, else `ct.FlowSignal.FlowPending`.
+			Information describing the `Data:Func`, if available, else `ct.FlowSignal.FlowPending`.
 		"""
 		monitor_data = input_sockets['Monitor Data']
 		monitor_data_type = props['monitor_data_type']

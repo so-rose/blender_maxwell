@@ -30,7 +30,7 @@ LazyFunction: typ.TypeAlias = typ.Callable[[typ.Any, ...], typ.Any]
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
-class LazyValueFuncFlow:
+class FuncFlow:
 	r"""Defines a flow of data as incremental function composition.
 
 	For specific math system usage instructions, please consult the documentation of relevant nodes.
@@ -44,9 +44,9 @@ class LazyValueFuncFlow:
 	- **Performant**: Since no operations are happening, the UI feels fast and snappy.
 
 	## Strongly Related FlowKinds
-	For doing math, `LazyValueFunc` relies on two other `FlowKind`s, which must run in parallel:
+	For doing math, `Func` relies on two other `FlowKind`s, which must run in parallel:
 
-	- `FlowKind.Info`: Tracks the name, `spux.MathType`, unit (if any), length, and index coordinates for the raw data object produced by `LazyValueFunc`.
+	- `FlowKind.Info`: Tracks the name, `spux.MathType`, unit (if any), length, and index coordinates for the raw data object produced by `Func`.
 	- `FlowKind.Params`: Tracks the particular values of input parameters to the lazy function, each of which can also be symbolic.
 
 	For more, please see the documentation for each.
@@ -84,12 +84,12 @@ class LazyValueFuncFlow:
 	## 'A0', 'KV0' are of length 'p' and 'q'
 	def f_0(*args, **kwargs): ...
 
-	lazy_value_func_0 = LazyValueFuncFlow(
+	lazy_func_0 = FuncFlow(
 		func=f_0,
 		func_args=[(a_i, type(a_i)) for a_i in A0],
 		func_kwargs={k: v for k,v in KV0},
 	)
-	output_0 = lazy_value_func.func(*A0_computed, **KV0_computed)
+	output_0 = lazy_func.func(*A0_computed, **KV0_computed)
 	```
 
 	## `depth>0`: Composition Chaining
@@ -120,7 +120,7 @@ class LazyValueFuncFlow:
 	## 'A1', 'KV1' are therefore of length 'r' and 's'
 	def f_1(output_0, *args, **kwargs): ...
 
-	lazy_value_func_1 = lazy_value_func_0.compose_within(
+	lazy_func_1 = lazy_func_0.compose_within(
 		enclosing_func=f_1,
 		enclosing_func_args=[(a_i, type(a_i)) for a_i in A1],
 		enclosing_func_kwargs={k: type(v) for k,v in K1},
@@ -128,10 +128,10 @@ class LazyValueFuncFlow:
 
 	A_computed = A0_computed + A1_computed
 	KW_computed = KV0_computed + KV1_computed
-	output_1 = lazy_value_func_1.func(*A_computed, **KW_computed)
+	output_1 = lazy_func_1.func(*A_computed, **KW_computed)
 	```
 
-	By using `LazyValueFunc`, we've guaranteed that even hugely deep $n$s won't ever look more complicated than this.
+	By using `Func`, we've guaranteed that even hugely deep $n$s won't ever look more complicated than this.
 
 	## `max depth`: "Realization"
 	So, we've composed a bunch of functions of functions of ...
@@ -142,22 +142,22 @@ class LazyValueFuncFlow:
 
 	```python
 	# A_all and KW_all must be tracked on the side.
-	output_n = lazy_value_func_n.func(*A_all, **KW_all)
+	output_n = lazy_func_n.func(*A_all, **KW_all)
 	```
 
 	Of course, this comes with enormous overhead.
 	Aside from the function calls themselves (which can be non-trivial), we must also contend with the enormous inefficiency of performing array operations sequentially.
 
-	That brings us to the killer feature of `LazyValueFuncFlow`, and the motivating reason for doing any of this at all:
+	That brings us to the killer feature of `FuncFlow`, and the motivating reason for doing any of this at all:
 	
 	```python
-	output_n = lazy_value_func_n.func_jax(*A_all, **KW_all)
+	output_n = lazy_func_n.func_jax(*A_all, **KW_all)
 	```
 
 	What happened was, **the entire pipeline** was compiled, optimized, and computed with bare-metal performance on either a CPU, GPU, or TPU.
 	With the help of the `jax` library (and its underlying OpenXLA bytecode), all of that inefficiency has been optimized based on _what we're trying to do_, not _exactly how we're doing it_, in order to maximize the use of modern massively-parallel devices.
 
-	See the documentation of `LazyValueFunc.func_jax()` for more information on this process.
+	See the documentation of `Func.func_jax()` for more information on this process.
 	
 
 
@@ -187,12 +187,12 @@ class LazyValueFuncFlow:
 	As a more nuanced example, when lag occurs due to the computing an image-based plot based on live-computed math, then the visual feedback of _the plot actually changing_ seems to have a similar effect, not least because it's emotionally well-understood that detaching the `Viewer` node would also remove the lag.
 
 	In short: Even if lazy evaluation didn't make any math faster, it will still _feel_ faster (to a point - raw performance obviously still matters).
-	Without `LazyValueFuncFlow`, the point of evaluation cannot be chosen at all, which is a huge issue for all the named reasons.
-	With `LazyValueFuncFlow`, better-chosen evaluation points can be chosen to cause the _user experience_ of high performance, simply because we were able to shift the exact same computation to a point in time where the user either understands or tolerates the delay better.
+	Without `FuncFlow`, the point of evaluation cannot be chosen at all, which is a huge issue for all the named reasons.
+	With `FuncFlow`, better-chosen evaluation points can be chosen to cause the _user experience_ of high performance, simply because we were able to shift the exact same computation to a point in time where the user either understands or tolerates the delay better.
 
 	## Flexibility
 	Large-scale math is done on tensors, whether one knows (or likes!) it or not.
-	To this end, the indexed arrays produced by `LazyValueFuncFlow.func_jax` aren't quite sufficient for most operations we want to do:
+	To this end, the indexed arrays produced by `FuncFlow.func_jax` aren't quite sufficient for most operations we want to do:
 
 	- **Naming**: What _is_ each axis?
 		Unnamed index axes are sometimes easy to decode, but in general, names have an unexpectedly critical function when operating on arrays.
@@ -206,13 +206,13 @@ class LazyValueFuncFlow:
 
 	Not only do we endeavor to track these, but we also introduce unit-awareness to the coordinates, and design the entire math system to visually communicate the state of arrays before/after every single computation, as well as only expose operations that this tracked data indicates possible.
 
-	In practice, this happens in `FlowKind.Info`, which due to having its own `FlowKind` "lane" can be adjusted without triggering changes to (and therefore recompilation of) the `FlowKind.LazyValueFunc` chain.
+	In practice, this happens in `FlowKind.Info`, which due to having its own `FlowKind` "lane" can be adjusted without triggering changes to (and therefore recompilation of) the `FlowKind.Func` chain.
 	**Please consult the `InfoFlow` documentation for more**.
 
 	## Performance
 	All values introduced while processing are kept in a seperate `FlowKind` lane, with its own incremental caching: `FlowKind.Params`.
 
-	It's a simple mechanism, but for the cost of introducing an extra `FlowKind` "lane", all of the values used to process data can be live-adjusted without the overhead of recompiling the entire `LazyValueFunc` every time anything changes.
+	It's a simple mechanism, but for the cost of introducing an extra `FlowKind` "lane", all of the values used to process data can be live-adjusted without the overhead of recompiling the entire `Func` every time anything changes.
 	Moreover, values used to process data don't even have to be numbers yet: They can be expressions of symbolic variables, complete with units, which are only realized at the very end of the chain, by the node that absolutely cannot function without the actual numerical data.
 
 	See the `ParamFlow` documentation for more information.
@@ -224,7 +224,7 @@ class LazyValueFuncFlow:
 	A few teasers of what nodes can do with this system:
 
 	**Auto-Differentiation**: `jax.jit` isn't even really the killer feature of `jax`.
-		`jax` can automatically differentiate `LazyValueFuncFlow.func_jax` with respect to any input parameter, including for fwd/bck jacobians/hessians, with robust numerical stability.
+		`jax` can automatically differentiate `FuncFlow.func_jax` with respect to any input parameter, including for fwd/bck jacobians/hessians, with robust numerical stability.
 		When used in 
 	**Symbolic Interop**: Any `sympy` expression containing symbolic variables can be compiled, by `sympy`, into a `jax`-compatible function which takes 
 		We make use of this in the `Expr` socket, enabling true symbolic math to be used in high-performance lazy `jax` computations.
@@ -304,7 +304,7 @@ class LazyValueFuncFlow:
 		if self.supports_jax:
 			return jax.jit(self.func)
 
-		msg = 'Can\'t express LazyValueFuncFlow as JAX function (using jax.jit), since "self.supports_jax" is False'
+		msg = 'Can\'t express FuncFlow as JAX function (using jax.jit), since "self.supports_jax" is False'
 		raise ValueError(msg)
 
 	####################
@@ -317,7 +317,7 @@ class LazyValueFuncFlow:
 		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
 		supports_jax: bool = False,
 	) -> typ.Self:
-		"""Compose `self.func` within the given enclosing function, which itself takes arguments, and create a new `LazyValueFuncFlow` to contain it.
+		"""Compose `self.func` within the given enclosing function, which itself takes arguments, and create a new `FuncFlow` to contain it.
 
 		This is the fundamental operation used to "chain" functions together.
 
@@ -328,13 +328,13 @@ class LazyValueFuncFlow:
 			C = spux.MathType.Complex
 			x, y = sp.symbols('x y', real=True)
 
-			# Prepare "Root" LazyValueFuncFlow w/x,y args
+			# Prepare "Root" FuncFlow w/x,y args
 			expr_root = 3*x + y**2 - 100
 			expr_root_func = sp.lambdify([x, y], expr, 'jax')
 
-			func_root = LazyValueFuncFlow(func=expr_root_func, func_args=[R,R], supports_jax=True)
+			func_root = FuncFlow(func=expr_root_func, func_args=[R,R], supports_jax=True)
 
-			# Compose "Enclosing" LazyValueFuncFlow w/z arg
+			# Compose "Enclosing" FuncFlow w/z arg
 			r = sp.Symbol('z', real=True)
 			z = sp.Symbol('z', complex=True)
 			expr = 10*sp.re(z) / (z + r)
@@ -351,7 +351,7 @@ class LazyValueFuncFlow:
 		Returns:
 			A lazy function that takes both the enclosed and enclosing arguments, and returns the value of the enclosing function (whose first argument is the output value of the enclosed function).
 		"""
-		return LazyValueFuncFlow(
+		return FuncFlow(
 			func=lambda *args, **kwargs: enclosing_func(
 				self.func(
 					*list(args[: len(self.func_args)]),
@@ -373,17 +373,17 @@ class LazyValueFuncFlow:
 
 		Generally, `self.func` produces a single array as output (when doing math, at least).
 		But sometimes (as in the `OperateMathNode`), we need to perform a binary operation between two arrays, like say, $+$.
-		Without realizing both `LazyValueFuncFlow`s, it's not immediately obvious how one might accomplish this.
+		Without realizing both `FuncFlow`s, it's not immediately obvious how one might accomplish this.
 
 		This overloaded function of the `|` operator (used as `left | right`) solves that problem.
-		A new `LazyValueFuncFlow` is created, which takes the arguments of both inputs, and which produces a single output value: A 2-tuple, where each element if the output of each function.
+		A new `FuncFlow` is created, which takes the arguments of both inputs, and which produces a single output value: A 2-tuple, where each element if the output of each function.
 
 		Examples:
 			Consider this illustrative (pseudocode) example:
 			```python
 			# Presume a,b are values, and that A,B are their identifiers.
-			func_1 = LazyValueFuncFlow(func=compute_big_data_1, func_args=[A])
-			func_2 = LazyValueFuncFlow(func=compute_big_data_2, func_args=[B])
+			func_1 = FuncFlow(func=compute_big_data_1, func_args=[A])
+			func_2 = FuncFlow(func=compute_big_data_2, func_args=[B])
 
 			f = (func_1 | func_2).compose_within(func=lambda D: D[0] + D[1])
 
@@ -402,7 +402,7 @@ class LazyValueFuncFlow:
 		Returns:
 			A lazy function that takes all arguments of both inputs, and returns a 2-tuple containing both output arguments.
 		"""
-		return LazyValueFuncFlow(
+		return FuncFlow(
 			func=lambda *args, **kwargs: (
 				self.func(
 					*list(args[: len(self.func_args)]),

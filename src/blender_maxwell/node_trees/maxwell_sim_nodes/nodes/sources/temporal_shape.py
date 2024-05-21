@@ -133,7 +133,7 @@ class TemporalShapeNode(base.MaxwellSimNode):
 		},
 		input_socket_kinds={
 			't Range': ct.FlowKind.Range,
-			'Envelope': ct.FlowKind.LazyValueFunc,
+			'Envelope': ct.FlowKind.Func,
 		},
 		input_sockets_optional={
 			'max E': True,

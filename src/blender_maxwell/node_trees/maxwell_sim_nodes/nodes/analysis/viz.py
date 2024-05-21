@@ -209,7 +209,7 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.LazyValueFunc,
+			active_kind=ct.FlowKind.Func,
 			default_symbols=[sim_symbols.x],
 			default_value=2 * sim_symbols.x.sp_symbol,
 		),
@@ -370,7 +370,7 @@ class VizNode(base.MaxwellSimNode):
 		props={'viz_mode', 'viz_target', 'colormap'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info, ct.FlowKind.Params}
+			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
 		},
 		all_loose_input_sockets=True,
 	)
@@ -382,7 +382,7 @@ class VizNode(base.MaxwellSimNode):
 		props={'viz_mode', 'viz_target', 'colormap'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info, ct.FlowKind.Params}
+			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
 		},
 		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		all_loose_input_sockets=True,
@@ -392,7 +392,7 @@ class VizNode(base.MaxwellSimNode):
 		self, managed_objs, props, input_sockets, loose_input_sockets, unit_systems
 	):
 		# Retrieve Inputs
-		lazy_value_func = input_sockets['Expr'][ct.FlowKind.LazyValueFunc]
+		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
 
@@ -422,9 +422,9 @@ class VizNode(base.MaxwellSimNode):
 			for sym in params.sorted_symbols
 		}
 
-		# Realize LazyValueFunc w/Symbolic Values, Unit System
+		# Realize Func w/Symbolic Values, Unit System
 		## -> This gives us the actual plot data!
-		data = lazy_value_func.func_jax(
+		data = lazy_func.func_jax(
 			*params.scaled_func_args(
 				unit_systems['BlenderUnits'], symbol_values=symbol_values
 			),

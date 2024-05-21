@@ -401,7 +401,7 @@ class MapMathNode(base.MaxwellSimNode):
 	The name and type of the available symbol is clearly shown, and most valid `sympy` expressions that you would expect to work, should work.
 
 	Use of expressions generally imposes no performance penalty: Just like the baked-in operations, it is compiled to a high-performance `jax` function.
-	Thus, it participates in the `ct.FlowKind.LazyValueFunc` composition chain.
+	Thus, it participates in the `ct.FlowKind.Func` composition chain.
 
 
 	Attributes:
@@ -412,10 +412,10 @@ class MapMathNode(base.MaxwellSimNode):
 	bl_label = 'Map Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	####################
@@ -474,7 +474,7 @@ class MapMathNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
-	# - FlowKind.Value|LazyValueFunc
+	# - FlowKind.Value|Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -497,16 +497,14 @@ class MapMathNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		props={'operation'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': ct.FlowKind.LazyValueFunc,
+			'Expr': ct.FlowKind.Func,
 		},
 	)
-	def compute_func(
-		self, props, input_sockets
-	) -> ct.LazyValueFuncFlow | ct.FlowSignal:
+	def compute_func(self, props, input_sockets) -> ct.FuncFlow | ct.FlowSignal:
 		operation = props['operation']
 		expr = input_sockets['Expr']
 

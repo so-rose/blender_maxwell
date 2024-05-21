@@ -29,7 +29,7 @@ from blender_maxwell.utils import logger
 
 from .array import ArrayFlow
 from .flow_kinds import FlowKind
-from .lazy_value_func import LazyValueFuncFlow
+from .lazy_func import FuncFlow
 
 log = logger.get(__name__)
 
@@ -361,7 +361,7 @@ class RangeFlow:
 			The ordering of the symbols is identical to `self.symbols`, which is guaranteed to be a deterministically sorted list of symbols.
 
 		Returns:
-			A `LazyValueFuncFlow` that, given the input symbols defined in `self.symbols`,
+			A `FuncFlow` that, given the input symbols defined in `self.symbols`,
 		"""
 		# Compile JAX Functions for Start/End Expressions
 		## FYI, JAX-in-JAX works perfectly fine.
@@ -378,18 +378,18 @@ class RangeFlow:
 		return gen_array
 
 	@functools.cached_property
-	def as_lazy_value_func(self) -> LazyValueFuncFlow:
-		"""Creates a `LazyValueFuncFlow` using the output of `self.as_func`.
+	def as_lazy_func(self) -> FuncFlow:
+		"""Creates a `FuncFlow` using the output of `self.as_func`.
 
 		This is useful for ex. parameterizing the first array in the node graph, without binding an entire computed array.
 
 		Notes:
-			The the function enclosed in the `LazyValueFuncFlow` is identical to the one returned by `self.as_func`.
+			The the function enclosed in the `FuncFlow` is identical to the one returned by `self.as_func`.
 
 		Returns:
-			A `LazyValueFuncFlow` containing `self.as_func`, as well as appropriate supporting settings.
+			A `FuncFlow` containing `self.as_func`, as well as appropriate supporting settings.
 		"""
-		return LazyValueFuncFlow(
+		return FuncFlow(
 			func=self.as_func,
 			func_args=[(spux.MathType.from_expr(sym)) for sym in self.symbols],
 			supports_jax=True,
@@ -401,7 +401,7 @@ class RangeFlow:
 	def realize_start(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | LazyValueFuncFlow:
+	) -> ArrayFlow | FuncFlow:
 		return spux.sympy_to_python(
 			self.start.subs({sym: symbol_values[sym.name] for sym in self.symbols})
 		)
@@ -409,7 +409,7 @@ class RangeFlow:
 	def realize_stop(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | LazyValueFuncFlow:
+	) -> ArrayFlow | FuncFlow:
 		return spux.sympy_to_python(
 			self.stop.subs({sym: symbol_values[sym.name] for sym in self.symbols})
 		)
@@ -417,7 +417,7 @@ class RangeFlow:
 	def realize_step_size(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-	) -> ArrayFlow | LazyValueFuncFlow:
+	) -> ArrayFlow | FuncFlow:
 		raw_step_size = (self.realize_stop() - self.realize_start() + 1) / self.steps
 
 		if self.mathtype is spux.MathType.Integer and raw_step_size.is_integer():
@@ -427,8 +427,8 @@ class RangeFlow:
 	def realize(
 		self,
 		symbol_values: dict[spux.Symbol, typ.Any] = MappingProxyType({}),
-		kind: typ.Literal[FlowKind.Array, FlowKind.LazyValueFunc] = FlowKind.Array,
-	) -> ArrayFlow | LazyValueFuncFlow:
+		kind: typ.Literal[FlowKind.Array, FlowKind.Func] = FlowKind.Array,
+	) -> ArrayFlow | FuncFlow:
 		"""Apply a function to the bounds, effectively rescaling the represented array.
 
 		Notes:
@@ -458,8 +458,8 @@ class RangeFlow:
 
 		if kind == FlowKind.Array:
 			return ArrayFlow(values=gen_array(), unit=self.unit, is_sorted=True)
-		if kind == FlowKind.LazyValueFunc:
-			return LazyValueFuncFlow(func=gen_array, supports_jax=True)
+		if kind == FlowKind.Func:
+			return FuncFlow(func=gen_array, supports_jax=True)
 
 		msg = f'Invalid kind: {kind}'
 		raise TypeError(msg)

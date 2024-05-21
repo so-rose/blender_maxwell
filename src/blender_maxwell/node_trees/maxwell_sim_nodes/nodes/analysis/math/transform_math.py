@@ -258,10 +258,10 @@ class TransformMathNode(base.MaxwellSimNode):
 	bl_label = 'Transform Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	####################
@@ -323,7 +323,7 @@ class TransformMathNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
-	# - Compute: LazyValueFunc / Array
+	# - Compute: Func / Array
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -346,16 +346,14 @@ class TransformMathNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		props={'operation'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': ct.FlowKind.LazyValueFunc,
+			'Expr': ct.FlowKind.Func,
 		},
 	)
-	def compute_func(
-		self, props, input_sockets
-	) -> ct.LazyValueFuncFlow | ct.FlowSignal:
+	def compute_func(self, props, input_sockets) -> ct.FuncFlow | ct.FlowSignal:
 		operation = props['operation']
 		expr = input_sockets['Expr']
 

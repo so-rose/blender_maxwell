@@ -265,10 +265,10 @@ class FilterMathNode(base.MaxwellSimNode):
 	bl_label = 'Filter Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.LazyValueFunc),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	####################
@@ -518,13 +518,13 @@ class FilterMathNode(base.MaxwellSimNode):
 			current_bl_socket = self.loose_input_sockets.get('Dim')
 			if (
 				current_bl_socket is None
-				or current_bl_socket.active_kind != ct.FlowKind.LazyValueFunc
+				or current_bl_socket.active_kind != ct.FlowKind.Func
 				or current_bl_socket.mathtype != spux.MathType.Real
 				or current_bl_socket.physical_type != spux.PhysicalType.NonPhysical
 			):
 				self.loose_input_sockets = {
 					'Dim': sockets.ExprSocketDef(
-						active_kind=ct.FlowKind.LazyValueFunc,
+						active_kind=ct.FlowKind.Func,
 						mathtype=spux.MathType.Real,
 						physical_type=spux.PhysicalType.NonPhysical,
 						show_info_columns=True,
@@ -536,28 +536,28 @@ class FilterMathNode(base.MaxwellSimNode):
 			self.loose_input_sockets = {}
 
 	####################
-	# - FlowKind.Value|LazyValueFunc
+	# - FlowKind.Value|Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.LazyValueFunc,
+		kind=ct.FlowKind.Func,
 		props={'operation', 'dim_0', 'dim_1', 'slice_tuple'},
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Info}},
+		input_socket_kinds={'Expr': {ct.FlowKind.Func, ct.FlowKind.Info}},
 	)
-	def compute_lazy_value_func(self, props: dict, input_sockets: dict):
+	def compute_lazy_func(self, props: dict, input_sockets: dict):
 		operation = props['operation']
-		lazy_value_func = input_sockets['Expr'][ct.FlowKind.LazyValueFunc]
+		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 
-		has_lazy_value_func = not ct.FlowSignal.check(lazy_value_func)
+		has_lazy_func = not ct.FlowSignal.check(lazy_func)
 		has_info = not ct.FlowSignal.check(info)
 
 		# Dimension(s)
 		dim_0 = props['dim_0']
 		dim_1 = props['dim_1']
 		if (
-			has_lazy_value_func
+			has_lazy_func
 			and has_info
 			and operation is not None
 			and operation.are_dims_valid(info, dim_0, dim_1)
@@ -570,7 +570,7 @@ class FilterMathNode(base.MaxwellSimNode):
 				else None
 			)
 
-			return lazy_value_func.compose_within(
+			return lazy_func.compose_within(
 				operation.jax_func(axis_0, axis_1, slice_tuple),
 				enclosing_func_args=operation.func_args,
 				supports_jax=True,
@@ -594,14 +594,14 @@ class FilterMathNode(base.MaxwellSimNode):
 		input_sockets={'Expr', 'Dim'},
 		input_socket_kinds={
 			'Expr': ct.FlowKind.Info,
-			'Dim': {ct.FlowKind.LazyValueFunc, ct.FlowKind.Params, ct.FlowKind.Info},
+			'Dim': {ct.FlowKind.Func, ct.FlowKind.Params, ct.FlowKind.Info},
 		},
 		input_sockets_optional={'Dim': True},
 	)
 	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
 		operation = props['operation']
 		info = input_sockets['Expr']
-		dim_coords = input_sockets['Dim'][ct.FlowKind.LazyValueFunc]
+		dim_coords = input_sockets['Dim'][ct.FlowKind.Func]
 		dim_params = input_sockets['Dim'][ct.FlowKind.Params]
 		dim_info = input_sockets['Dim'][ct.FlowKind.Info]
 		dim_symbol = props['set_dim_symbol']

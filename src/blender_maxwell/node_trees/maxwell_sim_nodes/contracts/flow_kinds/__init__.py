@@ -19,7 +19,7 @@ from .capabilities import CapabilitiesFlow
 from .flow_kinds import FlowKind
 from .info import InfoFlow
 from .lazy_range import RangeFlow, ScalingMode
-from .lazy_value_func import LazyValueFuncFlow
+from .lazy_func import FuncFlow
 from .params import ParamsFlow
 from .value import ValueFlow
 
@@ -30,7 +30,7 @@ __all__ = [
 	'InfoFlow',
 	'RangeFlow',
 	'ScalingMode',
-	'LazyValueFuncFlow',
+	'FuncFlow',
 	'ParamsFlow',
 	'ValueFlow',
 ]
