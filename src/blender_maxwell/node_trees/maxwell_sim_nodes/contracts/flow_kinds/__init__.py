@@ -18,8 +18,8 @@ from .array import ArrayFlow
 from .capabilities import CapabilitiesFlow
 from .flow_kinds import FlowKind
 from .info import InfoFlow
-from .lazy_range import RangeFlow, ScalingMode
 from .lazy_func import FuncFlow
+from .lazy_range import RangeFlow, ScalingMode
 from .params import ParamsFlow
 from .value import ValueFlow
 

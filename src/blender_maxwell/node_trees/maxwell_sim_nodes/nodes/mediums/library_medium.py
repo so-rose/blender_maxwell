@@ -259,9 +259,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	)
 	def compute_valid_freqs_lazy(self, props) -> sp.Expr:
 		return ct.RangeFlow(
-			start=props['freq_range'][0] / spux.THz,
-			stop=props['freq_range'][1] / spux.THz,
-			steps=0,
+			start=spu.scale_to_unit(['freq_range'][0], spux.THz),
+			stop=spu.scale_to_unit(props['freq_range'][1], spux.THz),
 			scaling=ct.ScalingMode.Lin,
 			unit=spux.THz,
 		)
@@ -273,9 +272,8 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	)
 	def compute_valid_wls_lazy(self, props) -> sp.Expr:
 		return ct.RangeFlow(
-			start=props['wl_range'][0] / spu.nm,
-			stop=props['wl_range'][0] / spu.nm,
-			steps=0,
+			start=spu.scale_to_unit(['wl_range'][0], spu.nm),
+			stop=spu.scale_to_unit(['wl_range'][0], spu.nm),
 			scaling=ct.ScalingMode.Lin,
 			unit=spu.nm,
 		)

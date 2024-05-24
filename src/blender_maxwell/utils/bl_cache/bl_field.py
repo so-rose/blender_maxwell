@@ -389,14 +389,15 @@ class BLField:
 
 		Reset by setting the descriptor to `Signal.ResetStrSearch`.
 		"""
-		cached_items = self.bl_prop_str_search.read_nonpersist(_self)
-		if cached_items is not Signal.CacheNotReady:
-			if cached_items is Signal.CacheEmpty:
-				computed_items = self.str_cb(_self, context, edit_text)
-				self.bl_prop_str_search.write_nonpersist(_self, computed_items)
-				return computed_items
-			return cached_items
-		return []
+		return self.str_cb(_self, context, edit_text)
+		# cached_items = self.bl_prop_str_search.read_nonpersist(_self)
+		# if cached_items is not Signal.CacheNotReady:
+		# if cached_items is Signal.CacheEmpty:
+		# computed_items = self.str_cb(_self, context, edit_text)
+		# self.bl_prop_str_search.write_nonpersist(_self, computed_items)
+		# return computed_items
+		# return cached_items
+		# return []
 
 	def safe_enum_cb(
 		self, _self: bl_instance.BLInstance, context: bpy.types.Context

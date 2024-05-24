@@ -17,8 +17,11 @@
 import typing as typ
 
 import bpy
+import sympy as sp
+import sympy.physics.units as spu
 
-from blender_maxwell.utils import bl_cache, sci_constants
+from blender_maxwell.utils import bl_cache, sci_constants, sim_symbols
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
 from .... import sockets
@@ -30,15 +33,19 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	bl_label = 'Scientific Constant'
 
 	output_sockets: typ.ClassVar = {
-		'Value': sockets.ExprSocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	####################
 	# - Properties
 	####################
-	sci_constant: str = bl_cache.BLField(
+	use_symbol: bool = bl_cache.BLField(False)
+
+	sci_constant_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerU
+	)
+	sci_constant_str: str = bl_cache.BLField(
 		'',
-		prop_ui=True,
 		str_cb=lambda self, _, edit_text: self.search_sci_constants(edit_text),
 	)
 
@@ -52,27 +59,139 @@ class ScientificConstantNode(base.MaxwellSimNode):
 			if edit_text.lower() in name.lower()
 		]
 
+	@bl_cache.cached_bl_property(depends_on={'sci_constant_str'})
+	def sci_constant(self) -> spux.SympyExpr | None:
+		"""Retrieve the expression for the scientific constant."""
+		return sci_constants.SCI_CONSTANTS.get(self.sci_constant_str)
+
+	@bl_cache.cached_bl_property(depends_on={'sci_constant_str'})
+	def sci_constant_info(self) -> spux.SympyExpr | None:
+		"""Retrieve the information for the selected scientific constant."""
+		return sci_constants.SCI_CONSTANTS_INFO.get(self.sci_constant_str)
+
+	@bl_cache.cached_bl_property(
+		depends_on={'sci_constant', 'sci_constant_info', 'sci_constant_name'}
+	)
+	def sci_constant_sym(self) -> spux.SympyExpr | None:
+		"""Retrieve a symbol for the scientific constant."""
+		if self.sci_constant is not None and self.sci_constant_info is not None:
+			unit = self.sci_constant_info['units']
+			return sim_symbols.SimSymbol(
+				sym_name=self.sci_constant_name,
+				mathtype=spux.MathType.from_expr(self.sci_constant),
+				# physical_type=  ## TODO: Formalize unit w/o physical_type
+				unit=unit,
+				is_constant=True,
+			)
+		return None
+
 	####################
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		col.prop(self, self.blfields['sci_constant'], text='')
+		col.prop(self, self.blfields['sci_constant_str'], text='')
+
+		row = col.row(align=True)
+		row.alignment = 'CENTER'
+		row.label(text='Assign Symbol')
+		col.prop(self, self.blfields['sci_constant_name'], text='')
+		col.prop(self, self.blfields['use_symbol'], text='Use Symbol', toggle=True)
 
 	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
-		if self.sci_constant:
-			col.label(
-				text=f'Units: {sci_constants.SCI_CONSTANTS_INFO[self.sci_constant]["units"]}'
-			)
-			col.label(
-				text=f'Uncertainty: {sci_constants.SCI_CONSTANTS_INFO[self.sci_constant]["uncertainty"]}'
-			)
+		box = col.box()
+		split = box.split(factor=0.25, align=True)
+
+		# Left: Units
+		_col = split.column(align=True)
+		row = _col.row(align=True)
+		# row.alignment = 'CENTER'
+		row.label(text='Src')
+
+		if self.sci_constant_info:
+			row = _col.row(align=True)
+			# row.alignment = 'CENTER'
+			row.label(text='Unit')
+
+			row = _col.row(align=True)
+			# row.alignment = 'CENTER'
+			row.label(text='Err')
+
+		# Right: Values
+		_col = split.column(align=True)
+		row = _col.row(align=True)
+		# row.alignment = 'CENTER'
+		row.label(text='CODATA2018')
+
+		if self.sci_constant_info:
+			row = _col.row(align=True)
+			# row.alignment = 'CENTER'
+			row.label(text=f'{self.sci_constant_info["units"]}')
+
+			row = _col.row(align=True)
+			# row.alignment = 'CENTER'
+			row.label(text=f'{self.sci_constant_info["uncertainty"]}')
 
 	####################
 	# - Output
 	####################
-	@events.computes_output_socket('Value', props={'sci_constant'})
-	def compute_value(self, props: dict) -> typ.Any:
-		return sci_constants.SCI_CONSTANTS[props['sci_constant']]
+	@events.computes_output_socket(
+		'Expr',
+		props={'use_symbol', 'sci_constant', 'sci_constant_sym'},
+	)
+	def compute_value(self, props) -> typ.Any:
+		sci_constant = props['sci_constant']
+		sci_constant_sym = props['sci_constant_sym']
+
+		if props['use_symbol'] and sci_constant_sym is not None:
+			return sci_constant_sym.sp_symbol
+
+		if sci_constant is not None:
+			return sci_constant
+
+		return ct.FlowSignal.FlowPending
+
+	@events.computes_output_socket(
+		'Expr',
+		kind=ct.FlowKind.Func,
+		props={'sci_constant', 'sci_constant_sym'},
+	)
+	def compute_lazy_func(self, props) -> typ.Any:
+		sci_constant = props['sci_constant']
+		sci_constant_sym = props['sci_constant_sym']
+
+		if sci_constant is not None:
+			return ct.FuncFlow(
+				func=sp.lambdify(
+					[sci_constant_sym.sp_symbol], sci_constant_sym.sp_symbol, 'jax'
+				),
+				func_args=[sci_constant_sym],
+				supports_jax=True,
+			)
+		return ct.FlowSignal.FlowPending
+
+	@events.computes_output_socket(
+		'Expr',
+		kind=ct.FlowKind.Info,
+		props={'sci_constant_sym'},
+	)
+	def compute_info(self, props: dict) -> typ.Any:
+		sci_constant_sym = props['sci_constant_sym']
+
+		if sci_constant_sym is not None:
+			return ct.InfoFlow(output=sci_constant_sym)
+		return ct.FlowSignal.FlowPending
+
+	@events.computes_output_socket(
+		'Expr',
+		kind=ct.FlowKind.Params,
+		props={'sci_constant'},
+	)
+	def compute_params(self, props: dict) -> typ.Any:
+		sci_constant = props['sci_constant']
+
+		if sci_constant is not None:
+			return ct.ParamsFlow(func_args=[sci_constant])
+		return ct.FlowSignal.FlowPending
 
 
 ####################

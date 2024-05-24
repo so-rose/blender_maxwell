@@ -18,7 +18,6 @@
 
 import enum
 import functools
-import time
 import typing as typ
 
 import jax
@@ -34,7 +33,7 @@ import seaborn as sns
 from blender_maxwell import contracts as ct
 from blender_maxwell.utils import logger
 
-mplstyle.use('fast')  ## TODO: Does this do anything?
+# mplstyle.use('fast')  ## TODO: Does this do anything?
 sns.set_theme()
 
 log = logger.get(__name__)
@@ -59,6 +58,9 @@ class Colormap(enum.StrEnum):
 	Viridis = enum.auto()
 	Grayscale = enum.auto()
 
+	####################
+	# - UI
+	####################
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
 		return {
@@ -139,7 +141,9 @@ def rgba_image_from_2d_map(
 ####################
 @functools.lru_cache(maxsize=16)
 def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
-	fig = matplotlib.figure.Figure(figsize=[width_inches, height_inches], dpi=dpi)
+	fig = matplotlib.figure.Figure(
+		figsize=[width_inches, height_inches], dpi=dpi, layout='tight'
+	)
 	canvas = matplotlib.backends.backend_agg.FigureCanvasAgg(fig)
 	ax = fig.add_subplot()
 
@@ -152,66 +156,53 @@ def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 # - Plotters
 ####################
 # (ℤ) -> ℝ
-def plot_box_plot_1d(
-	data: jtyp.Float32[jtyp.Array, ' heights'], info, ax: mpl_ax.Axis
-) -> None:
-	x_sym = info.last_dim
-	y_sym = info.output
+def plot_box_plot_1d(data, ax: mpl_ax.Axis) -> None:
+	x_sym, y_sym = list(data.keys())
 
-	ax.boxplot([data])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.boxplot([data[y_sym]])
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 
 
-def plot_bar(data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis) -> None:
-	x_sym = info.last_dim
-	y_sym = info.output
+def plot_bar(data, ax: mpl_ax.Axis) -> None:
+	x_sym, heights_sym = list(data.keys())
 
-	p = ax.bar(info.dims[x_sym], data)
+	p = ax.bar(data[x_sym], data[heights_sym])
 	ax.bar_label(p, label_type='center')
 
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_title(f'{x_sym.name_pretty} -> {heights_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_xlabel(heights_sym.plot_label)
 
 
 # (ℝ) -> ℝ
-def plot_curve_2d(
-	data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis
-) -> None:
-	x_sym = info.last_dim
-	y_sym = info.output
+def plot_curve_2d(data, ax: mpl_ax.Axis) -> None:
+	x_sym, y_sym = list(data.keys())
 
-	ax.plot(info.dims[x_sym].realize_array.values, data)
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.plot(data[x_sym], data[y_sym])
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 
 
-def plot_points_2d(
-	data: jtyp.Float32[jtyp.Array, ' points'], info, ax: mpl_ax.Axis
-) -> None:
-	x_sym = info.last_dim
-	y_sym = info.output
+def plot_points_2d(data, ax: mpl_ax.Axis) -> None:
+	x_sym, y_sym = list(data.keys())
 
-	ax.scatter(x_sym.realize_array.values, data)
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.scatter(data[x_sym], data[y_sym])
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 
 
 # (ℝ, ℤ) -> ℝ
-def plot_curves_2d(
-	data: jtyp.Float32[jtyp.Array, 'x_size categories'], info, ax: mpl_ax.Axis
-) -> None:
-	x_sym = info.first_dim
-	y_sym = info.output
+def plot_curves_2d(data, ax: mpl_ax.Axis) -> None:
+	x_sym, label_sym, y_sym = list(data.keys())
 
-	for i, category in enumerate(info.dims[info.last_dim]):
-		ax.plot(info.dims[x_sym], data[:, i], label=category)
+	for i, label in enumerate(data[label_sym]):
+		ax.plot(data[x_sym], data[y_sym][:, i], label=label)
 
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 	ax.legend()
@@ -220,12 +211,10 @@ def plot_curves_2d(
 def plot_filled_curves_2d(
 	data: jtyp.Float32[jtyp.Array, 'x_size 2'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_sym = info.first_dim
-	y_sym = info.output
+	x_sym, _, y_sym = list(data.keys())
 
-	shared_x_idx = info.dims[info.last_dim]
-	ax.fill_between(shared_x_idx, data[:, 0], shared_x_idx, data[:, 1])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name}')
+	ax.fill_between(data[x_sym], data[y_sym][:, 0], data[x_sym], data[y_sym][:, 1])
+	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 	ax.legend()
@@ -235,11 +224,9 @@ def plot_filled_curves_2d(
 def plot_heatmap_2d(
 	data: jtyp.Float32[jtyp.Array, 'x_size y_size'], info, ax: mpl_ax.Axis
 ) -> None:
-	x_sym = info.first_dim
-	y_sym = info.last_dim
-	c_sym = info.output
+	x_sym, y_sym, c_sym = list(data.keys())
 
-	heatmap = ax.imshow(data, aspect='equal', interpolation='none')
+	heatmap = ax.imshow(data[c_sym], aspect='equal', interpolation='none')
 	ax.figure.colorbar(heatmap, cax=ax)
 
 	ax.set_title(f'({x_sym.name_pretty}, {y_sym.name_pretty}) -> {c_sym.plot_label}')

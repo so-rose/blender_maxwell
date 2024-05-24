@@ -67,8 +67,9 @@ class InfoFlow:
 		default_factory=dict
 	)
 
+	# Access
 	@functools.cached_property
-	def last_dim(self) -> sim_symbols.SimSymbol | None:
+	def first_dim(self) -> sim_symbols.SimSymbol | None:
 		"""The integer axis occupied by the dimension.
 
 		Can be used to index `.shape` of the represented raw array.
@@ -87,13 +88,24 @@ class InfoFlow:
 			return list(self.dims.keys())[-1]
 		return None
 
-	def dim_axis(self, dim: sim_symbols.SimSymbol) -> int:
+	def dim_by_idx(self, idx: int) -> sim_symbols.SimSymbol | None:
+		if idx > 0 and idx < len(self.dims) - 1:
+			return list(self.dims.keys())[idx]
+		return None
+
+	def dim_by_name(self, dim_name: str) -> int:
 		"""The integer axis occupied by the dimension.
 
 		Can be used to index `.shape` of the represented raw array.
 		"""
-		return list(self.dims.keys()).index(dim)
+		dims_with_name = [dim for dim in self.dims if dim.name == dim_name]
+		if len(dims_with_name) == 1:
+			return dims_with_name[0]
 
+		msg = f'Dim name {dim_name} not found in InfoFlow (or >1 found)'
+		raise ValueError(msg)
+
+	# Information By-Dim
 	def has_idx_cont(self, dim: sim_symbols.SimSymbol) -> bool:
 		"""Whether the dim's index is continuous, and therefore index array.
 
@@ -114,6 +126,23 @@ class InfoFlow:
 			return isinstance(self.dims[dim], list)
 		return False
 
+	def is_idx_uniform(self, dim: sim_symbols.SimSymbol) -> bool:
+		"""Whether the (int) dim has explicitly uniform indexing.
+
+		This is needed primarily to check whether a Fourier Transform can be meaningfully performed on the data over the dimension's axis.
+
+		In practice, we've decided that only `RangeFlow` really truly _guarantees_ uniform indexing.
+		While `ArrayFlow` may be uniform in practice, it's a very expensive to check, and it's far better to enforce that the user perform that check and opt for a `RangeFlow` instead, at the time of dimension definition.
+		"""
+		return isinstance(self.dims[dim], RangeFlow) and self.dims[dim].scaling == 'lin'
+
+	def dim_axis(self, dim: sim_symbols.SimSymbol) -> int:
+		"""The integer axis occupied by the dimension.
+
+		Can be used to index `.shape` of the represented raw array.
+		"""
+		return list(self.dims.keys()).index(dim)
+
 	####################
 	# - Output: Contravariant Value
 	####################
@@ -127,6 +156,49 @@ class InfoFlow:
 	pinned_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = dataclasses.field(
 		default_factory=dict
 	)
+
+	####################
+	# - Properties
+	####################
+	@functools.cached_property
+	def input_mathtypes(self) -> tuple[spux.MathType, ...]:
+		return tuple([dim.mathtype for dim in self.dims])
+
+	@functools.cached_property
+	def output_mathtypes(self) -> tuple[spux.MathType, int, int]:
+		return [self.output.mathtype for _ in range(len(self.output.shape) + 1)]
+
+	@functools.cached_property
+	def order(self) -> tuple[spux.MathType, ...]:
+		r"""The order of the tensor represented by this info.
+
+		While that sounds fancy and all, it boils down to:
+
+		$$
+			\texttt{dims} + |\texttt{output}.\texttt{shape}|
+		$$
+
+		Doing so characterizes the full dimensionality of the tensor, which also perfectly matches the length of the raw data's shape exactly.
+
+		Notes:
+			Corresponds to `len(raw_data.shape)`, if `raw_data` is the n-dimensional array corresponding to this `InfoFlow`.
+		"""
+		return len(self.input_mathtypes) + self.output_shape_len
+
+	####################
+	# - Properties
+	####################
+	@functools.cached_property
+	def dim_labels(self) -> dict[str, dict[str, str]]:
+		"""Return a dictionary mapping pretty dim names to information oriented for columnar information display."""
+		return {
+			dim.name_pretty: {
+				'length': str(len(dim_idx)) if dim_idx is not None else '∞',
+				'mathtype': dim.mathtype.label_pretty,
+				'unit': dim.unit_label,
+			}
+			for dim, dim_idx in self.dims.items()
+		}
 
 	####################
 	# - Operations: Dimensions
@@ -147,9 +219,11 @@ class InfoFlow:
 		"""Slice a dimensional array by-index along a particular dimension."""
 		return InfoFlow(
 			dims={
-				_dim: dim_idx[slice_tuple[0] : slice_tuple[1] : slice_tuple[2]]
-				if _dim == dim
-				else _dim
+				_dim: (
+					dim_idx[slice_tuple[0] : slice_tuple[1] : slice_tuple[2]]
+					if _dim == dim
+					else dim_idx
+				)
 				for _dim, dim_idx in self.dims.items()
 			},
 			output=self.output,
@@ -166,7 +240,7 @@ class InfoFlow:
 		return InfoFlow(
 			dims={
 				(new_dim if _dim == old_dim else _dim): (
-					new_dim_idx if _dim == old_dim else _dim
+					new_dim_idx if _dim == old_dim else dim_idx
 				)
 				for _dim, dim_idx in self.dims.items()
 			},
@@ -234,6 +308,26 @@ class InfoFlow:
 			output=self.output.update(**kwargs),
 			pinned_values=self.pinned_values,
 		)
+
+	def operate_output(
+		self,
+		other: typ.Self,
+		op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
+		unit_op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
+	) -> spux.SympyExpr:
+		if self.dims == other.dims:
+			sym_name = sim_symbols.SimSymbolName.Expr
+			expr = op(self.output.sp_symbol_phy, other.output.sp_symbol_phy)
+			unit_expr = unit_op(self.output.unit_factor, other.output.unit_factor)
+
+			return InfoFlow(
+				dims=self.dims,
+				output=sim_symbols.SimSymbol.from_expr(sym_name, expr, unit_expr),
+				pinned_values=self.pinned_values,
+			)
+
+		msg = f'InfoFlow: operate_output cannot be used when dimensions are not identical ({self.dims} | {other.dims}).'
+		raise ValueError(msg)
 
 	####################
 	# - Operations: Fold

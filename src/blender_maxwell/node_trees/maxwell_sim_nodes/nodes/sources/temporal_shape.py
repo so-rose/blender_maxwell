@@ -40,6 +40,8 @@ _max_e_socket_def = sockets.ExprSocketDef(
 )
 _offset_socket_def = sockets.ExprSocketDef(default_value=5, abs_min=2.5)
 
+t_ps = sim_symbols.t(spu.picosecond)
+
 
 class TemporalShapeNode(base.MaxwellSimNode):
 	"""Declare a source-time dependence for use in simulation source nodes."""
@@ -82,8 +84,8 @@ class TemporalShapeNode(base.MaxwellSimNode):
 				default_steps=100,
 			),
 			'Envelope': sockets.ExprSocketDef(
-				default_symbols=[sim_symbols.t],
-				default_value=10 * sim_symbols.t.sp_symbol,
+				default_symbols=[t_ps],
+				default_value=10 * t_ps.sp_symbol,
 			),
 		},
 	}

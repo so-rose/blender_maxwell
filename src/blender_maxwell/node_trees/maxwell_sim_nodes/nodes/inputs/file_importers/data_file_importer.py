@@ -95,62 +95,35 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	####################
 	# - Info Guides
 	####################
-	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(sim_symbols.SimSymbolName)
-	output_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
+	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.Data
+	)
+	output_mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real)
 	output_physical_type: spux.PhysicalType = bl_cache.BLField(
 		spux.PhysicalType.NonPhysical
 	)
 	output_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_units(self.dim_0_physical_type),
+		enum_cb=lambda self, _: self.search_units(self.output_physical_type),
 		cb_depends_on={'output_physical_type'},
 	)
 
 	dim_0_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerA
 	)
-	dim_0_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
-	dim_0_physical_type: spux.PhysicalType = bl_cache.BLField(
-		spux.PhysicalType.NonPhysical
-	)
-	dim_0_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_units(self.dim_0_physical_type),
-		cb_depends_on={'dim_0_physical_type'},
-	)
-
 	dim_1_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerB
 	)
-	dim_1_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
-	dim_1_physical_type: spux.PhysicalType = bl_cache.BLField(
-		spux.PhysicalType.NonPhysical
-	)
-	dim_1_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_units(self.dim_1_physical_type),
-		cb_depends_on={'dim_1_physical_type'},
-	)
-
 	dim_2_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerC
 	)
-	dim_2_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
-	dim_2_physical_type: spux.PhysicalType = bl_cache.BLField(
-		spux.PhysicalType.NonPhysical
-	)
-	dim_2_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_units(self.dim_2_physical_type),
-		cb_depends_on={'dim_2_physical_type'},
-	)
-
 	dim_3_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerD
 	)
-	dim_3_mathtype: sim_symbols.MathType = bl_cache.BLField(sim_symbols.Real)
-	dim_3_physical_type: spux.PhysicalType = bl_cache.BLField(
-		spux.PhysicalType.NonPhysical
+	dim_4_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerE
 	)
-	dim_3_unit: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_units(self.dim_3_physical_type),
-		cb_depends_on={'dim_3_physical_type'},
+	dim_5_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.LowerF
 	)
 
 	def search_units(self, physical_type: spux.PhysicalType) -> list[ct.BLEnumElement]:
@@ -160,19 +133,6 @@ class DataFileImporterNode(base.MaxwellSimNode):
 				for i, unit in enumerate(physical_type.valid_units)
 			]
 		return []
-
-	def dim(self, i: int):
-		dim_name = getattr(self, f'dim_{i}_name')
-		dim_mathtype = getattr(self, f'dim_{i}_mathtype')
-		dim_physical_type = getattr(self, f'dim_{i}_physical_type')
-		dim_unit = getattr(self, f'dim_{i}_unit')
-
-		return sim_symbols.SimSymbol(
-			sym_name=dim_name,
-			mathtype=dim_mathtype,
-			physical_type=dim_physical_type,
-			unit=spux.unit_str_to_unit(dim_unit),
-		)
 
 	####################
 	# - UI
@@ -202,19 +162,21 @@ class DataFileImporterNode(base.MaxwellSimNode):
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
 		"""Draw loaded properties."""
-		for i in range(len(self.expr_info.dims)):
-			col = layout.column(align=True)
+		col = layout.column(align=True)
+		if self.expr_info is not None:
+			for i in range(len(self.expr_info.dims)):
+				col.prop(self, self.blfields[f'dim_{i}_name'], text=f'Dim {i}')
+
 			row = col.row(align=True)
 			row.alignment = 'CENTER'
-			row.label(text=f'Load Dim {i}')
+			row.label(text='Output')
 
 			row = col.row(align=True)
-			row.prop(self, self.blfields[f'dim_{i}_name'], text='')
-			row.prop(self, self.blfields[f'dim_{i}_mathtype'], text='')
-
+			row.prop(self, self.blfields['output_name'], text='')
+			row.prop(self, self.blfields['output_mathtype'], text='')
 			row = col.row(align=True)
-			row.prop(self, self.blfields[f'dim_{i}_physical_type'], text='')
-			row.prop(self, self.blfields[f'dim_{i}_unit'], text='')
+			row.prop(self, self.blfields['output_physical_type'], text='')
+			row.prop(self, self.blfields['output_unit'], text='')
 
 	####################
 	# - FlowKind.Array|Func
@@ -271,7 +233,8 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		'Expr',
 		kind=ct.FlowKind.Info,
 		# Loaded
-		props={'output_name', 'output_physical_type', 'output_unit'},
+		props={'output_name', 'output_mathtype', 'output_physical_type', 'output_unit'}
+		| {f'dim_{i}_name' for i in range(6)},
 		output_sockets={'Expr'},
 		output_socket_kinds={'Expr': ct.FlowKind.Func},
 	)
@@ -285,32 +248,31 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			A completely empty `ParamsFlow`, ready to be composed.
 		"""
 		expr = output_sockets['Expr']
-
 		has_expr_func = not ct.FlowSignal.check(expr)
-
 		if has_expr_func:
 			data = expr.func_jax()
 
-			# Deduce Dimensionality
-			_shape = data.shape
-			shape = _shape if _shape is not None else ()
-			dim_syms = [self.dim(i) for i in range(len(shape))]
+			# Deduce Dimension Symbols
+			## -> They are all chronically integer indices.
+			## -> The FilterNode can be used to "steal" an index from the data.
+			shape = data.shape if data.shape is not None else ()
+			dims = {
+				sim_symbols.idx(None).update(
+					sym_name=props[f'dim_{i}_name'],
+					interval_finite_z=(0, elements),
+					interval_inf=(False, False),
+					interval_closed=(True, True),
+				): [str(j) for j in range(elements)]
+				for i, elements in enumerate(shape)
+			}
 
-			# Return InfoFlow
 			return ct.InfoFlow(
-				dims={
-					dim_sym: ct.RangeFlow(
-						start=sp.S(0),
-						stop=sp.S(shape[i] - 1),
-						steps=shape[i],
-						unit=self.dim(i).unit,
-					)
-					for i, dim_sym in enumerate(dim_syms)
-				},
+				dims=dims,
 				output=sim_symbols.SimSymbol(
 					sym_name=props['output_name'],
 					mathtype=props['output_mathtype'],
 					physical_type=props['output_physical_type'],
+					unit=props['output_unit'],
 				),
 			)
 		return ct.FlowSignal.FlowPending

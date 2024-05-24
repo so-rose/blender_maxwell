@@ -496,7 +496,7 @@ class MapMathNode(base.MaxwellSimNode):
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
-		if self.info is not None:
+		if self.expr_info is not None:
 			return [
 				operation.bl_enum_element(i)
 				for i, operation in enumerate(MapOperation.by_expr_info(self.expr_info))

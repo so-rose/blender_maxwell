@@ -50,11 +50,6 @@ class ArrayFlow:
 	####################
 	# - Computed Properties
 	####################
-	@property
-	def is_symbolic(self) -> bool:
-		"""Always False, as ArrayFlows are never unrealized."""
-		return False
-
 	def __len__(self) -> int:
 		"""Outer length of the contained array."""
 		return len(self.values)
@@ -196,5 +191,11 @@ class ArrayFlow:
 		"""
 		return self.rescale(lambda v: v, new_unit=new_unit)
 
-	def rescale_to_unit_system(self, unit_system: spux.Unit) -> typ.Self:
-		raise NotImplementedError
+	def rescale_to_unit_system(self, unit_system: spux.UnitSystem | None) -> typ.Self:
+		if unit_system is None:
+			return self.values
+
+		return self.correct_unit(None).rescale(
+			lambda v: spux.scale_to_unit_system(v * self.unit, unit_system),
+			new_unit=spux.convert_to_unit_system(self.unit, unit_system),
+		)

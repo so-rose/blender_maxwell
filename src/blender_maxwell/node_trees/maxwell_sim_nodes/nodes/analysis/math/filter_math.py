@@ -46,6 +46,7 @@ class FilterOperation(enum.StrEnum):
 	"""
 
 	# Slice
+	Slice = enum.auto()
 	SliceIdx = enum.auto()
 
 	# Pin
@@ -53,9 +54,8 @@ class FilterOperation(enum.StrEnum):
 	Pin = enum.auto()
 	PinIdx = enum.auto()
 
-	# Reinterpret
+	# Dimension
 	Swap = enum.auto()
-	SetDim = enum.auto()
 
 	####################
 	# - UI
@@ -65,14 +65,14 @@ class FilterOperation(enum.StrEnum):
 		FO = FilterOperation
 		return {
 			# Slice
-			FO.SliceIdx: 'a[...]',
+			FO.Slice: '=a[i:j]',
+			FO.SliceIdx: '≈a[v₁:v₂]',
 			# Pin
-			FO.PinLen1: 'pinₐ =1',
+			FO.PinLen1: 'pinₐ',
 			FO.Pin: 'pinₐ ≈v',
-			FO.PinIdx: 'pinₐ =a[v]',
+			FO.PinIdx: 'pinₐ =i',
 			# Reinterpret
 			FO.Swap: 'a₁ ↔ a₂',
-			FO.SetDim: 'setₐ =v',
 		}[value]
 
 	@staticmethod
@@ -118,11 +118,6 @@ class FilterOperation(enum.StrEnum):
 		if len(info.dims) >= 2:  # noqa: PLR2004
 			operations.append(FO.Swap)
 
-		## SetDim
-		## -> There must be a dimension to correct.
-		if info.dims:
-			operations.append(FO.SetDim)
-
 		return operations
 
 	####################
@@ -145,6 +140,7 @@ class FilterOperation(enum.StrEnum):
 		FO = FilterOperation
 		return {
 			# Slice
+			FO.Slice: 1,
 			FO.SliceIdx: 1,
 			# Pin
 			FO.PinLen1: 1,
@@ -152,40 +148,35 @@ class FilterOperation(enum.StrEnum):
 			FO.PinIdx: 1,
 			# Reinterpret
 			FO.Swap: 2,
-			FO.SetDim: 1,
 		}[self]
 
 	def valid_dims(self, info: ct.InfoFlow) -> list[typ.Self]:
 		FO = FilterOperation
 		match self:
-			case FO.SliceIdx | FO.Swap:
-				return info.dims
+			# Slice
+			case FO.Slice:
+				return [dim for dim in info.dims if not dim.has_idx_labels(dim)]
 
-			# PinLen1: Only allow dimensions with length=1.
+			case FO.SliceIdx:
+				return [dim for dim in info.dims if not dim.has_idx_labels(dim)]
+
+			# Pin
 			case FO.PinLen1:
 				return [
 					dim
 					for dim, dim_idx in info.dims.items()
-					if dim_idx is not None and len(dim_idx) == 1
+					if not info.has_idx_cont(dim) and len(dim_idx) == 1
 				]
 
-			# Pin: Only allow dimensions with discrete index.
-			## TODO: Shouldn't 'Pin' be allowed to index continuous indices too?
-			case FO.Pin | FO.PinIdx:
-				return [
-					dim
-					for dim, dim_idx in info.dims
-					if dim_idx is not None and len(dim_idx) > 0
-				]
+			case FO.Pin:
+				return info.dims
 
-			case FO.SetDim:
-				return [
-					dim
-					for dim, dim_idx in info.dims
-					if dim_idx is not None
-					and not isinstance(dim_idx, list)
-					and dim_idx.mathtype == spux.MathType.Integer
-				]
+			case FO.PinIdx:
+				return [dim for dim in info.dims if not info.has_idx_cont(dim)]
+
+			# Dimension
+			case FO.Swap:
+				return info.dims
 
 		return []
 
@@ -193,9 +184,14 @@ class FilterOperation(enum.StrEnum):
 		self, info: ct.InfoFlow, dim_0: str | None, dim_1: str | None
 	) -> bool:
 		"""Check whether the given dimension inputs are valid in the context of this operation, and of the information."""
-		return (self.num_dim_inputs in [1, 2] and dim_0 in self.valid_dims(info)) or (
-			self.num_dim_inputs == 2 and dim_1 in self.valid_dims(info)
-		)
+		if self.num_dim_inputs == 1:
+			return dim_0 in self.valid_dims(info)
+
+		if self.num_dim_inputs == 2:  # noqa: PLR2004
+			valid_dims = self.valid_dims(info)
+			return dim_0 in valid_dims and dim_1 in valid_dims
+
+		return False
 
 	####################
 	# - UI
@@ -209,6 +205,9 @@ class FilterOperation(enum.StrEnum):
 		FO = FilterOperation
 		return {
 			# Pin
+			FO.Slice: lambda expr: jlax.slice_in_dim(
+				expr, slice_tuple[0], slice_tuple[1], slice_tuple[2], axis=axis_0
+			),
 			FO.SliceIdx: lambda expr: jlax.slice_in_dim(
 				expr, slice_tuple[0], slice_tuple[1], slice_tuple[2], axis=axis_0
 			),
@@ -216,9 +215,8 @@ class FilterOperation(enum.StrEnum):
 			FO.PinLen1: lambda expr: jnp.squeeze(expr, axis_0),
 			FO.Pin: lambda expr, idx: jnp.take(expr, idx, axis=axis_0),
 			FO.PinIdx: lambda expr, idx: jnp.take(expr, idx, axis=axis_0),
-			# Reinterpret
+			# Dimension
 			FO.Swap: lambda expr: jnp.swapaxes(expr, axis_0, axis_1),
-			FO.SetDim: lambda expr: expr,
 		}[self]
 
 	def transform_info(
@@ -228,10 +226,10 @@ class FilterOperation(enum.StrEnum):
 		dim_1: sim_symbols.SimSymbol,
 		pin_idx: int | None = None,
 		slice_tuple: tuple[int, int, int] | None = None,
-		replaced_dim: tuple[str, tuple[str, ct.ArrayFlow | ct.RangeFlow]] | None = None,
 	):
 		FO = FilterOperation
 		return {
+			FO.Slice: lambda: info.slice_dim(dim_0, slice_tuple),
 			FO.SliceIdx: lambda: info.slice_dim(dim_0, slice_tuple),
 			# Pin
 			FO.PinLen1: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
@@ -239,7 +237,6 @@ class FilterOperation(enum.StrEnum):
 			FO.PinIdx: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
 			# Reinterpret
 			FO.Swap: lambda: info.swap_dimensions(dim_0, dim_1),
-			FO.SetDim: lambda: info.replace_dim(*replaced_dim),
 		}[self]()
 
 
@@ -330,8 +327,8 @@ class FilterMathNode(base.MaxwellSimNode):
 	def search_dims(self) -> list[ct.BLEnumElement]:
 		if self.expr_info is not None and self.operation is not None:
 			return [
-				(dim_name, dim_name, dim_name, '', i)
-				for i, dim_name in enumerate(self.operation.valid_dims(self.expr_info))
+				(dim.name, dim.name_pretty, dim.name, '', i)
+				for i, dim in enumerate(self.operation.valid_dims(self.expr_info))
 			]
 		return []
 
@@ -380,8 +377,6 @@ class FilterMathNode(base.MaxwellSimNode):
 			# Reinterpret
 			case FO.Swap:
 				return f'Filter: Swap [{self.active_dim_0}]|[{self.active_dim_1}]'
-			case FO.SetDim:
-				return f'Filter: Set [{self.active_dim_0}]'
 
 			case _:
 				return self.bl_label
@@ -480,30 +475,6 @@ class FilterMathNode(base.MaxwellSimNode):
 					)
 				}
 
-		# Loose Sockets: Set Dim
-		## -> The user must provide a (ℤ) -> ℝ array.
-		## -> It must be of identical length to the replaced axis.
-		elif props['operation'] is FilterOperation.SetDim and dim_0 is not None:
-			dim = dim_0
-			current_bl_socket = self.loose_input_sockets.get('Dim')
-			if (
-				current_bl_socket is None
-				or current_bl_socket.active_kind != ct.FlowKind.Func
-				or current_bl_socket.size is not spux.NumberSize1D.Scalar
-				or current_bl_socket.mathtype != dim.mathtype
-				or current_bl_socket.physical_type != dim.physical_type
-			):
-				self.loose_input_sockets = {
-					'Dim': sockets.ExprSocketDef(
-						active_kind=ct.FlowKind.Func,
-						physical_type=dim.physical_type,
-						mathtype=dim.mathtype,
-						default_unit=dim.unit,
-						show_func_ui=False,
-						show_info_columns=True,
-					)
-				}
-
 		# No Loose Value: Remove Input Sockets
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
@@ -570,60 +541,11 @@ class FilterMathNode(base.MaxwellSimNode):
 
 		has_info = not ct.FlowSignal.check(info)
 
-		# Dim (Op.SetDim)
-		dim_func = input_sockets['Dim'][ct.FlowKind.Func]
-		dim_params = input_sockets['Dim'][ct.FlowKind.Params]
-		dim_info = input_sockets['Dim'][ct.FlowKind.Info]
-
-		has_dim_func = not ct.FlowSignal.check(dim_func)
-		has_dim_params = not ct.FlowSignal.check(dim_params)
-		has_dim_info = not ct.FlowSignal.check(dim_info)
-
 		# Dimension(s)
 		dim_0 = props['dim_0']
 		dim_1 = props['dim_1']
 		slice_tuple = props['slice_tuple']
 		if has_info and operation is not None:
-			# Set Dimension: Retrieve Array
-			if props['operation'] is FilterOperation.SetDim:
-				new_dim = (
-					next(dim_info.dims.keys()) if len(dim_info.dims) >= 1 else None
-				)
-
-				if (
-					dim_0 is not None
-					and new_dim is not None
-					and has_dim_info
-					and has_dim_params
-					# Check New Dimension Index Array Sizing
-					and len(dim_info.dims) == 1
-					and dim_info.output.rows == 1
-					and dim_info.output.cols == 1
-					# Check Lack of Params Symbols
-					and not dim_params.symbols
-					# Check Expr Dim | New Dim Compatibility
-					and info.has_idx_discrete(dim_0)
-					and dim_info.has_idx_discrete(new_dim)
-					and len(info.dims[dim_0]) == len(dim_info.dims[new_dim])
-				):
-					# Retrieve Dimension Coordinate Array
-					## -> It must be strictly compatible.
-					values = dim_func.realize(dim_params, spux.UNITS_SI)
-
-					# Transform Info w/Corrected Dimension
-					## -> The existing dimension will be replaced.
-					new_dim_idx = ct.ArrayFlow(
-						values=values,
-						unit=spux.convert_to_unit_system(
-							dim_info.output.unit, spux.UNITS_SI
-						),
-					).rescale_to_unit(dim_info.output.unit)
-
-					replaced_dim = [dim_0, (dim_info.output.name, new_dim_idx)]
-					return operation.transform_info(
-						info, dim_0, dim_1, replaced_dim=replaced_dim
-					)
-				return ct.FlowSignal.FlowPending
 			return operation.transform_info(info, dim_0, dim_1, slice_tuple=slice_tuple)
 		return ct.FlowSignal.FlowPending
 

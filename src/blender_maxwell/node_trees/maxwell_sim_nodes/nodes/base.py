@@ -610,8 +610,8 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			## -> Anyone needing results will need to wait on preinit().
 			return ct.FlowSignal.FlowInitializing
 
-		if optional:
-			return ct.FlowSignal.NoFlow
+		# if optional:
+		return ct.FlowSignal.NoFlow
 
 		msg = f'{self.sim_node_name}: Input socket "{input_socket_name}" cannot be computed, as it is not an active input socket'
 		raise ValueError(msg)
@@ -659,11 +659,12 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			return output_socket_methods[0](self)
 
 		# Auxiliary Fallbacks
-		if optional or kind in [ct.FlowKind.Info, ct.FlowKind.Params]:
-			return ct.FlowSignal.NoFlow
+		return ct.FlowSignal.NoFlow
+		# if optional or kind in [ct.FlowKind.Info, ct.FlowKind.Params]:
+		# return ct.FlowSignal.NoFlow
 
-		msg = f'No output method for ({output_socket_name}, {kind})'
-		raise ValueError(msg)
+		# msg = f'No output method for ({output_socket_name}, {kind})'
+		# raise ValueError(msg)
 
 	####################
 	# - Event Trigger

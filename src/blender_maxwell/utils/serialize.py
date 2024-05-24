@@ -99,6 +99,7 @@ class TypeID(enum.StrEnum):
 	SympyType: str = '!type=sympytype'
 	SympyExpr: str = '!type=sympyexpr'
 	SocketDef: str = '!type=socketdef'
+	SimSymbol: str = '!type=simsymbol'
 	ManagedObj: str = '!type=managedobj'
 
 
@@ -161,11 +162,12 @@ def _dec_hook(_type: type, obj: NaivelyEncodableType) -> typ.Any:
 		return sp.sympify(obj_value).subs(spux.UNIT_BY_SYMBOL)
 
 	if hasattr(_type, 'parse_as_msgspec') and (
-		is_representation(obj) and obj[0] in [TypeID.SocketDef, TypeID.ManagedObj]
+		is_representation(obj)
+		and obj[0] in [TypeID.SocketDef, TypeID.ManagedObj, TypeID.SimSymbol]
 	):
 		return _type.parse_as_msgspec(obj)
 
-	msg = f'Can\'t decode "{obj}" to type {type(obj)}'
+	msg = f'can\'t decode "{obj}" to type {type(obj)}'
 	raise NotImplementedError(msg)
 
 

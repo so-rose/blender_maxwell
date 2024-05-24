@@ -29,6 +29,7 @@ import tidy3d as td
 
 from blender_maxwell.contracts import BLEnumElement
 from blender_maxwell.services import tdcloud
+from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
 from .flow_kinds.info import InfoFlow
@@ -483,6 +484,93 @@ class DataFileFormat(enum.StrEnum):
 	## - ...Thus achieving the same result as if there were a sidecar.
 
 	####################
+	# - Functions: DataFrame
+	####################
+	@staticmethod
+	def to_df(
+		data: jtyp.Shaped[jtyp.Array, 'x_size y_size'], info: InfoFlow
+	) -> pl.DataFrame:
+		"""Utility method to convert raw data to a `polars.DataFrame`, as guided by an `InfoFlow`.
+
+		Only works with 2D data (obviously).
+
+		Raises:
+			ValueError: If the data has more than two dimensions, all `info` dimensions are not discrete/labelled, or the dimensionality of `info` doesn't match.
+		"""
+		if info.order > 2:  # noqa: PLR2004
+			msg = f'Data may not have more than two dimensions (info={info}, data.shape={data.shape})'
+			raise ValueError(msg)
+
+		if any(info.has_idx_cont(dim) for dim in info.dims):
+			msg = f'To convert data|info to a dataframe, no dimensions can have continuous indices (info={info})'
+			raise ValueError(msg)
+
+		data_np = np.array(data)
+
+		MT = spux.MathType
+		match (
+			info.input_mathtypes,
+			info.output.mathtype,
+			info.output.rows,
+			info.output.cols,
+		):
+			# (R,Z) -> Complex Scalar
+			## -> Polars (also pandas) doesn't have a complex type.
+			## -> Will be treated as (R, Z, 2) -> Real Scalar.
+			case ((MT.Rational | MT.Real, MT.Integer), MT.Complex, 1, 1):
+				row_dim = info.first_dim
+				col_dim = info.last_dim
+
+				return pl.DataFrame(
+					{row_dim.name: info.dims[row_dim]}
+					| {
+						col_label + postfix: re_im(data_np[:, col])
+						for col, col_label in enumerate(info.dims[col_dim])
+						for postfix, re_im in [('_re', np.real), ('_im', np.imag)]
+					}
+				)
+
+			# (R,Z) -> Scalar
+			case ((MT.Rational | MT.Real, MT.Integer), _, 1, 1):
+				row_dim = info.first_dim
+				col_dim = info.last_dim
+
+				return pl.DataFrame(
+					{row_dim.name: info.dims[row_dim]}
+					| {
+						col_label: data_np[:, col]
+						for col, col_label in enumerate(info.dims[col_dim])
+					}
+				)
+
+			# (Z) -> Complex Vector/Covector
+			case ((MT.Integer,), MT.Complex, r, c) if (r > 1 and c == 1) or (
+				r == 1 and c > 1
+			):
+				col_dim = info.last_dim
+
+				return pl.DataFrame(
+					{
+						col_label + postfix: re_im(data_np[col, :])
+						for col, col_label in enumerate(info.dims[col_dim])
+						for postfix, re_im in [('_re', np.real), ('_im', np.imag)]
+					}
+				)
+
+			# (Z) -> Real Vector
+			## -> Each integer index will be treated as a column index.
+			## -> This will effectively transpose the data.
+			case ((MT.Integer,), _, r, c) if (r > 1 and c == 1) or (r == 1 and c > 1):
+				col_dim = info.last_dim
+
+				return pl.DataFrame(
+					{
+						col_label: data_np[col, :]
+						for col, col_label in enumerate(info.dims[col_dim])
+					}
+				)
+
+	####################
 	# - Functions: Saver
 	####################
 	def is_info_compatible(self, info: InfoFlow) -> bool:
@@ -506,50 +594,7 @@ class DataFileFormat(enum.StrEnum):
 			np.savetxt(path, data)
 
 		def save_csv(path, data, info):
-			data_np = np.array(data)
-
-			# Extract Input Coordinates
-			dim_columns = {
-				dim.name: np.array(dim_idx.realize_array)
-				for i, (dim, dim_idx) in enumerate(info.dims)
-			}  ## TODO: realize_array might not be defined on some index arrays
-
-			# Declare Function to Extract Output Values
-			output_columns = {}
-
-			def declare_output_col(data_col, output_idx=0, use_output_idx=False):
-				nonlocal output_columns
-
-				# Complex: Split to Two Columns
-				output_idx_str = f'[{output_idx}]' if use_output_idx else ''
-				if bool(np.any(np.iscomplex(data_col))):
-					output_columns |= {
-						f'{info.output.name}{output_idx_str}_re': np.real(data_col),
-						f'{info.output.name}{output_idx_str}_im': np.imag(data_col),
-					}
-
-				# Else: Use Array Directly
-				else:
-					output_columns |= {
-						f'{info.output.name}{output_idx_str}': data_col,
-					}
-
-				## TODO: Maybe a check to ensure dtype!=object?
-
-			# Extract Output Values
-			## -> 2D: Iterate over columns by-index.
-			## -> 1D: Declare the array as the only column.
-			if len(data_np.shape) == 2:
-				for output_idx in data_np.shape[1]:
-					declare_output_col(data_np[:, output_idx], output_idx, True)
-			else:
-				declare_output_col(data_np)
-
-			# Compute DataFrame & Write CSV
-			df = pl.DataFrame(dim_columns | output_columns)
-
-			log.debug('Writing Polars DataFrame to CSV:')
-			log.debug(df)
+			df = self.to_df(data, info)
 			df.write_csv(path)
 
 		def save_npy(path, data, info):

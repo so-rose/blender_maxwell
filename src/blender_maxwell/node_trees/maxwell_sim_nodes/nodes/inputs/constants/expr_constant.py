@@ -30,6 +30,7 @@ class ExprConstantNode(base.MaxwellSimNode):
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Func,
+			show_name_selector=True,
 		),
 	}
 	output_sockets: typ.ClassVar = {

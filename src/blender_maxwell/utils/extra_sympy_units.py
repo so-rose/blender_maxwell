@@ -28,11 +28,13 @@ Attributes:
 
 import enum
 import functools
+import sys
 import typing as typ
 from fractions import Fraction
 
 import jax
 import jax.numpy as jnp
+import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 import sympy.physics.units as spu
@@ -145,6 +147,21 @@ class MathType(enum.StrEnum):
 		}[dtype]
 
 	@staticmethod
+	def from_jax_array(data: jtyp.Shaped[jtyp.Array, '...']) -> type:
+		"""Deduce the MathType corresponding to a JAX array.
+
+		We go about this by leveraging that:
+		- `data` is of a homogeneous type.
+		- `data.item(0)` returns a single element of the array w/pure-python type.
+
+		By combing this with `type()` and `MathType.from_pytype`, we can effectively deduce the `MathType` of the entire array with relative efficiency.
+
+		Notes:
+			Should also work with numpy arrays.
+		"""
+		return MathType.from_pytype(type(data.item(0)))
+
+	@staticmethod
 	def has_mathtype(obj: typ.Any) -> typ.Literal['pytype', 'expr'] | None:
 		if isinstance(obj, bool | int | Fraction | float | complex):
 			return 'pytype'
@@ -174,6 +191,39 @@ class MathType(enum.StrEnum):
 		}[self]
 
 	@property
+	def inf_finite(self) -> type:
+		"""Opinionated finite representation of "infinity" within this `MathType`.
+
+		These are chosen using `sys.maxsize` and `sys.float_info`.
+		As such, while not arbitrary, this "finite representation of infinity" certainly is opinionated.
+
+		**Note** that, in practice, most systems will have no trouble working with values that exceed those defined here.
+
+		Notes:
+			Values should be presumed to vary by-platform, as the `sys` attributes may be influenced by CPU architecture, OS, runtime environment, etc. .
+
+			These values can be used directly in `jax` arrays, but at the cost of an overflow warning (in part because `jax` generally only allows the use of `float32`).
+			In this case, the warning doesn't matter, as the value will be cast to `jnp.inf` anyway.
+
+			However, it's generally cleaner to directly use `jnp.inf` if infinite values must be defined in an array context.
+		"""
+		MT = MathType
+		Z = MT.Integer
+		R = MT.Integer
+		return {
+			MT.Integer: (-sys.maxsize, sys.maxsize),
+			MT.Rational: (
+				Fraction(Z.inf_finite[0], 1),
+				Fraction(Z.inf_finite[1], 1),
+			),
+			MT.Real: -(sys.float_info.min, sys.float_info.max),
+			MT.Complex: (
+				complex(R.inf_finite[0], R.inf_finite[0]),
+				complex(R.inf_finite[1], R.inf_finite[1]),
+			),
+		}[self]
+
+	@property
 	def sp_symbol_a(self) -> type:
 		MT = MathType
 		return {
@@ -191,6 +241,10 @@ class MathType(enum.StrEnum):
 			MathType.Real: 'ℝ',
 			MathType.Complex: 'ℂ',
 		}[value]
+
+	@property
+	def label_pretty(self) -> str:
+		return MathType.to_str(self)
 
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
@@ -819,14 +873,15 @@ def sp_to_str(sp_obj: SympyExpr) -> str:
 		A string representing the expression for human use.
 			_The string is not re-encodable to the expression._
 	"""
+	## TODO: A bool flag property that does a lot of find/replace to make it super pretty
 	return _SYMPY_EXPR_PRINTER_STR.doprint(sp_obj)
 
 
 def pretty_symbol(sym: sp.Symbol) -> str:
 	return f'{sym.name} ∈ ' + (
-		'ℂ'
-		if sym.is_complex
-		else ('ℝ' if sym.is_real else ('ℤ' if sym.is_integer else '?'))
+		'ℤ'
+		if sym.is_integer
+		else ('ℝ' if sym.is_real else ('ℂ' if sym.is_complex else '?'))
 	)
 
 
@@ -1039,20 +1094,24 @@ class PhysicalType(enum.StrEnum):
 			PT.LumIntensity: spu.candela,
 			PT.LumFlux: spu.candela * spu.steradian,
 			PT.Illuminance: spu.candela / spu.meter**2,
-			# Optics
-			PT.OrdinaryWaveVector: terahertz,
-			PT.AngularWaveVector: spu.radian * terahertz,
 		}[self]
 
 	@functools.cached_property
 	def valid_units(self) -> list[Unit]:
+		"""Retrieve an ordered (by subjective usefulness) list of units for this physical type.
+
+		Notes:
+			The order in which valid units are declared is the exact same order that UI dropdowns display them.
+
+			**Altering the order of units breaks backwards compatibility**.
+		"""
 		PT = PhysicalType
 		return {
 			PT.NonPhysical: [None],
 			# Global
 			PT.Time: [
-				femtosecond,
 				spu.picosecond,
+				femtosecond,
 				spu.nanosecond,
 				spu.microsecond,
 				spu.millisecond,
@@ -1070,11 +1129,11 @@ class PhysicalType(enum.StrEnum):
 			],
 			PT.Freq: (
 				_valid_freqs := [
+					terahertz,
 					spu.hertz,
 					kilohertz,
 					megahertz,
 					gigahertz,
-					terahertz,
 					petahertz,
 					exahertz,
 				]
@@ -1083,10 +1142,10 @@ class PhysicalType(enum.StrEnum):
 			# Cartesian
 			PT.Length: (
 				_valid_lens := [
+					spu.micrometer,
+					spu.nanometer,
 					spu.picometer,
 					spu.angstrom,
-					spu.nanometer,
-					spu.micrometer,
 					spu.millimeter,
 					spu.centimeter,
 					spu.meter,
@@ -1102,24 +1161,24 @@ class PhysicalType(enum.StrEnum):
 			PT.Vel: [_unit / spu.second for _unit in _valid_lens],
 			PT.Accel: [_unit / spu.second**2 for _unit in _valid_lens],
 			PT.Mass: [
+				spu.kilogram,
 				spu.electron_rest_mass,
 				spu.dalton,
 				spu.microgram,
 				spu.milligram,
 				spu.gram,
-				spu.kilogram,
 				spu.metric_ton,
 			],
 			PT.Force: [
-				spu.kg * spu.meter / spu.second**2,
-				nanonewton,
 				micronewton,
+				nanonewton,
 				millinewton,
 				spu.newton,
+				spu.kg * spu.meter / spu.second**2,
 			],
 			PT.Pressure: [
-				millibar,
 				spu.bar,
+				millibar,
 				spu.pascal,
 				hectopascal,
 				spu.atmosphere,
@@ -1129,8 +1188,8 @@ class PhysicalType(enum.StrEnum):
 			],
 			# Energy
 			PT.Work: [
-				spu.electronvolt,
 				spu.joule,
+				spu.electronvolt,
 			],
 			PT.Power: [
 				spu.watt,
@@ -1194,18 +1253,17 @@ class PhysicalType(enum.StrEnum):
 			PT.Illuminance: [
 				spu.candela / spu.meter**2,
 			],
-			# Optics
-			PT.OrdinaryWaveVector: _valid_freqs,
-			PT.AngularWaveVector: [spu.radian * _unit for _unit in _valid_freqs],
 		}[self]
 
 	@staticmethod
-	def from_unit(unit: Unit) -> list[Unit]:
+	def from_unit(unit: Unit, optional: bool = False) -> list[Unit] | None:
 		for physical_type in list(PhysicalType):
 			if unit in physical_type.valid_units:
 				return physical_type
 		## TODO: Optimize
 
+		if optional:
+			return None
 		msg = f'Could not determine PhysicalType for {unit}'
 		raise ValueError(msg)
 
@@ -1400,20 +1458,9 @@ def sympy_to_python(
 ####################
 # - Convert to Unit System
 ####################
-def convert_to_unit_system(
-	sp_obj: SympyExpr, unit_system: UnitSystem | None
+def strip_unit_system(
+	sp_obj: SympyExpr, unit_system: UnitSystem | None = None
 ) -> SympyExpr:
-	"""Convert an expression to the units of a given unit system, with appropriate scaling."""
-	if unit_system is None:
-		return sp_obj
-
-	return spu.convert_to(
-		sp_obj,
-		{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
-	)
-
-
-def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem | None) -> SympyExpr:
 	"""Strip units occurring in the given unit system from the expression.
 
 	Unit stripping is a "dumb" operation: "Substitute any `sympy` object in `unit_system.values()` with `1`".
@@ -1425,6 +1472,19 @@ def strip_unit_system(sp_obj: SympyExpr, unit_system: UnitSystem | None) -> Symp
 	if unit_system is None:
 		return sp_obj.subs(UNIT_TO_1)
 	return sp_obj.subs({unit: 1 for unit in unit_system.values() if unit is not None})
+
+
+def convert_to_unit_system(
+	sp_obj: SympyExpr, unit_system: UnitSystem | None
+) -> SympyExpr:
+	"""Convert an expression to the units of a given unit system."""
+	if unit_system is None:
+		return sp_obj
+
+	return spu.convert_to(
+		sp_obj,
+		{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
+	)
 
 
 def scale_to_unit_system(

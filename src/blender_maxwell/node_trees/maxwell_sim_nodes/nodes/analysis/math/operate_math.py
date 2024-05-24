@@ -20,8 +20,11 @@ import typing as typ
 import bpy
 import jax.numpy as jnp
 import sympy as sp
+import sympy.physics.quantum as spq
+import sympy.physics.units as spu
 
 from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import extra_sympy_units as spux
 
 from .... import contracts as ct
 from .... import sockets
@@ -37,36 +40,46 @@ class BinaryOperation(enum.StrEnum):
 	"""Valid operations for the `OperateMathNode`.
 
 	Attributes:
-		Add: Addition w/broadcasting.
-		Sub: Subtraction w/broadcasting.
-		Mul: Hadamard-product multiplication.
-		Div: Hadamard-product based division.
-		Pow: Elementwise expontiation.
-		Atan2: Quadrant-respecting arctangent variant.
-		VecVecDot: Dot product for vectors.
-		Cross: Cross product.
-		MatVecDot: Matrix-Vector dot product.
+		Mul: Scalar multiplication.
+		Div: Scalar division.
+		Pow: Scalar exponentiation.
+		Add: Elementwise addition.
+		Sub: Elementwise subtraction.
+		HadamMul: Elementwise multiplication (hadamard product).
+		HadamPow: Principled shape-aware exponentiation (hadamard power).
+		Atan2: Quadrant-respecting 2D arctangent.
+		VecVecDot: Dot product for identically shaped vectors w/transpose.
+		Cross: Cross product between identically shaped 3D vectors.
+		VecVecOuter: Vector-vector outer product.
 		LinSolve: Solve a linear system.
 		LsqSolve: Minimize error of an underdetermined linear system.
-		MatMatDot: Matrix-Matrix dot product.
+		VecMatOuter: Vector-matrix outer product.
+		MatMatDot: Matrix-matrix dot product.
 	"""
 
 	# Number | Number
-	Add = enum.auto()
-	Sub = enum.auto()
 	Mul = enum.auto()
 	Div = enum.auto()
 	Pow = enum.auto()
+
+	# Elements | Elements
+	Add = enum.auto()
+	Sub = enum.auto()
+	HadamMul = enum.auto()
+	# HadamPow = enum.auto()  ## TODO: Sympy's HadamardPower is problematic.
 	Atan2 = enum.auto()
 
 	# Vector | Vector
 	VecVecDot = enum.auto()
 	Cross = enum.auto()
+	VecVecOuter = enum.auto()
 
 	# Matrix | Vector
-	MatVecDot = enum.auto()
 	LinSolve = enum.auto()
 	LsqSolve = enum.auto()
+
+	# Vector | Matrix
+	VecMatOuter = enum.auto()
 
 	# Matrix | Matrix
 	MatMatDot = enum.auto()
@@ -79,19 +92,24 @@ class BinaryOperation(enum.StrEnum):
 		BO = BinaryOperation
 		return {
 			# Number | Number
+			BO.Mul: 'ℓ · r',
+			BO.Div: 'ℓ / r',
+			BO.Pow: 'ℓ ^ r',
+			# Elements | Elements
 			BO.Add: 'ℓ + r',
 			BO.Sub: 'ℓ - r',
-			BO.Mul: 'ℓ ⊙ r',  ## Notation for Hadamard Product
-			BO.Div: 'ℓ / r',
-			BO.Pow: 'ℓʳ',
-			BO.Atan2: 'atan2(ℓ,r)',
+			BO.HadamMul: '𝐋 ⊙ 𝐑',
+			# BO.HadamPow: '𝐥 ⊙^ 𝐫',
+			BO.Atan2: 'atan2(ℓ:x, r:y)',
 			# Vector | Vector
 			BO.VecVecDot: '𝐥 · 𝐫',
-			BO.Cross: 'cross(L,R)',
+			BO.Cross: 'cross(𝐥,𝐫)',
+			BO.VecVecOuter: '𝐥 ⊗ 𝐫',
 			# Matrix | Vector
-			BO.MatVecDot: '𝐋 · 𝐫',
 			BO.LinSolve: '𝐋 ∖ 𝐫',
 			BO.LsqSolve: 'argminₓ∥𝐋𝐱−𝐫∥₂',
+			# Vector | Matrix
+			BO.VecMatOuter: '𝐋 ⊗ 𝐫',
 			# Matrix | Matrix
 			BO.MatMatDot: '𝐋 · 𝐑',
 		}[value]
@@ -118,56 +136,104 @@ class BinaryOperation(enum.StrEnum):
 		"""Deduce valid binary operations from the shapes of the inputs."""
 		BO = BinaryOperation
 
-		ops_number_number = [
+		ops_el_el = [
 			BO.Add,
 			BO.Sub,
-			BO.Mul,
-			BO.Div,
-			BO.Pow,
-			BO.Atan2,
+			BO.HadamMul,
+			# BO.HadamPow,
 		]
 
-		match (info_l.output_shape_len, info_r.output_shape_len):
+		outl = info_l.output
+		outr = info_r.output
+		match (outl.shape_len, outr.shape_len):
+			# match (ol.shape_len, info_r.output.shape_len):
 			# Number | *
 			## Number | Number
 			case (0, 0):
-				return ops_number_number
+				ops = [
+					BO.Add,
+					BO.Sub,
+					BO.Mul,
+					BO.Div,
+					BO.Pow,
+				]
+				if (
+					info_l.output.physical_type == spux.PhysicalType.Length
+					and info_l.output.unit == info_r.output.unit
+				):
+					ops += [BO.Atan2]
+				return ops
 
 			## Number | Vector
-			## -> Broadcasting allows Number|Number ops to work as-is.
 			case (0, 1):
-				return ops_number_number
+				return [BO.Mul]  # , BO.HadamPow]
 
 			## Number | Matrix
-			## -> Broadcasting allows Number|Number ops to work as-is.
 			case (0, 2):
-				return ops_number_number
+				return [BO.Mul]  # , BO.HadamPow]
 
 			# Vector | *
 			## Vector | Number
 			case (1, 0):
-				return ops_number_number
+				return [BO.Mul]  # , BO.HadamPow]
 
-			## Vector | Number
+			## Vector | Vector
 			case (1, 1):
-				return [*ops_number_number, BO.VecVecDot, BO.Cross]
+				ops = []
+
+				# Vector | Vector
+				## -> Dot: Convenience; utilize special vec-vec dot w/transp.
+				if outl.rows > outl.cols and outr.rows > outr.cols:
+					ops += [BO.VecVecDot, BO.VecVecOuter]
+
+				# Covector | Vector
+				## -> Dot: Directly use matrix-matrix dot, as it's now correct.
+				if outl.rows < outl.cols and outr.rows > outr.cols:
+					ops += [BO.MatMatDot, BO.VecVecOuter]
+
+				# Vector | Covector
+				## -> Dot: Directly use matrix-matrix dot, as it's now correct.
+				## -> These are both the same operation, in this case.
+				if outl.rows > outl.cols and outr.rows < outr.cols:
+					ops += [BO.MatMatDot, BO.VecVecOuter]
+
+				# Covector | Covector
+				## -> Dot: Convenience; utilize special vec-vec dot w/transp.
+				if outl.rows < outl.cols and outr.rows < outr.cols:
+					ops += [BO.VecVecDot, BO.VecVecOuter]
+
+				# Cross Product
+				## -> Enforce that both are 3x1 or 1x3.
+				## -> See https://docs.sympy.org/latest/modules/matrices/matrices.html#sympy.matrices.matrices.MatrixBase.cross
+				if (outl.rows == 3 and outr.rows == 3) or (
+					outl.cols == 3 and outl.cols == 3
+				):
+					ops += [BO.Cross]
+
+				return ops
 
 			## Vector | Matrix
 			case (1, 2):
-				return []
+				return [BO.VecMatOuter]
 
 			# Matrix | *
 			## Matrix | Number
 			case (2, 0):
-				return [*ops_number_number, BO.MatMatDot]
+				return [BO.Mul]  # , BO.HadamPow]
 
 			## Matrix | Vector
 			case (2, 1):
-				return [BO.MatVecDot, BO.LinSolve, BO.LsqSolve]
+				prepend_ops = []
+
+				# Mat-Vec Dot: Enforce RHS Column Vector
+				if outr.rows > outl.cols:
+					prepend_ops += [BO.MatMatDot]
+
+				return [*ops, BO.LinSolve, BO.LsqSolve]  # , BO.HadamPow]
 
 			## Matrix | Matrix
 			case (2, 2):
-				return [*ops_number_number, BO.MatMatDot]
+				return [*ops_el_el, BO.MatMatDot]
 
 		return []
 
@@ -182,34 +248,86 @@ class BinaryOperation(enum.StrEnum):
 		## TODO: Make this compatible with sp.Matrix inputs
 		return {
 			# Number | Number
-			BO.Add: lambda exprs: exprs[0] + exprs[1],
-			BO.Sub: lambda exprs: exprs[0] - exprs[1],
 			BO.Mul: lambda exprs: exprs[0] * exprs[1],
 			BO.Div: lambda exprs: exprs[0] / exprs[1],
 			BO.Pow: lambda exprs: exprs[0] ** exprs[1],
+			# Elements | Elements
+			BO.Add: lambda exprs: exprs[0] + exprs[1],
+			BO.Sub: lambda exprs: exprs[0] - exprs[1],
+			BO.HadamMul: lambda exprs: sp.hadamard_product(exprs[0], exprs[1]),
+			# BO.HadamPow: lambda exprs: sp.HadamardPower(exprs[0], exprs[1]),
 			BO.Atan2: lambda exprs: sp.atan2(exprs[1], exprs[0]),
+			# Vector | Vector
+			BO.VecVecDot: lambda exprs: (exprs[0].T @ exprs[1])[0],
+			BO.Cross: lambda exprs: exprs[0].cross(exprs[1]),
+			BO.VecVecOuter: lambda exprs: exprs[0] @ exprs[1].T,
+			# Matrix | Vector
+			BO.LinSolve: lambda exprs: exprs[0].solve(exprs[1]),
+			BO.LsqSolve: lambda exprs: exprs[0].solve_least_squares(exprs[1]),
+			# Vector | Matrix
+			BO.VecMatOuter: lambda exprs: spq.TensorProduct(exprs[0], exprs[1]),
+			# Matrix | Matrix
+			BO.MatMatDot: lambda exprs: exprs[0] @ exprs[1],
+		}[self]
+
+	@property
+	def unit_func(self):
+		"""The binary function to apply to both unit expressions, in order to deduce the unit expression of the output."""
+		BO = BinaryOperation
+
+		## TODO: Make this compatible with sp.Matrix inputs
+		return {
+			# Number | Number
+			BO.Mul: BO.Mul.sp_func,
+			BO.Div: BO.Div.sp_func,
+			BO.Pow: BO.Pow.sp_func,
+			# Elements | Elements
+			BO.Add: BO.Add.sp_func,
+			BO.Sub: BO.Sub.sp_func,
+			BO.HadamMul: BO.Mul.sp_func,
+			# BO.HadamPow: lambda exprs: sp.HadamardPower(exprs[0], exprs[1]),
+			BO.Atan2: lambda _: spu.radian,
+			# Vector | Vector
+			BO.VecVecDot: BO.Mul.sp_func,
+			BO.Cross: BO.Mul.sp_func,
+			BO.VecVecOuter: BO.Mul.sp_func,
+			# Matrix | Vector
+			## -> A,b in Ax = b have units, and the equality must hold.
+			## -> Therefore, A \ b must have the units [b]/[A].
+			BO.LinSolve: lambda exprs: exprs[1] / exprs[0],
+			BO.LsqSolve: lambda exprs: exprs[1] / exprs[0],
+			# Vector | Matrix
+			BO.VecMatOuter: BO.Mul.sp_func,
+			# Matrix | Matrix
+			BO.MatMatDot: BO.Mul.sp_func,
 		}[self]
 
 	@property
 	def jax_func(self):
 		"""Deduce an appropriate jax-based function that implements the binary operation for array inputs."""
+		## TODO: Scale the units of one side to the other.
 		BO = BinaryOperation
 
 		return {
 			# Number | Number
-			BO.Add: lambda exprs: exprs[0] + exprs[1],
-			BO.Sub: lambda exprs: exprs[0] - exprs[1],
 			BO.Mul: lambda exprs: exprs[0] * exprs[1],
 			BO.Div: lambda exprs: exprs[0] / exprs[1],
 			BO.Pow: lambda exprs: exprs[0] ** exprs[1],
-			BO.Atan2: lambda exprs: sp.atan2(exprs[1], exprs[0]),
+			# Elements | Elements
+			BO.Add: lambda exprs: exprs[0] + exprs[1],
+			BO.Sub: lambda exprs: exprs[0] - exprs[1],
+			BO.HadamMul: lambda exprs: exprs[0] * exprs[1],
+			# BO.HadamPow: lambda exprs: exprs[0] ** exprs[1],
+			BO.Atan2: lambda exprs: jnp.atan2(exprs[1], exprs[0]),
 			# Vector | Vector
 			BO.VecVecDot: lambda exprs: jnp.dot(exprs[0], exprs[1]),
 			BO.Cross: lambda exprs: jnp.cross(exprs[0], exprs[1]),
+			BO.VecVecOuter: lambda exprs: jnp.outer(exprs[0], exprs[1]),
 			# Matrix | Vector
-			BO.MatVecDot: lambda exprs: jnp.matmul(exprs[0], exprs[1]),
 			BO.LinSolve: lambda exprs: jnp.linalg.solve(exprs[0], exprs[1]),
 			BO.LsqSolve: lambda exprs: jnp.linalg.lstsq(exprs[0], exprs[1]),
+			# Vector | Matrix
+			BO.VecMatOuter: lambda exprs: jnp.outer(exprs[0], exprs[1]),
 			# Matrix | Matrix
 			BO.MatMatDot: lambda exprs: jnp.matmul(exprs[0], exprs[1]),
 		}[self]
@@ -218,30 +336,12 @@ class BinaryOperation(enum.StrEnum):
 	# - InfoFlow Transform
 	####################
 	def transform_infos(self, info_l: ct.InfoFlow, info_r: ct.InfoFlow):
-		BO = BinaryOperation
-
-		info_largest = (
-			info_l if info_l.output_shape_len > info_l.output_shape_len else info_l
+		"""Deduce the output information by using `self.sp_func` to operate on the two output `SimSymbol`s, then capturing the information associated with the resulting expression."""
+		return info_l.operate_output(
+			info_r,
+			lambda a, b: self.sp_func([a, b]),
+			lambda a, b: self.unit_func([a, b]),
 		)
-		info_any = info_largest
-		return {
-			# Number | * or * | Number
-			BO.Add: info_largest,
-			BO.Sub: info_largest,
-			BO.Mul: info_largest,
-			BO.Div: info_largest,
-			BO.Pow: info_largest,
-			BO.Atan2: info_largest,
-			# Vector | Vector
-			BO.VecVecDot: info_any,
-			BO.Cross: info_any,
-			# Matrix | Vector
-			BO.MatVecDot: info_r,
-			BO.LinSolve: info_r,
-			BO.LsqSolve: info_r,
-			# Matrix | Matrix
-			BO.MatMatDot: info_any,
-		}[self]
 
 
 ####################
@@ -367,9 +467,9 @@ class OperateMathNode(base.MaxwellSimNode):
 		# Compute Sympy Function
 		## -> The operation enum directly provides the appropriate function.
 		if has_expr_l_value and has_expr_r_value and operation is not None:
-			operation.sp_func([expr_l, expr_r])
+			return operation.sp_func([expr_l, expr_r])
 
-		return ct.Flowsignal.FlowPending
+		return ct.FlowSignal.FlowPending
 
 	@events.computes_output_socket(
 		'Expr',
@@ -396,7 +496,7 @@ class OperateMathNode(base.MaxwellSimNode):
 		## -> The operation enum directly provides the appropriate function.
 		if has_expr_l and has_expr_r:
 			return (expr_l | expr_r).compose_within(
-				operation.jax_func,
+				enclosing_func=operation.jax_func,
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending

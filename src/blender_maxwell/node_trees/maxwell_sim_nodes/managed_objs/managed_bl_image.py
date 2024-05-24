@@ -264,17 +264,22 @@ class ManagedBLImage(base.ManagedObj):
 		# times = [time.perf_counter()]
 
 		# Compute Plot Dimensions
-		aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (
-			self.gen_image_geometry(width_inches, height_inches, dpi)
-		)
+		# aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (
+		# self.gen_image_geometry(width_inches, height_inches, dpi)
+		# )
 		# times.append(['Image Geometry', time.perf_counter() - times[0]])
+		# log.critical(
+		# [aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px]
+		# )
 
 		# Create MPL Figure, Axes, and Compute Figure Geometry
-		fig, canvas, ax = image_ops.mpl_fig_canvas_ax(
-			_width_inches, _height_inches, _dpi
-		)
+		# fig, canvas, ax = image_ops.mpl_fig_canvas_ax(
+		# _width_inches, _height_inches, _dpi
+		# )
+		fig, canvas, ax = image_ops.mpl_fig_canvas_ax(width_inches, height_inches, dpi)
 		# times.append(['MPL Fig Canvas Axis', time.perf_counter() - times[0]])
 
+		# fig.clear()
 		ax.clear()
 		# times.append(['Clear Axis', time.perf_counter() - times[0]])
 

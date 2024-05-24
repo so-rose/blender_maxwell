@@ -17,15 +17,19 @@
 import dataclasses
 import functools
 import typing as typ
+from fractions import Fraction
 from types import MappingProxyType
 
+import jaxtyping as jtyp
 import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
 
+from .array import ArrayFlow
 from .expr_info import ExprInfo
 from .flow_kinds import FlowKind
+from .lazy_range import RangeFlow
 
 # from .info import InfoFlow
 
@@ -34,13 +38,22 @@ log = logger.get(__name__)
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class ParamsFlow:
+	"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
+
+	Returns:
+		All symbols valid for use in the expression.
+	"""
+
 	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
 	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
 
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
 
+	####################
+	# - Symbols
+	####################
 	@functools.cached_property
-	def sorted_symbols(self) -> list[sp.Symbol]:
+	def sorted_symbols(self) -> list[sim_symbols.SimSymbol]:
 		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
 
 		Returns:
@@ -48,52 +61,179 @@ class ParamsFlow:
 		"""
 		return sorted(self.symbols, key=lambda sym: sym.name)
 
+	@functools.cached_property
+	def sorted_sp_symbols(self) -> list[sp.Symbol | sp.MatrixSymbol]:
+		"""Computes `sympy` symbols from `self.sorted_symbols`.
+
+		When the output is shaped, a single shaped symbol (`sp.MatrixSymbol`) is used to represent the symbolic name and shaping.
+		This choice is made due to `MatrixSymbol`'s compatibility with `.lambdify` JIT.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
+		return [sym.sp_symbol_matsym for sym in self.sorted_symbols]
+
+	####################
+	# - JIT'ed Callables for Numerical Function Arguments
+	####################
+	def func_args_n(
+		self, target_syms: list[sim_symbols.SimSymbol]
+	) -> list[
+		typ.Callable[
+			[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
+			int | float | complex | jtyp.Inexact[jtyp.Array, '...'],
+		]
+	]:
+		"""Callable functions for evaluating each `self.func_args` entry numerically.
+
+		Before simplification, each `self.func_args` entry will be conformed to the corresponding (by-index) `SimSymbol` in `target_syms`.
+
+		Notes:
+			Before using any `sympy` expressions as arguments to the returned callablees, they **must** be fully conformed and scaled to the corresponding `self.symbols` entry using that entry's `SimSymbol.scale()` method.
+
+			This ensures conformance to the `SimSymbol` properties (like units), as well as adherance to a numerical type identity compatible with `sp.lambdify()`.
+
+		Parameters:
+			target_syms: `SimSymbol`s describing how a particular `ParamsFlow` function argument should be scaled when performing a purely numerical insertion.
+		"""
+		return [
+			sp.lambdify(
+				self.sorted_sp_symbols,
+				target_sym.conform(func_arg, strip_unit=True),
+				'jax',
+			)
+			for func_arg, target_sym in zip(self.func_args, target_syms, strict=True)
+		]
+
+	def func_kwargs_n(
+		self, target_syms: dict[str, sim_symbols.SimSymbol]
+	) -> dict[
+		str,
+		typ.Callable[
+			[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
+			int | float | complex | jtyp.Inexact[jtyp.Array, '...'],
+		],
+	]:
+		"""Callable functions for evaluating each `self.func_kwargs` entry numerically.
+
+		The arguments of each function **must** be pre-treated using `SimSymbol.scale()`.
+		This ensures conformance to the `SimSymbol` properties, as well as adherance to a numerical type identity compatible with `sp.lambdify()`
+		"""
+		return {
+			func_arg_key: sp.lambdify(
+				self.sorted_sp_symbols,
+				target_syms[func_arg_key].scale(func_arg),
+				'jax',
+			)
+			for func_arg_key, func_arg in self.func_kwargs.items()
+		}
+
+	####################
+	# - Realization
+	####################
+	def realize_symbols(
+		self,
+		symbol_values: dict[
+			sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
+		] = MappingProxyType({}),
+	) -> dict[
+		sp.Symbol,
+		int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...'] :,
+	]:
+		"""Fully realize all symbols by assigning them a value.
+
+		Three kinds of values for `symbol_values` are supported, fundamentally:
+
+		- **Sympy Expression**: When the value is a sympy expression with units, the unit of the `SimSymbol` key which unit the value if converted to.
+			If the `SimSymbol`'s unit is `None`, then the value is left as-is.
+		- **Range**: When the value is a `RangeFlow`, units are converted to the `SimSymbol`'s unit using `.rescale_to_unit()`.
+			If the `SimSymbol`'s unit is `None`, then the value is left as-is.
+		- **Array**: When the value is an `ArrayFlow`, units are converted to the `SimSymbol`'s unit using `.rescale_to_unit()`.
+			If the `SimSymbol`'s unit is `None`, then the value is left as-is.
+
+		Returns:
+			A dictionary almost with `.subs()`, other than `jax` arrays.
+		"""
+		if set(self.symbols) == set(symbol_values.keys()):
+			realized_syms = {}
+			for sym in self.sorted_symbols:
+				sym_value = symbol_values[sym]
+
+				if isinstance(sym_value, spux.SympyType):
+					v = sym.scale(sym_value)
+
+				elif isinstance(sym_value, ArrayFlow | RangeFlow):
+					v = sym_value.rescale_to_unit(sym.unit).values
+					## NOTE: RangeFlow must not be symbolic.
+
+				else:
+					msg = f'No support for symbolic value {sym_value} (type={type(sym_value)})'
+					raise NotImplementedError(msg)
+
+				realized_syms |= {sym: v}
+
+			return realized_syms
+
+		msg = f'ParamsFlow: Not all symbols were given a value during realization (symbols={self.symbols}, symbol_values={symbol_values})'
+		raise ValueError(msg)
+
 	####################
 	# - Realize Arguments
 	####################
 	def scaled_func_args(
 		self,
-		unit_system: spux.UnitSystem | None = None,
+		target_syms: list[sim_symbols.SimSymbol] = (),
 		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
 			{}
 		),
-	):
-		"""Realize the function arguments contained in this `ParamsFlow`, making it ready for insertion into `Func.func()`.
+	) -> list[
+		int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...']
+	]:
+		"""Realize correctly conformed numerical arguments for `self.func_args`.
 
-		For all `arg`s in `self.func_args`, the following operations are performed.
+		Because we allow symbols to be used in `self.func_args`, producing a numerical value that can be passed directly to a `FuncFlow` becomes a two-step process:
 
-		Notes:
-			This method is created for the purpose of being able to make this exact call in an `events.on_value_changed` method:
+		1. Conform Symbols: Arbitrary `sympy` expressions passed as `symbol_values` must first be conformed to match the ex. units of `SimSymbol`s found in `self.symbols`, before they can be used.
+
+		2. Conform Function Arguments: Arbitrary `sympy` expressions encoded in `self.func_args` must, **after** inserting the conformed numerical symbols, themselves be conformed to the expected ex. units of the function that they are to be used within.
+			**`ParamsFlow` doesn't contain information about the `SimSymbol`s that `self.func_args` are expected to conform to** (on purpose).
+			Therefore, the user is required to pass a `target_syms` with identical length to `self.func_args`, describing the `SimSymbol`s to conform the function arguments to.
+
+		Our implementation attempts to utilize simple, powerful primitives to accomplish this in roughly three steps:
+
+		1. **Realize Symbols**: Particular passed symbolic values `symbol_values`, which are arbitrary `sympy` expressions, are conformed to the definitions in `self.symbols` (ex. to match units), then cast to numerical values (pure Python / jax array).
+
+		2. **Lazy Function Arguments**: Stored function arguments `self.func_args`, which are arbitrary `sympy` expressions, are conformed to the definitions in `target_syms` (ex. to match units), then cast to numerical values (pure Python / jax array).
+			_Technically, this happens as part of `self.func_args_n`._
+
+		3. **Numerical Evaluation**: The numerical values for each symbol are passed as parameters to each (callable) element of `self.func_args_n`, which produces a correct numerical value for each function argument.
+
+		Parameters:
+			target_syms: `SimSymbol`s describing how the function arguments returned by this method are intended to be used.
+				**Generally**, the parallel `FuncFlow.func_args` should be inserted here, and guarantees correct results when this output is inserted into `FuncFlow.func(...)`.
+			symbol_values: Particular values for all symbols in `self.symbols`, which will be conformed and used to compute the function arguments (before they are conformed to `target_syms`).
 		"""
-		if not all(sym in self.symbols for sym in symbol_values):
-			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
-			raise ValueError(msg)
-
-		## TODO: MutableDenseMatrix causes error with 'in' check bc it isn't hashable.
+		realized_symbols = list(self.realize_symbols(symbol_values).values())
 		return [
-			(
-				spux.scale_to_unit_system(arg, unit_system, use_jax_array=True)
-				if arg not in symbol_values
-				else symbol_values[arg]
-			)
-			for arg in self.func_args
+			func_arg_n(*realized_symbols)
+			for func_arg_n in self.func_args_n(target_syms)
 		]
 
 	def scaled_func_kwargs(
 		self,
-		unit_system: spux.UnitSystem | None = None,
+		target_syms: list[sim_symbols.SimSymbol] = (),
 		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
-	):
-		"""Return the function arguments, scaled to the unit system, stripped of units, and cast to jax-compatible arguments."""
-		if not all(sym in self.symbols for sym in symbol_values):
-			msg = f"Symbols in {symbol_values} don't perfectly match the ParamsFlow symbols {self.symbols}"
-			raise ValueError(msg)
+	) -> dict[
+		str, int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...']
+	]:
+		"""Realize correctly conformed numerical arguments for `self.func_kwargs`.
 
+		Other than the `dict[str, ...]` key, the semantics are identical to `self.scaled_func_args()`.
+		"""
+		realized_symbols = self.realize_symbols(symbol_values)
 		return {
-			arg_name: spux.convert_to_unit_system(arg, unit_system, use_jax_array=True)
-			if arg not in symbol_values
-			else symbol_values[arg]
-			for arg_name, arg in self.func_kwargs.items()
+			func_arg_name: func_arg_n(**realized_symbols)
+			for func_arg_name, func_arg_n in self.func_kwargs_n(target_syms).items()
 		}
 
 	####################
@@ -129,8 +269,8 @@ class ParamsFlow:
 	####################
 	# - Generate ExprSocketDef
 	####################
-	def sym_expr_infos(self, info, use_range: bool = False) -> dict[str, ExprInfo]:
-		"""Generate all information needed to define expressions that realize all symbolic parameters in this `ParamsFlow`.
+	def sym_expr_infos(self, use_range: bool = False) -> dict[str, ExprInfo]:
+		"""Generate keyword arguments for defining all `ExprSocket`s needed to realize all `self.symbols`.
 
 		Many nodes need actual data, and as such, they require that the user select actual values for any symbols in the `ParamsFlow`.
 		The best way to do this is to create one `ExprSocket` for each symbol that needs realizing.
@@ -151,35 +291,22 @@ class ParamsFlow:
 
 		The `ExprInfo`s can be directly defererenced `**expr_info`)
 		"""
-		for sim_sym in self.sorted_symbols:
-			if use_range and sim_sym.mathtype is spux.MathType.Complex:
+		for sym in self.sorted_symbols:
+			if use_range and sym.mathtype is spux.MathType.Complex:
 				msg = 'No support for complex range in ExprInfo'
 				raise NotImplementedError(msg)
-			if use_range and (sim_sym.rows > 1 or sim_sym.cols > 1):
+			if use_range and (sym.rows > 1 or sym.cols > 1):
 				msg = 'No support for non-scalar elements of range in ExprInfo'
 				raise NotImplementedError(msg)
-			if sim_sym.rows > 3 or sim_sym.cols > 1:
+			if sym.rows > 3 or sym.cols > 1:
 				msg = 'No support for >Vec3 / Matrix values in ExprInfo'
 				raise NotImplementedError(msg)
+
 		return {
-			sim_sym.name: {
-				# Declare Kind/Size
-				## -> Kind: Value prevents user-alteration of config.
-				## -> Size: Always scalar, since symbols are scalar (for now).
+			sym.name: {
 				'active_kind': FlowKind.Value if not use_range else FlowKind.Range,
-				'size': spux.NumberSize1D.Scalar,
-				# Declare MathType/PhysicalType
-				## -> MathType: Lookup symbol name in info dimensions.
-				## -> PhysicalType: Same.
-				'mathtype': self.dims[sim_sym].mathtype,
-				'physical_type': self.dims[sim_sym].physical_type,
-				# TODO: Default Value
-				# FlowKind.Value: Default Value
-				#'default_value':
-				# FlowKind.Range: Default Min/Max/Steps
-				'default_min': sim_sym.domain.start,
-				'default_max': sim_sym.domain.end,
 				'default_steps': 50,
 			}
-			for sim_sym in self.sorted_symbols
+			| sym.expr_info
+			for sym in self.sorted_symbols
 		}

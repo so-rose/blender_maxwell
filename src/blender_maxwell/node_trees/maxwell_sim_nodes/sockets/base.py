@@ -593,6 +593,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			ValueError: When referencing a socket that's meant to be directly referenced.
 		"""
 		kind_data_map = {
+			ct.FlowKind.Capabilities: lambda: self.capabilities,
 			ct.FlowKind.Value: lambda: self.value,
 			ct.FlowKind.Array: lambda: self.array,
 			ct.FlowKind.Func: lambda: self.lazy_func,

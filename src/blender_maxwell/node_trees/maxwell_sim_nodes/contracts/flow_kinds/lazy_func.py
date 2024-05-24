@@ -22,7 +22,7 @@ from types import MappingProxyType
 import jax
 
 from blender_maxwell.utils import extra_sympy_units as spux
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import logger, sim_symbols
 
 from .params import ParamsFlow
 
@@ -244,17 +244,10 @@ class FuncFlow:
 	"""
 
 	func: LazyFunction
-	func_args: list[spux.MathType | spux.PhysicalType] = dataclasses.field(
-		default_factory=list
-	)
-	func_kwargs: dict[str, spux.MathType | spux.PhysicalType] = dataclasses.field(
+	func_args: list[sim_symbols.SimSymbol] = dataclasses.field(default_factory=list)
+	func_kwargs: dict[str, sim_symbols.SimSymbol] = dataclasses.field(
 		default_factory=dict
 	)
-	## TODO: Use SimSymbol instead of the MathType|PT union.
-	## -- SimSymbol is an ideal pivot point for both, as well as valid domains.
-	## -- SimSymbol has more semantic meaning, including a name.
-	## -- If desired, SimSymbols could maybe even require a specific unit.
-	## It could greatly simplify a whole lot of pain associated with func_args.
 	supports_jax: bool = False
 
 	####################
@@ -315,17 +308,18 @@ class FuncFlow:
 	def realize(
 		self,
 		params: ParamsFlow,
-		unit_system: spux.UnitSystem | None = None,
-		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
+		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
+			{}
+		),
 	) -> typ.Self:
 		if self.supports_jax:
 			return self.func_jax(
-				*params.scaled_func_args(unit_system, symbol_values),
-				*params.scaled_func_kwargs(unit_system, symbol_values),
+				*params.scaled_func_args(self.func_args, symbol_values),
+				*params.scaled_func_kwargs(self.func_args, symbol_values),
 			)
 		return self.func(
-			*params.scaled_func_args(unit_system, symbol_values),
-			*params.scaled_func_kwargs(unit_system, symbol_values),
+			*params.scaled_func_args(self.func_kwargs, symbol_values),
+			*params.scaled_func_kwargs(self.func_kwargs, symbol_values),
 		)
 
 	####################

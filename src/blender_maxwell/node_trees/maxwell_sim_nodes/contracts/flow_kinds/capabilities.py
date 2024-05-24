@@ -16,6 +16,7 @@
 
 import dataclasses
 import typing as typ
+from types import MappingProxyType
 
 from ..socket_types import SocketType
 from .flow_kinds import FlowKind
@@ -25,6 +26,7 @@ from .flow_kinds import FlowKind
 class CapabilitiesFlow:
 	socket_type: SocketType
 	active_kind: FlowKind
+	allow_out_to_in: dict[FlowKind, FlowKind] = dataclasses.field(default_factory=dict)
 
 	is_universal: bool = False
 
@@ -40,7 +42,13 @@ class CapabilitiesFlow:
 	def is_compatible_with(self, other: typ.Self) -> bool:
 		return other.is_universal or (
 			self.socket_type == other.socket_type
-			and self.active_kind == other.active_kind
+			and (
+				self.active_kind == other.active_kind
+				or (
+					other.active_kind in other.allow_out_to_in
+					and self.active_kind == other.allow_out_to_in[other.active_kind]
+				)
+			)
 			# == Constraint
 			and all(
 				name in other.must_match
