@@ -79,6 +79,16 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 	def value(self, value: ct.BoundCondType) -> None:
 		self.default = value
 
+	@bl_cache.cached_bl_property(depends_on={'value'})
+	def lazy_func(self) -> ct.FuncFlow:
+		return ct.FuncFlow(
+			func=lambda: self.value,
+		)
+
+	@bl_cache.cached_bl_property()
+	def params(self) -> ct.FuncFlow:
+		return ct.ParamsFlow()
+
 
 ####################
 # - Socket Configuration

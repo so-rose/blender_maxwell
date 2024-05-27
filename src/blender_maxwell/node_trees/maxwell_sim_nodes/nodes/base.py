@@ -479,6 +479,16 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		self._prune_inactive_sockets()
 		self._add_new_active_sockets()
 
+		for i, socket_name in enumerate(self.active_socket_defs('input')):
+			current_idx_of_socket = self.inputs.find(socket_name)
+			if i != current_idx_of_socket:
+				self.inputs.move(current_idx_of_socket, i)
+
+		for i, socket_name in enumerate(self.active_socket_defs('output')):
+			current_idx_of_socket = self.outputs.find(socket_name)
+			if i != current_idx_of_socket:
+				self.outputs.move(current_idx_of_socket, i)
+
 	####################
 	# - Event Methods
 	####################

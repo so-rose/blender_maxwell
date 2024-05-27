@@ -98,6 +98,7 @@ class BoundCondsNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'BCs',
 		kind=ct.FlowKind.Value,
+		# Loaded
 		input_sockets={'X', 'Y', 'Z', '+X', '-X', '+Y', '-Y', '+Z', '-Z'},
 		input_sockets_optional={
 			'X': True,
@@ -110,23 +111,26 @@ class BoundCondsNode(base.MaxwellSimNode):
 			'+Z': True,
 			'-Z': True,
 		},
+		output_sockets={'BCs'},
+		output_socket_kinds={'BCs': ct.FlowKind.Params},
 	)
-	def compute_boundary_conds(self, input_sockets) -> td.BoundarySpec:
+	def compute_bcs_value(self, input_sockets, output_sockets) -> td.BoundarySpec:
 		"""Compute the simulation boundary conditions, by combining the individual input by specified half axis."""
-		log.debug(
-			'%s: Computing Boundary Conditions (Input Sockets = %s)',
-			self.sim_node_name,
-			str(input_sockets),
-		)
+		output_params = output_sockets['BCs']
+		has_output_params = not ct.FlowSignal.check(output_params)
 
 		# Deduce "Doubledness"
 		## -> A "doubled" axis defines the same bound cond both ways
-		has_doubled_x = not ct.FlowSignal.check(input_sockets['X'])
-		has_doubled_y = not ct.FlowSignal.check(input_sockets['Y'])
-		has_doubled_z = not ct.FlowSignal.check(input_sockets['Z'])
+		x = input_sockets['X']
+		y = input_sockets['Y']
+		z = input_sockets['Z']
+
+		has_doubled_x = not ct.FlowSignal.check_single(x, ct.FlowSignal.NoFlow)
+		has_doubled_y = not ct.FlowSignal.check_single(y, ct.FlowSignal.NoFlow)
+		has_doubled_z = not ct.FlowSignal.check_single(z, ct.FlowSignal.NoFlow)
 
 		# Deduce +/- of Each Axis
-		## +/- X
+		## -> +/- X
 		if has_doubled_x:
 			x_pos = input_sockets['X']
 			x_neg = input_sockets['X']
@@ -134,7 +138,10 @@ class BoundCondsNode(base.MaxwellSimNode):
 			x_pos = input_sockets['+X']
 			x_neg = input_sockets['-X']
 
-		## +/- Y
+		has_x_pos = not ct.FlowSignal.check(x_pos)
+		has_x_neg = not ct.FlowSignal.check(x_neg)
+
+		## -> +/- Y
 		if has_doubled_y:
 			y_pos = input_sockets['Y']
 			y_neg = input_sockets['Y']
@@ -142,7 +149,10 @@ class BoundCondsNode(base.MaxwellSimNode):
 			y_pos = input_sockets['+Y']
 			y_neg = input_sockets['-Y']
 
-		## +/- Z
+		has_y_pos = not ct.FlowSignal.check(y_pos)
+		has_y_neg = not ct.FlowSignal.check(y_neg)
+
+		## -> +/- Z
 		if has_doubled_z:
 			z_pos = input_sockets['Z']
 			z_neg = input_sockets['Z']
@@ -150,20 +160,224 @@ class BoundCondsNode(base.MaxwellSimNode):
 			z_pos = input_sockets['+Z']
 			z_neg = input_sockets['-Z']
 
-		return td.BoundarySpec(
-			x=td.Boundary(
-				plus=x_pos,
-				minus=x_neg,
-			),
-			y=td.Boundary(
-				plus=y_pos,
-				minus=y_neg,
-			),
-			z=td.Boundary(
-				plus=z_pos,
-				minus=z_neg,
-			),
-		)
+		has_z_pos = not ct.FlowSignal.check(z_pos)
+		has_z_neg = not ct.FlowSignal.check(z_neg)
+
+		if (
+			has_x_pos
+			and has_x_neg
+			and has_y_pos
+			and has_y_neg
+			and has_z_pos
+			and has_z_neg
+			and has_output_params
+			and not output_params.symbols
+		):
+			return td.BoundarySpec(
+				x=td.Boundary(
+					plus=x_pos,
+					minus=x_neg,
+				),
+				y=td.Boundary(
+					plus=y_pos,
+					minus=y_neg,
+				),
+				z=td.Boundary(
+					plus=z_pos,
+					minus=z_neg,
+				),
+			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'BCs',
+		kind=ct.FlowKind.Func,
+		input_sockets={'X', 'Y', 'Z', '+X', '-X', '+Y', '-Y', '+Z', '-Z'},
+		input_socket_kinds={
+			'X': ct.FlowKind.Func,
+			'Y': ct.FlowKind.Func,
+			'Z': ct.FlowKind.Func,
+			'+X': ct.FlowKind.Func,
+			'-X': ct.FlowKind.Func,
+			'+Y': ct.FlowKind.Func,
+			'-Y': ct.FlowKind.Func,
+			'+Z': ct.FlowKind.Func,
+			'-Z': ct.FlowKind.Func,
+		},
+		input_sockets_optional={
+			'X': True,
+			'Y': True,
+			'Z': True,
+			'+X': True,
+			'-X': True,
+			'+Y': True,
+			'-Y': True,
+			'+Z': True,
+			'-Z': True,
+		},
+	)
+	def compute_bcs_func(self, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the simulation boundary conditions, by combining the individual input by specified half axis."""
+		# Deduce "Doubledness"
+		## -> A "doubled" axis defines the same bound cond both ways
+		x = input_sockets['X']
+		y = input_sockets['Y']
+		z = input_sockets['Z']
+
+		has_doubled_x = not ct.FlowSignal.check_single(x, ct.FlowSignal.NoFlow)
+		has_doubled_y = not ct.FlowSignal.check_single(y, ct.FlowSignal.NoFlow)
+		has_doubled_z = not ct.FlowSignal.check_single(z, ct.FlowSignal.NoFlow)
+
+		# Deduce +/- of Each Axis
+		## -> +/- X
+		if has_doubled_x:
+			x_pos = input_sockets['X']
+			x_neg = input_sockets['X']
+		else:
+			x_pos = input_sockets['+X']
+			x_neg = input_sockets['-X']
+
+		has_x_pos = not ct.FlowSignal.check(x_pos)
+		has_x_neg = not ct.FlowSignal.check(x_neg)
+
+		## -> +/- Y
+		if has_doubled_y:
+			y_pos = input_sockets['Y']
+			y_neg = input_sockets['Y']
+		else:
+			y_pos = input_sockets['+Y']
+			y_neg = input_sockets['-Y']
+
+		has_y_pos = not ct.FlowSignal.check(y_pos)
+		has_y_neg = not ct.FlowSignal.check(y_neg)
+
+		## -> +/- Z
+		if has_doubled_z:
+			z_pos = input_sockets['Z']
+			z_neg = input_sockets['Z']
+		else:
+			z_pos = input_sockets['+Z']
+			z_neg = input_sockets['-Z']
+
+		has_z_pos = not ct.FlowSignal.check(z_pos)
+		has_z_neg = not ct.FlowSignal.check(z_neg)
+
+		if (
+			has_x_pos
+			and has_x_neg
+			and has_y_pos
+			and has_y_neg
+			and has_z_pos
+			and has_z_neg
+		):
+			return (x_pos | x_neg | y_pos | y_neg | z_pos | z_neg).compose_within(
+				enclosing_func=lambda els: td.BoundarySpec(
+					x=td.Boundary(
+						plus=els[0],
+						minus=els[1],
+					),
+					y=td.Boundary(
+						plus=els[2],
+						minus=els[3],
+					),
+					z=td.Boundary(
+						plus=els[4],
+						minus=els[5],
+					),
+				),
+				supports_jax=False,
+			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'BCs',
+		kind=ct.FlowKind.Params,
+		input_sockets={'X', 'Y', 'Z', '+X', '-X', '+Y', '-Y', '+Z', '-Z'},
+		input_socket_kinds={
+			'X': ct.FlowKind.Params,
+			'Y': ct.FlowKind.Params,
+			'Z': ct.FlowKind.Params,
+			'+X': ct.FlowKind.Params,
+			'-X': ct.FlowKind.Params,
+			'+Y': ct.FlowKind.Params,
+			'-Y': ct.FlowKind.Params,
+			'+Z': ct.FlowKind.Params,
+			'-Z': ct.FlowKind.Params,
+		},
+		input_sockets_optional={
+			'X': True,
+			'Y': True,
+			'Z': True,
+			'+X': True,
+			'-X': True,
+			'+Y': True,
+			'-Y': True,
+			'+Z': True,
+			'-Z': True,
+		},
+	)
+	def compute_bcs_params(self, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the simulation boundary conditions, by combining the individual input by specified half axis."""
+		# Deduce "Doubledness"
+		## -> A "doubled" axis defines the same bound cond both ways
+		x = input_sockets['X']
+		y = input_sockets['Y']
+		z = input_sockets['Z']
+
+		has_doubled_x = not ct.FlowSignal.check_single(x, ct.FlowSignal.NoFlow)
+		has_doubled_y = not ct.FlowSignal.check_single(y, ct.FlowSignal.NoFlow)
+		has_doubled_z = not ct.FlowSignal.check_single(z, ct.FlowSignal.NoFlow)
+
+		# Deduce +/- of Each Axis
+		## -> +/- X
+		if has_doubled_x:
+			x_pos = input_sockets['X']
+			x_neg = input_sockets['X']
+		else:
+			x_pos = input_sockets['+X']
+			x_neg = input_sockets['-X']
+
+		has_x_pos = not ct.FlowSignal.check(x_pos)
+		has_x_neg = not ct.FlowSignal.check(x_neg)
+
+		## -> +/- Y
+		if has_doubled_y:
+			y_pos = input_sockets['Y']
+			y_neg = input_sockets['Y']
+		else:
+			y_pos = input_sockets['+Y']
+			y_neg = input_sockets['-Y']
+
+		has_y_pos = not ct.FlowSignal.check(y_pos)
+		has_y_neg = not ct.FlowSignal.check(y_neg)
+
+		## -> +/- Z
+		if has_doubled_z:
+			z_pos = input_sockets['Z']
+			z_neg = input_sockets['Z']
+		else:
+			z_pos = input_sockets['+Z']
+			z_neg = input_sockets['-Z']
+
+		has_z_pos = not ct.FlowSignal.check(z_pos)
+		has_z_neg = not ct.FlowSignal.check(z_neg)
+
+		if (
+			has_x_pos
+			and has_x_neg
+			and has_y_pos
+			and has_y_neg
+			and has_z_pos
+			and has_z_neg
+		):
+			return x_pos | x_neg | y_pos | y_neg | z_pos | z_neg
+		return ct.FlowSignal.FlowPending
 
 
 ####################
