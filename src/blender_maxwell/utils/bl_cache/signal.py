@@ -39,8 +39,6 @@ class Signal(enum.StrEnum):
 
 		InvalidateCache: The cache should be invalidated.
 		InvalidateCacheNoUpdate: The cache should be invalidated, but no update method should be run.
-		DoUpdate: Any update method that the cache triggers on change should be run.
-			An update is **not guaranteeed** to be run, merely requested.
 
 		ResetEnumItems: Cached dynamic enum items should be recomputed on next use.
 		ResetStrSearch: Cached string-search items should be recomputed on next use.
@@ -53,7 +51,6 @@ class Signal(enum.StrEnum):
 	# Invalidation
 	InvalidateCache: str = str(uuid.uuid4())
 	InvalidateCacheNoUpdate: str = str(uuid.uuid4())
-	DoUpdate: str = str(uuid.uuid4())
 
 	# Reset Signals
 	## -> Invalidates data adjascent to fields.

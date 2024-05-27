@@ -18,6 +18,7 @@ import typing as typ
 
 import bpy
 import sympy as sp
+import tidy3d as td
 
 from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -88,32 +89,79 @@ class ViewerNode(base.MaxwellSimNode):
 		socket_name='Any',
 	)
 	def on_input_changed(self) -> None:
-		self.input_flow = bl_cache.Signal.InvalidateCache
+		"""Lightweight invalidator, which invalidates the more specific `cached_bl_property` used to determine when something ex. plot-related has changed.
 
-	@bl_cache.cached_bl_property()
-	def input_flow(self) -> dict[ct.FlowKind, typ.Any | None]:
-		input_flow = {}
-
+		Calls `get_flow`, which will be called again when regenerating the `cached_bl_property`s.
+		This **does not** call the flow twice, as `self._compute_input()` will be cached the first time.
+		"""
 		for flow_kind in list(ct.FlowKind):
+			flow = self.get_flow(
+				flow_kind, always_load=flow_kind is ct.FlowKind.Previews
+			)
+			if flow is not None:
+				setattr(
+					self,
+					'input_' + flow_kind.property_name,
+					bl_cache.Signal.InvalidateCache,
+				)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_capabilities(self) -> ct.CapabilitiesFlow | None:
+		return self.get_flow(ct.FlowKind.Capabilities)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_previews(self) -> ct.PreviewsFlow | None:
+		return self.get_flow(ct.FlowKind.Previews, always_load=True)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_value(self) -> ct.ValueFlow | None:
+		return self.get_flow(ct.FlowKind.Value)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_array(self) -> ct.ArrayFlow | None:
+		return self.get_flow(ct.FlowKind.Array)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_lazy_range(self) -> ct.RangeFlow | None:
+		return self.get_flow(ct.FlowKind.Range)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_lazy_func(self) -> ct.FuncFlow | None:
+		return self.get_flow(ct.FlowKind.Func)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_params(self) -> ct.ParamsFlow | None:
+		return self.get_flow(ct.FlowKind.Params)
+
+	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	def input_info(self) -> ct.InfoFlow | None:
+		return self.get_flow(ct.FlowKind.Info)
+
+	def get_flow(
+		self, flow_kind: ct.FlowKind, always_load: bool = False
+	) -> typ.Any | None:
+		"""Generic interface to simplify getting `FlowKind` properties on the viewer node."""
+		if self.auto_expr or always_load:
 			flow = self._compute_input('Any', kind=flow_kind)
 			has_flow = not ct.FlowSignal.check(flow)
 
 			if has_flow:
-				input_flow |= {flow_kind: flow}
-			else:
-				input_flow |= {flow_kind: None}
-
-		return input_flow
+				return flow
+			return None
+		return None
 
 	####################
 	# - Property: Input Expression String Lines
 	####################
-	@bl_cache.cached_bl_property(depends_on={'input_flow'})
+	@bl_cache.cached_bl_property(depends_on={'input_value'})
 	def input_expr_str_entries(self) -> list[list[str]] | None:
-		value = self.input_flow.get(ct.FlowKind.Value)
+		value = self.input_value
+		if value is None:
+			return None
 
+		# Parse SympyType
 		def sp_pretty(v: spux.SympyExpr) -> spux.SympyExpr:
-			## sp.pretty makes new lines and wreaks havoc.
+			## -> The real sp.pretty makes new lines and wreaks havoc.
 			return spux.sp_to_str(v.n(4))
 
 		if isinstance(value, spux.SympyType):
@@ -124,6 +172,25 @@ class ViewerNode(base.MaxwellSimNode):
 				]
 
 			return [[sp_pretty(value)]]
+
+		# Parse Tidy3D Types
+		if isinstance(value, td.Structure):
+			return [
+				[str(key), str(value)]
+				for key, value in dict(value).items()
+				if key not in ['type', 'geometry', 'medium']
+			] + [
+				[str(key), str(value)]
+				for key, value in dict(value.geometry).items()
+				if key != 'type'
+			]
+		if isinstance(value, td.components.base.Tidy3dBaseModel):
+			return [
+				[str(key), str(value)]
+				for key, value in dict(value).items()
+				if key != 'type'
+			]
+
 		return None
 
 	####################
@@ -132,11 +199,11 @@ class ViewerNode(base.MaxwellSimNode):
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
 		row = layout.row(align=True)
 
+		# Automatic Expression Printing
+		row.prop(self, self.blfields['auto_expr'], text='Live', toggle=True)
+
 		# Debug Mode On/Off
 		row.prop(self, self.blfields['debug_mode'], text='Debug', toggle=True)
-
-		# Automatic Expression Printing
-		row.prop(self, self.blfields['auto_expr'], text='Expr', toggle=True)
 
 		# Debug Mode Operators
 		if self.debug_mode:
@@ -210,47 +277,47 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Methods
 	####################
 	def print_data_to_console(self):
-		if not self.inputs['Any'].is_linked:
-			return
+		flow = self._compute_input('Any', kind=self.console_print_kind)
 
 		log.info('Printing to Console')
-		data = self._compute_input('Any', kind=self.console_print_kind, optional=True)
-
-		if isinstance(data, spux.SympyType):
-			console.print(sp.pretty(data, use_unicode=True))
+		if isinstance(flow, spux.SympyType):
+			console.print(sp.pretty(flow, use_unicode=True))
 		else:
-			console.print(data)
+			console.print(flow)
 
 	####################
 	# - Event Methods
 	####################
 	@events.on_value_changed(
-		socket_name='Any',
-		prop_name='auto_plot',
-		props={'auto_plot'},
+		# Trigger
+		prop_name={'input_previews', 'auto_plot'},
+		# Loaded
+		props={'input_previews', 'auto_plot'},
 	)
 	def on_changed_plot_preview(self, props):
-		node_tree = self.id_data
+		previews = props['input_previews']
+		if previews is not None:
+			if props['auto_plot']:
+				bl_socket = self.inputs['Any']
+				if bl_socket.is_linked:
+					bl_socket.links[0].from_node.compute_plot()
 
-		# Unset Plot if Nothing Plotted
-		with node_tree.replot():
-			if props['auto_plot'] and self.inputs['Any'].is_linked:
-				self.inputs['Any'].links[0].from_socket.node.trigger_event(
-					ct.FlowEvent.ShowPlot
-				)
+			previews.update_image_preview()
+		else:
+			ct.PreviewsFlow.hide_image_preview()
 
 	@events.on_value_changed(
-		socket_name='Any',
-		prop_name='auto_3d_preview',
-		props={'auto_3d_preview'},
+		# Trigger
+		prop_name={'input_previews', 'auto_3d_preview'},
+		# Loaded
+		props={'input_previews', 'auto_3d_preview'},
 	)
 	def on_changed_3d_preview(self, props):
-		node_tree = self.id_data
-
-		# Remove Non-Repreviewed Previews on Close
-		with node_tree.repreview_all():
-			if props['auto_3d_preview']:
-				self.trigger_event(ct.FlowEvent.ShowPreview)
+		previews = props['input_previews']
+		if previews is not None and props['auto_3d_preview']:
+			previews.update_bl_object_previews()
+		else:
+			ct.PreviewsFlow.hide_bl_object_previews()
 
 
 ####################

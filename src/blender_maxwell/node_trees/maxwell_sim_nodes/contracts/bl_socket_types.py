@@ -230,7 +230,6 @@ class BLSocketType(enum.StrEnum):
 		return {
 			# Blender
 			# Basic
-			BLST.Bool: MT.Bool,
 			# Float
 			BLST.Float: MT.Real,
 			BLST.FloatAngle: MT.Real,

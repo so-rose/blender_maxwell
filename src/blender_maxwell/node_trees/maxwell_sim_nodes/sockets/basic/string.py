@@ -16,6 +16,8 @@
 
 import bpy
 
+from blender_maxwell.utils import bl_cache
+
 from ... import contracts as ct
 from .. import base
 
@@ -30,12 +32,7 @@ class StringBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.StringProperty(
-		name='String',
-		description='Represents a string',
-		default='',
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: str = bl_cache.BLField('')
 
 	####################
 	# - Socket UI
@@ -46,7 +43,7 @@ class StringBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Computation of Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> str:
 		return self.raw_value
 

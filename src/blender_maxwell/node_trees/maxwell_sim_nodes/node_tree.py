@@ -19,7 +19,7 @@ import typing as typ
 
 import bpy
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import logger, serialize
 
 from . import contracts as ct
 from .managed_objs.managed_bl_image import ManagedBLImage

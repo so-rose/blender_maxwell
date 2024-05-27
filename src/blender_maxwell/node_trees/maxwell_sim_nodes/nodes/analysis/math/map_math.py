@@ -236,7 +236,7 @@ class MapOperation(enum.StrEnum):
 			MO.Sinc: lambda expr: sp.sinc(expr),
 			# By Vector
 			# Vector -> Number
-			MO.Norm2: lambda expr: sp.sqrt(expr.T @ expr),
+			MO.Norm2: lambda expr: sp.sqrt(expr.T @ expr)[0],
 			# By Matrix
 			# Matrix -> Number
 			MO.Det: lambda expr: sp.det(expr),
@@ -467,10 +467,15 @@ class MapMathNode(base.MaxwellSimNode):
 	# - Properties
 	####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Expr'},
+		# Loaded
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': ct.FlowKind.Info},
 		input_sockets_optional={'Expr': True},
+		# Flow
+		## -> See docs in TransformMathNode
+		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_info = not ct.FlowSignal.check(input_sockets['Expr'])

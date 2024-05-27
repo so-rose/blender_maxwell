@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from blender_maxwell.utils import bl_cache
+
 from ... import contracts as ct
 from .. import base
 
@@ -25,8 +27,8 @@ class AnyBLSocket(base.MaxwellSimSocket):
 	socket_type = ct.SocketType.Any
 	bl_label = 'Any'
 
-	@property
-	def capabilities(self):
+	@bl_cache.cached_bl_property(depends_on={'active_kind'})
+	def capabilities(self) -> ct.CapabilitiesFlow:
 		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,

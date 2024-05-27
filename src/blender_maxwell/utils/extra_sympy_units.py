@@ -44,6 +44,7 @@ from pydantic_core import core_schema as pyd_core_schema
 from blender_maxwell import contracts as ct
 
 from . import logger
+from .staticproperty import staticproperty
 
 log = logger.get(__name__)
 
@@ -69,7 +70,7 @@ class MathType(enum.StrEnum):
 	Complex = enum.auto()
 
 	@staticmethod
-	def combine(*mathtypes: list[typ.Self]) -> typ.Self:
+	def combine(*mathtypes: list[typ.Self], optional: bool = False) -> typ.Self | None:
 		if MathType.Complex in mathtypes:
 			return MathType.Complex
 		if MathType.Real in mathtypes:
@@ -78,6 +79,9 @@ class MathType(enum.StrEnum):
 			return MathType.Rational
 		if MathType.Integer in mathtypes:
 			return MathType.Integer
+
+		if optional:
+			return None
 
 		msg = f"Can't combine mathtypes {mathtypes}"
 		raise ValueError(msg)
@@ -113,7 +117,7 @@ class MathType(enum.StrEnum):
 				return complex(pyobj, 0)
 
 	@staticmethod
-	def from_expr(sp_obj: SympyType) -> type:
+	def from_expr(sp_obj: SympyType, optional: bool = False) -> type | None:
 		if isinstance(sp_obj, sp.MatrixBase):
 			return MathType.combine(
 				*[MathType.from_expr(v) for v in sp.flatten(sp_obj)]
@@ -133,6 +137,9 @@ class MathType(enum.StrEnum):
 			return MathType.Real  ## TODO: Strictly, could be ex. integer...
 		if sp_obj in [sp.zoo, -sp.zoo]:
 			return MathType.Complex
+
+		if optional:
+			return None
 
 		msg = f"Can't determine MathType from sympy object: {sp_obj}"
 		raise ValueError(msg)
@@ -957,6 +964,48 @@ def unit_str_to_unit(unit_str: str) -> Unit | None:
 ####################
 # - "Physical" Type
 ####################
+def unit_dim_to_unit_dim_deps(
+	unit_dims: SympyType,
+) -> dict[spu.dimensions.Dimension, int] | None:
+	dimsys_SI = spu.systems.si.dimsys_SI
+
+	# Retrieve Dimensional Dependencies
+	try:
+		return dimsys_SI.get_dimensional_dependencies(unit_dims)
+
+	# Catch TypeError
+	## -> Happens if `+` or `-` is in `unit`.
+	## -> Generally, it doesn't make sense to add/subtract differing unit dims.
+	## -> Thus, when trying to figure out the unit dimension, there isn't one.
+	except TypeError:
+		return None
+
+
+def unit_to_unit_dim_deps(
+	unit: SympyType,
+) -> dict[spu.dimensions.Dimension, int] | None:
+	# Retrieve Dimensional Dependencies
+	## -> NOTE: .subs() alone seems to produce sp.Symbol atoms.
+	## -> This is extremely problematic; `Dims` arithmetic has key properties.
+	## -> So we have to go all the way to the dimensional dependencies.
+	## -> This isn't really respecting the args, but it seems to work :)
+	return unit_dim_to_unit_dim_deps(
+		unit.subs({arg: arg.dimension for arg in unit.atoms(spu.Quantity)})
+	)
+
+
+def compare_unit_dims(unit_dim_l: SympyType, unit_dim_r: SympyType) -> bool:
+	return unit_dim_to_unit_dim_deps(unit_dim_l) == unit_dim_to_unit_dim_deps(
+		unit_dim_r
+	)
+
+
+def compare_unit_dim_to_unit_dim_deps(
+	unit_dim: SympyType, unit_dim_deps: dict[spu.dimensions.Dimension, int]
+) -> bool:
+	return unit_dim_to_unit_dim_deps(unit_dim) == unit_dim_deps
+
+
 class PhysicalType(enum.StrEnum):
 	"""Type identifiers for expressions with both `MathType` and a unit, aka a "physical" type."""
 
@@ -1005,7 +1054,7 @@ class PhysicalType(enum.StrEnum):
 	Illuminance = enum.auto()
 
 	@functools.cached_property
-	def unit_dim(self):
+	def unit_dim(self) -> SympyType:
 		PT = PhysicalType
 		return {
 			PT.NonPhysical: None,
@@ -1048,6 +1097,95 @@ class PhysicalType(enum.StrEnum):
 			PT.LumIntensity: Dims.luminous_intensity,
 			PT.LumFlux: Dims.luminous_intensity * spu.steradian.dimension,
 			PT.Illuminance: Dims.luminous_intensity / Dims.length**2,
+		}[self]
+
+	@staticproperty
+	def unit_dims() -> dict[typ.Self, SympyType]:
+		return {
+			physical_type: physical_type.unit_dim
+			for physical_type in list(PhysicalType)
+		}
+
+	@functools.cached_property
+	def color(self):
+		"""A color corresponding to the physical type.
+
+		The color selections were initially generated using AI, as this is a rote task that's better adjusted than invented.
+		The LLM provided the following rationale for its choices:
+
+		> Non-Physical: Grey signifies neutrality and non-physical nature.
+		> Global:
+		>    Time: Blue is often associated with calmness and the passage of time.
+		>    Angle and Solid Angle: Different shades of blue and cyan suggest angular dimensions and spatial aspects.
+		>    Frequency and Angular Frequency: Darker shades of blue to maintain the link to time.
+		> Cartesian:
+		>    Length, Area, Volume: Shades of green to represent spatial dimensions, with intensity increasing with dimension.
+		> Mechanical:
+		>    Velocity and Acceleration: Red signifies motion and dynamics, with lighter reds for related quantities.
+		>    Mass: Dark red for the fundamental property.
+		>    Force and Pressure: Shades of red indicating intensity.
+		> Energy:
+		>    Work and Power: Orange signifies energy transformation, with lighter oranges for related quantities.
+		>    Temperature: Yellow for heat.
+		> Electrodynamics:
+		>    Current and related quantities: Cyan shades indicating flow.
+		>    Voltage, Capacitance: Greenish and blueish cyan for electrical potential.
+		>    Impedance, Conductance, Conductivity: Purples and magentas to signify resistance and conductance.
+		>    Magnetic properties: Magenta shades for magnetism.
+		>    Electric Field: Light blue.
+		>    Magnetic Field: Grey, as it can be considered neutral in terms of direction.
+		> Luminal:
+		>    Luminous properties: Yellows to signify light and illumination.
+		>
+		> This color mapping helps maintain intuitive connections for users interacting with these physical types.
+		"""
+		PT = PhysicalType
+		return {
+			PT.NonPhysical: (0.75, 0.75, 0.75, 1.0),  # Light Grey: Non-physical
+			# Global
+			PT.Time: (0.5, 0.5, 1.0, 1.0),  # Light Blue: Time
+			PT.Angle: (0.5, 0.75, 1.0, 1.0),  # Light Blue: Angle
+			PT.SolidAngle: (0.5, 0.75, 0.75, 1.0),  # Light Cyan: Solid Angle
+			PT.Freq: (0.5, 0.5, 0.9, 1.0),  # Light Blue: Frequency
+			PT.AngFreq: (0.5, 0.5, 0.8, 1.0),  # Light Blue: Angular Frequency
+			# Cartesian
+			PT.Length: (0.5, 1.0, 0.5, 1.0),  # Light Green: Length
+			PT.Area: (0.6, 1.0, 0.6, 1.0),  # Light Green: Area
+			PT.Volume: (0.7, 1.0, 0.7, 1.0),  # Light Green: Volume
+			# Mechanical
+			PT.Vel: (1.0, 0.5, 0.5, 1.0),  # Light Red: Velocity
+			PT.Accel: (1.0, 0.6, 0.6, 1.0),  # Light Red: Acceleration
+			PT.Mass: (0.75, 0.5, 0.5, 1.0),  # Light Red: Mass
+			PT.Force: (0.9, 0.5, 0.5, 1.0),  # Light Red: Force
+			PT.Pressure: (1.0, 0.7, 0.7, 1.0),  # Light Red: Pressure
+			# Energy
+			PT.Work: (1.0, 0.75, 0.5, 1.0),  # Light Orange: Work
+			PT.Power: (1.0, 0.85, 0.5, 1.0),  # Light Orange: Power
+			PT.PowerFlux: (1.0, 0.8, 0.6, 1.0),  # Light Orange: Power Flux
+			PT.Temp: (1.0, 1.0, 0.5, 1.0),  # Light Yellow: Temperature
+			# Electrodynamics
+			PT.Current: (0.5, 1.0, 1.0, 1.0),  # Light Cyan: Current
+			PT.CurrentDensity: (0.5, 0.9, 0.9, 1.0),  # Light Cyan: Current Density
+			PT.Charge: (0.5, 0.85, 0.85, 1.0),  # Light Cyan: Charge
+			PT.Voltage: (0.5, 1.0, 0.75, 1.0),  # Light Greenish Cyan: Voltage
+			PT.Capacitance: (0.5, 0.75, 1.0, 1.0),  # Light Blueish Cyan: Capacitance
+			PT.Impedance: (0.6, 0.5, 0.75, 1.0),  # Light Purple: Impedance
+			PT.Conductance: (0.7, 0.5, 0.8, 1.0),  # Light Purple: Conductance
+			PT.Conductivity: (0.8, 0.5, 0.9, 1.0),  # Light Purple: Conductivity
+			PT.MFlux: (0.75, 0.5, 0.75, 1.0),  # Light Magenta: Magnetic Flux
+			PT.MFluxDensity: (
+				0.85,
+				0.5,
+				0.85,
+				1.0,
+			),  # Light Magenta: Magnetic Flux Density
+			PT.Inductance: (0.8, 0.5, 0.8, 1.0),  # Light Magenta: Inductance
+			PT.EField: (0.75, 0.75, 1.0, 1.0),  # Light Blue: Electric Field
+			PT.HField: (0.75, 0.75, 0.75, 1.0),  # Light Grey: Magnetic Field
+			# Luminal
+			PT.LumIntensity: (1.0, 0.95, 0.5, 1.0),  # Light Yellow: Luminous Intensity
+			PT.LumFlux: (1.0, 0.95, 0.6, 1.0),  # Light Yellow: Luminous Flux
+			PT.Illuminance: (1.0, 1.0, 0.75, 1.0),  # Pale Yellow: Illuminance
 		}[self]
 
 	@functools.cached_property
@@ -1256,15 +1394,57 @@ class PhysicalType(enum.StrEnum):
 		}[self]
 
 	@staticmethod
-	def from_unit(unit: Unit, optional: bool = False) -> list[Unit] | None:
-		for physical_type in list(PhysicalType):
-			if unit in physical_type.valid_units:
-				return physical_type
-		## TODO: Optimize
+	def from_unit(unit: Unit | None, optional: bool = False) -> typ.Self | None:
+		"""Attempt to determine a matching `PhysicalType` from a unit.
+
+		NOTE: It is not guaranteed that `unit` is within `valid_units`, only that it can be converted to any unit in `valid_units`.
+
+		Returns:
+			The matched `PhysicalType`.
+
+			If none could be matched, then either return `None` (if `optional` is set) or error.
+
+		Raises:
+			ValueError: If no `PhysicalType` could be matched, and `optional` is `False`.
+		"""
+		if unit is None:
+			return ct.PhysicalType.NonPhysical
+
+		unit_dim_deps = unit_to_unit_dim_deps(unit)
+		if unit_dim_deps is not None:
+			for physical_type, candidate_unit_dim in PhysicalType.unit_dims.items():
+				if compare_unit_dim_to_unit_dim_deps(candidate_unit_dim, unit_dim_deps):
+					return physical_type
 
 		if optional:
 			return None
 		msg = f'Could not determine PhysicalType for {unit}'
+		raise ValueError(msg)
+
+	@staticmethod
+	def from_unit_dim(
+		unit_dim: SympyType | None, optional: bool = False
+	) -> typ.Self | None:
+		"""Attempts to match an arbitrary unit dimension expression to a corresponding `PhysicalType`.
+
+		For comparing arbitrary unit dimensions (via expressions of `spu.dimensions.Dimension`), it is critical that equivalent dimensions are also compared as equal (ex. `mass*length/time^2 == force`).
+		To do so, we employ the `SI` unit conventions, for extracting the fundamental dimensional dependencies of unit dimension expressions.
+
+		Returns:
+			The matched `PhysicalType`.
+
+			If none could be matched, then either return `None` (if `optional` is set) or error.
+
+		Raises:
+			ValueError: If no `PhysicalType` could be matched, and `optional` is `False`.
+		"""
+		for physical_type, candidate_unit_dim in PhysicalType.unit_dims.items():
+			if compare_unit_dims(unit_dim, candidate_unit_dim):
+				return physical_type
+
+		if optional:
+			return None
+		msg = f'Could not determine PhysicalType for {unit_dim}'
 		raise ValueError(msg)
 
 	@functools.cached_property

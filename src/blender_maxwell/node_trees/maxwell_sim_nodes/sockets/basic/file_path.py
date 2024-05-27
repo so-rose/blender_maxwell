@@ -48,7 +48,7 @@ class FilePathBLSocket(base.MaxwellSimSocket):
 	####################
 	# - FlowKind: Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> Path:
 		return self.raw_value
 

@@ -50,7 +50,9 @@ class ReloadFolderList(bpy.types.Operator):
 		tdcloud.TidyCloudTasks.update_tasks(bl_socket.existing_folder_id)
 
 		bl_socket.existing_folder_id = bl_cache.Signal.ResetEnumItems
+		bl_socket.existing_folder_id = bl_cache.Signal.InvalidateCache
 		bl_socket.existing_task_id = bl_cache.Signal.ResetEnumItems
+		bl_socket.existing_task_id = bl_cache.Signal.InvalidateCache
 
 		return {'FINISHED'}
 
@@ -77,7 +79,9 @@ class Authenticate(bpy.types.Operator):
 			bl_socket.api_key = ''
 
 			bl_socket.existing_folder_id = bl_cache.Signal.ResetEnumItems
+			bl_socket.existing_folder_id = bl_cache.Signal.InvalidateCache
 			bl_socket.existing_task_id = bl_cache.Signal.ResetEnumItems
+			bl_socket.existing_task_id = bl_cache.Signal.InvalidateCache
 
 		return {'FINISHED'}
 
@@ -102,62 +106,18 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	api_key: str = bl_cache.BLField('', prop_ui=True, str_secret=True)
+	api_key: str = bl_cache.BLField('', str_secret=True)
 	should_exist: bool = bl_cache.BLField(False)
 
+	new_task_name: str = bl_cache.BLField('')
+
+	####################
+	# - Properties: Cloud Folders
+	####################
 	existing_folder_id: enum.StrEnum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_folders()
-	)
-	existing_task_id: enum.StrEnum = bl_cache.BLField(
-		prop_ui=True, enum_cb=lambda self, _: self.search_cloud_tasks()
+		enum_cb=lambda self, _: self.search_cloud_folders()
 	)
 
-	new_task_name: str = bl_cache.BLField('', prop_ui=True)
-
-	####################
-	# - FlowKinds
-	####################
-	@property
-	def capabilities(self) -> ct.CapabilitiesFlow:
-		return ct.CapabilitiesFlow(
-			socket_type=self.socket_type,
-			active_kind=self.active_kind,
-			must_match={'should_exist': self.should_exist},
-		)
-
-	@property
-	def value(
-		self,
-	) -> ct.NewSimCloudTask | tdcloud.CloudTask | ct.FlowSignal:
-		if tdcloud.IS_AUTHENTICATED:
-			# Retrieve Folder
-			cloud_folder = tdcloud.TidyCloudFolders.folders().get(
-				self.existing_folder_id
-			)
-			if cloud_folder is None:
-				return ct.FlowSignal.NoFlow  ## Folder deleted somewhere else
-
-			# Case: New Task
-			if not self.should_exist:
-				return ct.NewSimCloudTask(
-					task_name=self.new_task_name, cloud_folder=cloud_folder
-				)
-
-			# Case: Existing Task
-			if self.existing_task_id is not None:
-				cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
-					self.existing_task_id
-				)
-				if cloud_folder is None:
-					return ct.FlowSignal.NoFlow  ## Task deleted somewhere else
-
-				return cloud_task
-
-		return ct.FlowSignal.FlowPending
-
-	####################
-	# - Searchers
-	####################
 	def search_cloud_folders(self) -> list[ct.BLEnumElement]:
 		if tdcloud.IS_AUTHENTICATED:
 			return [
@@ -174,6 +134,13 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 			]
 
 		return []
+
+	####################
+	# - Properties: Cloud Tasks
+	####################
+	existing_task_id: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_cloud_tasks()
+	)
 
 	def search_cloud_tasks(self) -> list[ct.BLEnumElement]:
 		if self.existing_folder_id is None or not tdcloud.IS_AUTHENTICATED:
@@ -227,6 +194,54 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 				)
 			)
 		]
+
+	####################
+	# - FlowKinds
+	####################
+	@bl_cache.cached_bl_property(depends_on={'active_kind', 'should_exist'})
+	def capabilities(self) -> ct.CapabilitiesFlow:
+		return ct.CapabilitiesFlow(
+			socket_type=self.socket_type,
+			active_kind=self.active_kind,
+			must_match={'should_exist': self.should_exist},
+		)
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'should_exist',
+			'new_task_name',
+			'existing_folder_id',
+			'existing_task_id',
+		}
+	)
+	def value(
+		self,
+	) -> ct.NewSimCloudTask | tdcloud.CloudTask | ct.FlowSignal:
+		if tdcloud.IS_AUTHENTICATED:
+			# Retrieve Folder
+			cloud_folder = tdcloud.TidyCloudFolders.folders().get(
+				self.existing_folder_id
+			)
+			if cloud_folder is None:
+				return ct.FlowSignal.NoFlow  ## Folder deleted somewhere else
+
+			# Case: New Task
+			if not self.should_exist:
+				return ct.NewSimCloudTask(
+					task_name=self.new_task_name, cloud_folder=cloud_folder
+				)
+
+			# Case: Existing Task
+			if self.existing_task_id is not None:
+				cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
+					self.existing_task_id
+				)
+				if cloud_folder is None:
+					return ct.FlowSignal.NoFlow  ## Task deleted somewhere else
+
+				return cloud_task
+
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - UI

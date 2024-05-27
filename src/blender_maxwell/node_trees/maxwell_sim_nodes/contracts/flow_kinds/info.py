@@ -93,7 +93,7 @@ class InfoFlow:
 			return list(self.dims.keys())[idx]
 		return None
 
-	def dim_by_name(self, dim_name: str) -> int:
+	def dim_by_name(self, dim_name: str, optional: bool = False) -> int | None:
 		"""The integer axis occupied by the dimension.
 
 		Can be used to index `.shape` of the represented raw array.
@@ -101,6 +101,9 @@ class InfoFlow:
 		dims_with_name = [dim for dim in self.dims if dim.name == dim_name]
 		if len(dims_with_name) == 1:
 			return dims_with_name[0]
+
+		if optional:
+			return None
 
 		msg = f'Dim name {dim_name} not found in InfoFlow (or >1 found)'
 		raise ValueError(msg)
@@ -127,14 +130,15 @@ class InfoFlow:
 		return False
 
 	def is_idx_uniform(self, dim: sim_symbols.SimSymbol) -> bool:
-		"""Whether the (int) dim has explicitly uniform indexing.
+		"""Whether the given dim has explicitly uniform indexing.
 
 		This is needed primarily to check whether a Fourier Transform can be meaningfully performed on the data over the dimension's axis.
 
 		In practice, we've decided that only `RangeFlow` really truly _guarantees_ uniform indexing.
 		While `ArrayFlow` may be uniform in practice, it's a very expensive to check, and it's far better to enforce that the user perform that check and opt for a `RangeFlow` instead, at the time of dimension definition.
 		"""
-		return isinstance(self.dims[dim], RangeFlow) and self.dims[dim].scaling == 'lin'
+		dim_idx = self.dims[dim]
+		return isinstance(dim_idx, RangeFlow) and dim_idx.scaling == 'lin'
 
 	def dim_axis(self, dim: sim_symbols.SimSymbol) -> int:
 		"""The integer axis occupied by the dimension.
@@ -194,7 +198,7 @@ class InfoFlow:
 		return {
 			dim.name_pretty: {
 				'length': str(len(dim_idx)) if dim_idx is not None else '∞',
-				'mathtype': dim.mathtype.label_pretty,
+				'mathtype': dim.mathtype_size_label,
 				'unit': dim.unit_label,
 			}
 			for dim, dim_idx in self.dims.items()
@@ -315,27 +319,23 @@ class InfoFlow:
 		op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
 		unit_op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
 	) -> spux.SympyExpr:
-		if self.dims == other.dims:
-			sym_name = sim_symbols.SimSymbolName.Expr
-			expr = op(self.output.sp_symbol_phy, other.output.sp_symbol_phy)
-			unit_expr = unit_op(self.output.unit_factor, other.output.unit_factor)
+		sym_name = sim_symbols.SimSymbolName.Expr
+		expr = op(self.output.sp_symbol_phy, other.output.sp_symbol_phy)
+		unit_expr = unit_op(self.output.unit_factor, other.output.unit_factor)
+		## TODO: Handle per-cell matrix units?
 
-			return InfoFlow(
-				dims=self.dims,
-				output=sim_symbols.SimSymbol.from_expr(sym_name, expr, unit_expr),
-				pinned_values=self.pinned_values,
-			)
-
-		msg = f'InfoFlow: operate_output cannot be used when dimensions are not identical ({self.dims} | {other.dims}).'
-		raise ValueError(msg)
+		return InfoFlow(
+			dims=self.dims,
+			output=sim_symbols.SimSymbol.from_expr(sym_name, expr, unit_expr),
+			pinned_values=self.pinned_values,
+		)
 
 	####################
 	# - Operations: Fold
 	####################
 	def fold_last_input(self):
 		"""Fold the last input dimension into the output."""
-		last_key = list(self.dims.keys())[-1]
-		last_idx = list(self.dims.values())[-1]
+		last_idx = self.dims[self.last_dim]
 
 		rows = self.output.rows
 		cols = self.output.cols
@@ -351,7 +351,9 @@ class InfoFlow:
 
 		return InfoFlow(
 			dims={
-				dim: dim_idx for dim, dim_idx in self.dims.items() if dim != last_key
+				dim: dim_idx
+				for dim, dim_idx in self.dims.items()
+				if dim != self.last_dim
 			},
 			output=new_output,
 			pinned_values=self.pinned_values,

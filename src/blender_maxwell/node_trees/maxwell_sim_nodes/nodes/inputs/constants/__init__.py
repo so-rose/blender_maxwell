@@ -18,15 +18,18 @@ from . import (
 	blender_constant,
 	expr_constant,
 	scientific_constant,
+	symbol_constant,
 )
 
 BL_REGISTER = [
 	*expr_constant.BL_REGISTER,
+	*symbol_constant.BL_REGISTER,
 	*scientific_constant.BL_REGISTER,
 	*blender_constant.BL_REGISTER,
 ]
 BL_NODES = {
 	**expr_constant.BL_NODES,
+	**symbol_constant.BL_NODES,
 	**scientific_constant.BL_NODES,
 	**blender_constant.BL_NODES,
 }

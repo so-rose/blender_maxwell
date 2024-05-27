@@ -210,7 +210,7 @@ class BinaryOperation(enum.StrEnum):
 				):
 					ops += [BO.Cross]
 
-				return ops
+				return ops_el_el + ops
 
 			## Vector | Matrix
 			case (1, 2):
@@ -374,10 +374,15 @@ class OperateMathNode(base.MaxwellSimNode):
 	# - Properties
 	####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Expr L', 'Expr R'},
+		# Loaded
 		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={'Expr L': ct.FlowKind.Info, 'Expr R': ct.FlowKind.Info},
 		input_sockets_optional={'Expr L': True, 'Expr R': True},
+		# Flow
+		## -> See docs in TransformMathNode
+		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_info_l = not ct.FlowSignal.check(input_sockets['Expr L'])

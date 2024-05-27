@@ -124,12 +124,12 @@ class FilterOperation(enum.StrEnum):
 	# - Computed Properties
 	####################
 	@property
-	def func_args(self) -> list[spux.MathType]:
+	def func_args(self) -> list[sim_symbols.SimSymbol]:
 		FO = FilterOperation
 		return {
 			# Pin
-			FO.Pin: [spux.MathType.Integer],
-			FO.PinIdx: [spux.MathType.Integer],
+			FO.Pin: [sim_symbols.idx(None)],
+			FO.PinIdx: [sim_symbols.idx(None)],
 		}.get(self, [])
 
 	####################
@@ -155,10 +155,10 @@ class FilterOperation(enum.StrEnum):
 		match self:
 			# Slice
 			case FO.Slice:
-				return [dim for dim in info.dims if not dim.has_idx_labels(dim)]
+				return [dim for dim in info.dims if not info.has_idx_labels(dim)]
 
 			case FO.SliceIdx:
-				return [dim for dim in info.dims if not dim.has_idx_labels(dim)]
+				return [dim for dim in info.dims if not info.has_idx_labels(dim)]
 
 			# Pin
 			case FO.PinLen1:
@@ -272,10 +272,15 @@ class FilterMathNode(base.MaxwellSimNode):
 	# - Properties: Expr InfoFlow
 	####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Expr'},
+		# Loaded
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': ct.FlowKind.Info},
 		input_sockets_optional={'Expr': True},
+		# Flow
+		## -> See docs in TransformMathNode
+		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
@@ -593,11 +598,17 @@ class FilterMathNode(base.MaxwellSimNode):
 					pinned_value, require_sorted=True
 				)
 
-				return params.compose_within(enclosing_func_args=[nearest_idx_to_value])
+				return params.compose_within(
+					enclosing_arg_targets=[sim_symbols.idx(None)],
+					enclosing_func_args=[sp.S(nearest_idx_to_value)],
+				)
 
 			# Pin by-Index
 			if props['operation'] is FilterOperation.PinIdx and has_pinned_axis:
-				return params.compose_within(enclosing_func_args=[pinned_axis])
+				return params.compose_within(
+					enclosing_arg_targets=[sim_symbols.idx(None)],
+					enclosing_func_args=[sp.S(pinned_axis)],
+				)
 
 			return params
 

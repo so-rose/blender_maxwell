@@ -17,7 +17,6 @@
 """Useful image processing operations for use in the addon."""
 
 import enum
-import functools
 import typing as typ
 
 import jax
@@ -27,13 +26,13 @@ import matplotlib
 import matplotlib.axis as mpl_ax
 import matplotlib.backends.backend_agg
 import matplotlib.figure
-import matplotlib.style as mplstyle
+import numpy as np
 import seaborn as sns
 
 from blender_maxwell import contracts as ct
+from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 
-# mplstyle.use('fast')  ## TODO: Does this do anything?
 sns.set_theme()
 
 log = logger.get(__name__)
@@ -139,7 +138,7 @@ def rgba_image_from_2d_map(
 ####################
 # - MPL Helpers
 ####################
-@functools.lru_cache(maxsize=16)
+# @functools.lru_cache(maxsize=16)
 def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 	fig = matplotlib.figure.Figure(
 		figsize=[width_inches, height_inches], dpi=dpi, layout='tight'
@@ -160,9 +159,9 @@ def plot_box_plot_1d(data, ax: mpl_ax.Axis) -> None:
 	x_sym, y_sym = list(data.keys())
 
 	ax.boxplot([data[y_sym]])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
+	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_ylabel(y_sym.plot_label)
 
 
 def plot_bar(data, ax: mpl_ax.Axis) -> None:
@@ -173,26 +172,31 @@ def plot_bar(data, ax: mpl_ax.Axis) -> None:
 
 	ax.set_title(f'{x_sym.name_pretty} -> {heights_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(heights_sym.plot_label)
+	ax.set_ylabel(heights_sym.plot_label)
 
 
-# (ℝ) -> ℝ
+# (ℝ) -> ℝ (| sometimes complex)
 def plot_curve_2d(data, ax: mpl_ax.Axis) -> None:
 	x_sym, y_sym = list(data.keys())
 
+	if y_sym.mathtype is spux.MathType.Complex:
+		ax.plot(data[x_sym], data[y_sym].real, label='ℝ')
+		ax.plot(data[x_sym], data[y_sym].imag, label='𝕀')
+		ax.legend()
+
 	ax.plot(data[x_sym], data[y_sym])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
+	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_ylabel(y_sym.plot_label)
 
 
 def plot_points_2d(data, ax: mpl_ax.Axis) -> None:
 	x_sym, y_sym = list(data.keys())
 
 	ax.scatter(data[x_sym], data[y_sym])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
+	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_ylabel(y_sym.plot_label)
 
 
 # (ℝ, ℤ) -> ℝ
@@ -202,34 +206,30 @@ def plot_curves_2d(data, ax: mpl_ax.Axis) -> None:
 	for i, label in enumerate(data[label_sym]):
 		ax.plot(data[x_sym], data[y_sym][:, i], label=label)
 
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
+	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_ylabel(y_sym.plot_label)
 	ax.legend()
 
 
-def plot_filled_curves_2d(
-	data: jtyp.Float32[jtyp.Array, 'x_size 2'], info, ax: mpl_ax.Axis
-) -> None:
-	x_sym, _, y_sym = list(data.keys())
+def plot_filled_curves_2d(data, ax: mpl_ax.Axis) -> None:
+	x_sym, _, y_sym = list(data.keys(data))
 
 	ax.fill_between(data[x_sym], data[y_sym][:, 0], data[x_sym], data[y_sym][:, 1])
-	ax.set_title(f'{x_sym.name_pretty} -> {y_sym.name_pretty}')
+	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
-	ax.set_xlabel(y_sym.plot_label)
+	ax.set_ylabel(y_sym.plot_label)
 	ax.legend()
 
 
 # (ℝ, ℝ) -> ℝ
-def plot_heatmap_2d(
-	data: jtyp.Float32[jtyp.Array, 'x_size y_size'], info, ax: mpl_ax.Axis
-) -> None:
+def plot_heatmap_2d(data, ax: mpl_ax.Axis) -> None:
 	x_sym, y_sym, c_sym = list(data.keys())
 
 	heatmap = ax.imshow(data[c_sym], aspect='equal', interpolation='none')
 	ax.figure.colorbar(heatmap, cax=ax)
 
-	ax.set_title(f'({x_sym.name_pretty}, {y_sym.name_pretty}) -> {c_sym.plot_label}')
+	ax.set_title(f'({x_sym.name_pretty}, {y_sym.name_pretty}) → {c_sym.plot_label}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 	ax.legend()

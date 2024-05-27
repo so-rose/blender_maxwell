@@ -16,6 +16,8 @@
 
 import bpy
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
 
@@ -27,12 +29,7 @@ class BlenderMaterialBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.PointerProperty(
-		name='Blender Material',
-		description='Represents a Blender material',
-		type=bpy.types.Material,
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: bpy.types.Material = bl_cache.BLField()
 
 	####################
 	# - UI
@@ -43,7 +40,7 @@ class BlenderMaterialBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> bpy.types.Material | None:
 		return self.raw_value
 

@@ -35,10 +35,6 @@ class FlowEvent(enum.StrEnum):
 			This event can lock a subset of the node tree graph.
 		DisableLock: Indicates that the node/socket should disable locking.
 			This event can unlock part of a locked subgraph.
-		ShowPreview: Indicates that the node/socket should enable its primary preview.
-			This should be used if a more specific preview-esque event doesn't apply.
-		ShowPlot: Indicates that the node/socket should enable its plotted preview.
-			This should generally be used if the node is rendering to an image, for viewing through the Blender image editor.
 		LinkChanged: Indicates that a link to a node/socket was added/removed.
 			Is translated to `DataChanged` on sockets before propagation.
 		DataChanged: Indicates that data flowing through a node/socket was altered.
@@ -50,15 +46,12 @@ class FlowEvent(enum.StrEnum):
 	EnableLock = enum.auto()
 	DisableLock = enum.auto()
 
-	# Preview Events
-	ShowPreview = enum.auto()
-	ShowPlot = enum.auto()
-
 	# Data Events
 	LinkChanged = enum.auto()
 	DataChanged = enum.auto()
 
 	# Non-Triggered Events
+	ShowPlot = enum.auto()
 	OutputRequested = enum.auto()
 
 	# Properties
@@ -79,9 +72,6 @@ class FlowEvent(enum.StrEnum):
 			# Lock Events
 			FlowEvent.EnableLock: 'input',
 			FlowEvent.DisableLock: 'input',
-			# Preview Events
-			FlowEvent.ShowPreview: 'input',
-			FlowEvent.ShowPlot: 'input',
 			# Data Events
 			FlowEvent.LinkChanged: 'output',
 			FlowEvent.DataChanged: 'output',

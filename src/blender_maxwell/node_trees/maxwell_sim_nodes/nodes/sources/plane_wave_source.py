@@ -129,18 +129,14 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
-	@events.on_value_changed(
-		# Trigger
-		prop_name='preview_active',
+	@events.computes_output_socket(
+		'Angled Source',
+		kind=ct.FlowKind.Previews,
 		# Loaded
-		managed_objs={'modifier'},
-		props={'preview_active'},
+		props={'sim_node_name'},
 	)
-	def on_preview_changed(self, managed_objs, props):
-		if props['preview_active']:
-			managed_objs['modifier'].show_preview()
-		else:
-			managed_objs['modifier'].hide_preview()
+	def compute_previews(self, props):
+		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
 
 	@events.on_value_changed(
 		# Trigger

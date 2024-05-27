@@ -24,7 +24,6 @@ from fractions import Fraction
 import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
-import sympy.physics.units as spu
 
 from . import extra_sympy_units as spux
 from . import logger, serialize
@@ -88,6 +87,7 @@ class SimSymbolName(enum.StrEnum):
 	Wavelength = enum.auto()
 	Frequency = enum.auto()
 
+	Perm = enum.auto()
 	PermXX = enum.auto()
 	PermYY = enum.auto()
 	PermZZ = enum.auto()
@@ -161,6 +161,7 @@ class SimSymbolName(enum.StrEnum):
 				# Optics
 				SSN.Wavelength: 'wl',
 				SSN.Frequency: 'freq',
+				SSN.Perm: 'eps_r',
 				SSN.PermXX: 'eps_xx',
 				SSN.PermYY: 'eps_yy',
 				SSN.PermZZ: 'eps_zz',
@@ -179,6 +180,7 @@ class SimSymbolName(enum.StrEnum):
 			SSN.LowerTheta: 'θ',
 			SSN.LowerPhi: 'φ',
 			# Fields
+			SSN.Er: 'Er',
 			SSN.Etheta: 'Eθ',
 			SSN.Ephi: 'Eφ',
 			SSN.Hr: 'Hr',
@@ -186,10 +188,11 @@ class SimSymbolName(enum.StrEnum):
 			SSN.Hphi: 'Hφ',
 			# Optics
 			SSN.Wavelength: 'λ',
-			SSN.Frequency: '𝑓',
-			SSN.PermXX: 'ε_xx',
-			SSN.PermYY: 'ε_yy',
-			SSN.PermZZ: 'ε_zz',
+			SSN.Frequency: 'fᵣ',
+			SSN.Perm: 'εᵣ',
+			SSN.PermXX: 'εᵣ[xx]',
+			SSN.PermYY: 'εᵣ[yy]',
+			SSN.PermZZ: 'εᵣ[zz]',
 		}.get(self, self.name)
 
 
@@ -248,6 +251,8 @@ class SimSymbol(pyd.BaseModel):
 	## -> See self.domain.
 	## -> We have to deconstruct symbolic interval semantics a bit for UI.
 	is_constant: bool = False
+	exclude_zero: bool = False
+
 	interval_finite_z: tuple[int, int] = (0, 1)
 	interval_finite_q: tuple[tuple[int, int], tuple[int, int]] = ((0, 1), (1, 1))
 	interval_finite_re: tuple[float, float] = (0.0, 1.0)
@@ -284,20 +289,25 @@ class SimSymbol(pyd.BaseModel):
 	@functools.cached_property
 	def unit_label(self) -> str:
 		"""Pretty unit label, which is an empty string when there is no unit."""
-		return spux.sp_to_str(self.unit) if self.unit is not None else ''
+		return spux.sp_to_str(self.unit.n(4)) if self.unit is not None else ''
+
+	@functools.cached_property
+	def name_unit_label(self) -> str:
+		"""Pretty name | unit label, which is just the name when there is no unit."""
+		if self.unit is None:
+			return self.name_pretty
+		return f'{self.name_pretty} | {self.unit_label}'
 
 	@functools.cached_property
 	def def_label(self) -> str:
 		"""Pretty definition label, exposing the symbol definition."""
-		return f'{self.name_pretty} | {self.unit_label} ∈ {self.mathtype_size_label}'
+		return f'{self.name_unit_label} ∈ {self.mathtype_size_label}'
 		## TODO: Domain of validity from self.domain?
 
 	@functools.cached_property
 	def plot_label(self) -> str:
 		"""Pretty plot-oriented label."""
-		return f'{self.name_pretty}' + (
-			f'({self.unit})' if self.unit is not None else ''
-		)
+		return f'{self.name_pretty} ({self.unit_label})'
 
 	####################
 	# - Computed Properties
@@ -305,6 +315,11 @@ class SimSymbol(pyd.BaseModel):
 	@functools.cached_property
 	def unit_factor(self) -> spux.SympyExpr:
 		"""Factor corresponding to the tracked unit, which can be multiplied onto exported values without `None`-checking."""
+		return self.unit if self.unit is not None else sp.S(1)
+
+	@functools.cached_property
+	def unit_dim(self) -> spux.SympyExpr:
+		"""Unit dimension factor corresponding to the tracked unit, which can be multiplied onto exported values without `None`-checking."""
 		return self.unit if self.unit is not None else sp.S(1)
 
 	@functools.cached_property
@@ -403,6 +418,29 @@ class SimSymbol(pyd.BaseModel):
 			case (False, False):
 				return sp.S(self.mathtype.coerce_compatible_pyobj(-1))
 
+	@functools.cached_property
+	def is_nonzero(self) -> bool:
+		if self.exclude_zero:
+			return True
+
+		def check_real_domain(real_domain):
+			return (
+				(
+					real_domain.left == 0
+					and real_domain.left_open
+					or real_domain.right == 0
+					and real_domain.right_open
+				)
+				or real_domain.left > 0
+				or real_domain.right < 0
+			)
+
+		if self.mathtype is spux.MathType.Complex:
+			return check_real_domain(self.domain[0]) and check_real_domain(
+				self.domain[1]
+			)
+		return check_real_domain(self.domain)
+
 	####################
 	# - Properties
 	####################
@@ -434,23 +472,15 @@ class SimSymbol(pyd.BaseModel):
 				mathtype_kwargs |= {'complex': True}
 
 		# Non-Zero Assumption
-		if (
-			(
-				self.domain.left == 0
-				and self.domain.left_open
-				or self.domain.right == 0
-				and self.domain.right_open
-			)
-			or self.domain.left > 0
-			or self.domain.right < 0
-		):
+		if self.is_nonzero:
 			mathtype_kwargs |= {'nonzero': True}
 
 		# Positive/Negative Assumption
-		if self.domain.left >= 0:
-			mathtype_kwargs |= {'positive': True}
-		elif self.domain.right <= 0:
-			mathtype_kwargs |= {'negative': True}
+		if self.mathtype is not spux.MathType.Complex:
+			if self.domain.left >= 0:
+				mathtype_kwargs |= {'positive': True}
+			elif self.domain.right <= 0:
+				mathtype_kwargs |= {'negative': True}
 
 		# Scalar: Return Symbol
 		if self.rows == 1 and self.cols == 1:
@@ -521,8 +551,8 @@ class SimSymbol(pyd.BaseModel):
 						self.valid_domain_value, strip_unit=True
 					),
 					# Defaults: FlowKind.Range
-					'default_min': self.domain.start,
-					'default_max': self.domain.end,
+					'default_min': self.conform(self.domain.start, strip_unit=True),
+					'default_max': self.conform(self.domain.end, strip_unit=True),
 				}
 			msg = f'Tried to generate an ExprSocket from a SymSymbol "{self.name}", but its unit ({self.unit}) is not a valid unit of its physical type ({self.physical_type}) (SimSymbol={self})'
 			raise NotImplementedError(msg)
@@ -671,7 +701,9 @@ class SimSymbol(pyd.BaseModel):
 		sym_name: SimSymbolName,
 		expr: spux.SympyExpr,
 		unit_expr: spux.SympyExpr,
-	) -> typ.Self:
+		is_constant: bool = False,
+		optional: bool = False,
+	) -> typ.Self | None:
 		"""Deduce a `SimSymbol` that matches the output of a given expression (and unit expression).
 
 		This is an essential method, allowing for the ded
@@ -697,12 +729,28 @@ class SimSymbol(pyd.BaseModel):
 		# MathType from Expr Assumptions
 		## -> All input symbols have assumptions, because we are very pedantic.
 		## -> Therefore, we should be able to reconstruct the MathType.
-		mathtype = spux.MathType.from_expr(expr)
+		mathtype = spux.MathType.from_expr(expr, optional=optional)
+		if mathtype is None:
+			return None
 
 		# PhysicalType as "NonPhysical"
 		## -> 'unit' still applies - but we can't guarantee a PhysicalType will.
 		## -> Therefore, this is what we gotta do.
-		physical_type = spux.PhysicalType.NonPhysical
+		if spux.uses_units(unit_expr):
+			simplified_unit_expr = sp.simplify(unit_expr)
+			expr_physical_type = spux.PhysicalType.from_unit(
+				simplified_unit_expr, optional=True
+			)
+
+			physical_type = (
+				spux.PhysicalType.NonPhysical
+				if expr_physical_type is None
+				else expr_physical_type
+			)
+			unit = simplified_unit_expr
+		else:
+			physical_type = spux.PhysicalType.NonPhysical
+			unit = None
 
 		# Rows/Cols from Expr (if Matrix)
 		rows, cols = expr.shape if isinstance(expr, sp.MatrixBase) else (1, 1)
@@ -711,9 +759,11 @@ class SimSymbol(pyd.BaseModel):
 			sym_name=sym_name,
 			mathtype=mathtype,
 			physical_type=physical_type,
-			unit=unit_expr if unit_expr != 1 else None,
+			unit=unit,
 			rows=rows,
 			cols=cols,
+			is_constant=is_constant,
+			exclude_zero=expr.is_zero is not None and not expr.is_zero,
 		)
 
 	####################

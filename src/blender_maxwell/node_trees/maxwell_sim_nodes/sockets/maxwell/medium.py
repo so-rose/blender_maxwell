@@ -18,6 +18,7 @@ import bpy
 import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td
+import tidy3d.plugins.adjoint as tdadj
 
 from blender_maxwell.utils import bl_cache, logger
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -39,12 +40,14 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	rel_permittivity: tuple[float, float] = bl_cache.BLField((1.0, 0.0), float_prec=2)
+	eps_rel: tuple[float, float] = bl_cache.BLField((1.0, 0.0), float_prec=2)
+
+	differentiable: bool = bl_cache.BLField(False)
 
 	####################
 	# - FlowKinds
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'eps_rel', 'differentiable'})
 	def value(self) -> td.Medium:
 		freq = (
 			spu.convert_to(
@@ -53,31 +56,49 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 			)
 			/ spu.hertz
 		)
+
+		if self.differentiable:
+			return tdadj.JaxMedium.from_nk(
+				n=self.eps_rel[0],
+				k=self.eps_rel[1],
+				freq=freq,
+			)
 		return td.Medium.from_nk(
-			n=self.rel_permittivity[0],
-			k=self.rel_permittivity[1],
+			n=self.eps_rel[0],
+			k=self.eps_rel[1],
 			freq=freq,
 		)
 
 	@value.setter
-	def value(
-		self, value: tuple[spux.ConstrSympyExpr(allow_variables=False), complex]
-	) -> None:
-		rel_permittivity = value
+	def value(self, eps_rel: tuple[float, float]) -> None:
+		self.eps_rel = eps_rel
 
-		self.rel_permittivity = (rel_permittivity.real, rel_permittivity.imag)
+	@bl_cache.cached_bl_property(depends_on={'value', 'differentiable'})
+	def lazy_func(self) -> ct.FuncFlow:
+		return ct.FuncFlow(
+			func=lambda: self.value,
+			supports_jax=self.differentiable,
+		)
+
+	@bl_cache.cached_bl_property(depends_on={'differentiable'})
+	def params(self) -> ct.FuncFlow:
+		return ct.ParamsFlow(is_differentiable=self.differentiable)
 
 	####################
 	# - UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		split = col.split(factor=0.35, align=False)
+		col.prop(
+			self, self.blfields['differentiable'], text='Differentiable', toggle=True
+		)
+		col.separator()
+		split = col.split(factor=0.25, align=False)
 
-		col = split.column(align=True)
-		col.label(text='ϵ_r (ℂ)')
+		_col = split.column(align=True)
+		_col.label(text='εᵣ')
 
-		col = split.column(align=True)
-		col.prop(self, self.blfields['rel_permittivity'], text='')
+		_col = split.column(align=True)
+		_col.prop(self, self.blfields['eps_rel'], text='')
 
 
 ####################
@@ -90,7 +111,7 @@ class MaxwellMediumSocketDef(base.SocketDef):
 	default_permittivity_imag: float = 0.0
 
 	def init(self, bl_socket: MaxwellMediumBLSocket) -> None:
-		bl_socket.rel_permittivity = (
+		bl_socket.eps_rel = (
 			self.default_permittivity_real,
 			self.default_permittivity_imag,
 		)

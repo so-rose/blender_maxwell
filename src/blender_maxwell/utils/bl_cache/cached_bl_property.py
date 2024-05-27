@@ -16,6 +16,7 @@
 
 """Implements various key caches on instances of Blender objects, especially nodes and sockets."""
 
+import contextlib
 import inspect
 import typing as typ
 
@@ -76,7 +77,7 @@ class CachedBLProperty:
 		self.decode_type: type = inspect.signature(getter_method).return_annotation
 
 		# Write Suppressing
-		self.suppress_write: dict[str, bool] = {}
+		self.suppressed_update: dict[str, bool] = {}
 
 		# Check Non-Empty Type Annotation
 		## For now, just presume that all types can be encoded/decoded.
@@ -125,9 +126,38 @@ class CachedBLProperty:
 			return Signal.CacheNotReady
 		return cached_value
 
-	def suppress_next_write(self, bl_instance) -> None:
-		self.suppress_write[bl_instance.instance_id] = True
-		## TODO: Make it a context manager to prevent the worst of surprises
+	@contextlib.contextmanager
+	def suppress_update(self, bl_instance: bl_instance.BLInstance) -> None:
+		"""A context manager that suppresses all calls to `on_prop_changed()` for fields of the given `bl_instance` while active.
+
+		Any change to a `BLProp` managed by this descriptor inevitably trips `bl_instance.on_bl_prop_changed()`.
+		In response to these changes, `bl_instance.on_bl_prop_changed()` always signals the `Signal.InvalidateCache` via this descriptor.
+		Unless something interferes, this results in a call to `bl_instance.on_prop_changed()`.
+
+		Usually, this is great.
+		But sometimes, like when ex. refreshing enum items, we **want** to be able to set the value of the `BLProp` **without** triggering that `bl_instance.on_prop_changed()`.
+		By default, there is absolutely no way to accomplish this.
+
+		That's where this context manager comes into play.
+		While active, all calls to `bl_instance.on_prop_changed()` will be ignored for the given `bl_instance`, allowing us to freely set persistent properties without side effects.
+
+		Examples:
+			A simple illustrative example could look something like:
+
+			```python
+			with self.suppress_update(bl_instance):
+				self.bl_prop.write(bl_instance, 'I won't trigger an update')
+
+			self.bl_prop.write(bl_instance, 'I will trigger an update')
+			```
+		"""
+		self.suppressed_update[bl_instance.instance_id] = True
+		try:
+			yield
+		finally:
+			self.suppressed_update[bl_instance.instance_id] = False
+			## -> We could .pop(None).
+			## -> But keeping a reused memory location around is GC friendly.
 
 	def __set__(
 		self, bl_instance: bl_instance.BLInstance | None, value: typ.Any
@@ -141,44 +171,59 @@ class CachedBLProperty:
 		Parameters:
 			bl_instance: The Blender object this prop
 		"""
-		if value is Signal.DoUpdate:
-			bl_instance.on_prop_changed(self.bl_prop.name)
-
-		elif value is Signal.InvalidateCache or value is Signal.InvalidateCacheNoUpdate:
+		# Invalidate Cache
+		## -> This empties the non-persistent cache.
+		## -> If persist=True, this also writes the persistent cache (no update).
+		## The 'on_prop_changed' method on the bl_instance might also be called.
+		if value is Signal.InvalidateCache or value is Signal.InvalidateCacheNoUpdate:
 			# Invalidate Partner Non-Persistent Caches
 			## -> Only for the invalidation case do we also invalidate partners.
 			if bl_instance is not None:
 				# Fill Caches
-				## -> persist: Fill Persist and Non-Persist Cache
-				## -> else: Fill Non-Persist Cache
-				if self.persist and not self.suppress_write.get(
-					bl_instance.instance_id
-				):
-					self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
+				## -> persist=True: Fill Persist and Non-Persist Cache
+				## -> persist=False: Fill Non-Persist Cache
+				if self.persist:
+					with self.suppress_update(bl_instance):
+						self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
 
 				else:
 					self.bl_prop.write_nonpersist(
 						bl_instance, self.getter_method(bl_instance)
 					)
 
-				if value == Signal.InvalidateCache:
+				# Trigger Update
+				## -> Use InvalidateCacheNoUpdate to explicitly disable update.
+				## -> If 'suppress_update' context manager is active, don't update.
+				if value is Signal.InvalidateCache and not self.suppressed_update.get(
+					bl_instance.instance_id
+				):
 					bl_instance.on_prop_changed(self.bl_prop.name)
 
+		# Call Setter
 		elif self.setter_method is not None:
-			# Run Setter
-			## -> The user-provided setter should do any updating of partners.
-			if self.setter_method is not None:
-				self.setter_method(bl_instance, value)
+			if bl_instance is not None:
+				# Run Setter
+				## -> The user-provided setter can set values as it sees fit.
+				## -> The user-provided setter will not immediately trigger updates.
+				with self.suppress_update(bl_instance):
+					self.setter_method(bl_instance, value)
 
-			# Fill Non-Persistant (and maybe Persistent) Cache
-			if self.persist and not self.suppress_write.get(bl_instance.instance_id):
-				self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
+				# Fill Caches
+				## -> persist=True: Fill Persist and Non-Persist Cache
+				## -> persist=False: Fill Non-Persist Cache
+				if self.persist:
+					with self.suppress_update(bl_instance):
+						self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
 
-			else:
-				self.bl_prop.write_nonpersist(
-					bl_instance, self.getter_method(bl_instance)
-				)
-			bl_instance.on_prop_changed(self.bl_prop.name)
+				else:
+					self.bl_prop.write_nonpersist(
+						bl_instance, self.getter_method(bl_instance)
+					)
+
+				# Trigger Update
+				## -> If 'suppress_update' context manager is active, don't update.
+				if not self.suppressed_update.get(bl_instance.instance_id):
+					bl_instance.on_prop_changed(self.bl_prop.name)
 
 		else:
 			msg = f'Tried to set "{value}" to "{self.prop_name}" on "{bl_instance.bl_label}", but a setter was not defined'

@@ -64,20 +64,22 @@ class FDTDSimNode(base.MaxwellSimNode):
 		},
 	)
 	def compute_fdtd_sim(self, input_sockets: dict) -> sp.Expr:
-		## TODO: Visualize the boundary conditions on top of the sim domain
+		if any(ct.FlowSignal.check(inp) for inp in input_sockets):
+			return ct.FlowSignal.FlowPending
+
 		sim_domain = input_sockets['Domain']
 		sources = input_sockets['Sources']
 		structures = input_sockets['Structures']
 		bounds = input_sockets['BCs']
 		monitors = input_sockets['Monitors']
-
 		return td.Simulation(
-			**sim_domain,  ## run_time=, size=, grid=, medium=
+			**sim_domain,
 			structures=structures,
 			sources=sources,
 			monitors=monitors,
 			boundary_spec=bounds,
 		)
+		## TODO: Visualize the boundary conditions on top of the sim domain
 
 
 ####################

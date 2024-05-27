@@ -76,13 +76,13 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		"""Retrieve a symbol for the scientific constant."""
 		if self.sci_constant is not None and self.sci_constant_info is not None:
 			unit = self.sci_constant_info['units']
-			return sim_symbols.SimSymbol(
-				sym_name=self.sci_constant_name,
-				mathtype=spux.MathType.from_expr(self.sci_constant),
-				# physical_type=  ## TODO: Formalize unit w/o physical_type
-				unit=unit,
+			return sim_symbols.SimSymbol.from_expr(
+				self.sci_constant_name,
+				self.sci_constant,
+				unit,
 				is_constant=True,
 			)
+
 		return None
 
 	####################
@@ -125,7 +125,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		if self.sci_constant_info:
 			row = _col.row(align=True)
 			# row.alignment = 'CENTER'
-			row.label(text=f'{self.sci_constant_info["units"]}')
+			row.label(text=f'{spux.sp_to_str(self.sci_constant_info["units"].n(4))}')
 
 			row = _col.row(align=True)
 			# row.alignment = 'CENTER'
@@ -184,13 +184,18 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Params,
-		props={'sci_constant'},
+		props={'sci_constant', 'sci_constant_sym'},
 	)
 	def compute_params(self, props: dict) -> typ.Any:
 		sci_constant = props['sci_constant']
+		sci_constant_sym = props['sci_constant_sym']
 
-		if sci_constant is not None:
-			return ct.ParamsFlow(func_args=[sci_constant])
+		if sci_constant is not None and sci_constant_sym is not None:
+			return ct.ParamsFlow(
+				arg_targets=[sci_constant_sym],
+				func_args=[sci_constant],
+				is_differentiable=True,
+			)
 		return ct.FlowSignal.FlowPending
 
 

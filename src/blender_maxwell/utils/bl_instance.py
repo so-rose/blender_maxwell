@@ -220,7 +220,13 @@ class BLInstance:
 		for str_search_prop_name in self.blfields_str_search:
 			setattr(self, str_search_prop_name, bl_cache.Signal.ResetStrSearch)
 
-	def invalidate_blfield_deps(self, prop_name: str) -> None:
+	def trace_blfields_to_clear(
+		self,
+		prop_name: str,
+		prev_blfields_to_clear: list[
+			tuple[str, typ.Literal['invalidate', 'reset_enum', 'reset_strsearch']]
+		] = (),
+	) -> list[str]:
 		"""Invalidates all properties that depend on `prop_name`.
 
 		A property can recursively depend on other properties, including specificity as to whether the cache should be invalidated, the enum items be recomputed, or the string search items be recomputed.
@@ -232,35 +238,110 @@ class BLInstance:
 			The dictionaries governing exactly what invalidates what, and how, are encoded as `self.blfield_deps`, `self.blfield_dynamic_enum_deps`, and `self.blfield_str_search_deps`.
 			All of these are filled when creating the `BLInstance` subclass, using `self.declare_blfield_dep()`, generally via the `BLField` descriptor (which internally uses `BLProp`).
 		"""
+		if prev_blfields_to_clear:
+			blfields_to_clear = prev_blfields_to_clear.copy()
+		else:
+			blfields_to_clear = []
+
 		# Invalidate Dependent Properties (incl. DynEnums and StrSearch)
-		## -> NOTE: Dependent props may also trigger `on_prop_changed`.
-		## -> Don't abuse dependencies :)
-		for deps, invalidate_signal in zip(
+		## -> InvalidateCacheNoUpdate: Exactly what it sounds like.
+		## -> ResetEnumItems: Won't trigger on_prop_changed.
+		## -> -- To get on_prop_changed after, do explicit 'InvalidateCache'.
+		## -> StrSearch: It's a straight computation, no on_prop_changed.
+		for deps, clear_method in zip(
 			[
 				self.blfield_deps,
 				self.blfield_dynamic_enum_deps,
 				self.blfield_str_search_deps,
 			],
-			[
-				bl_cache.Signal.InvalidateCache,
-				bl_cache.Signal.ResetEnumItems,
-				bl_cache.Signal.ResetStrSearch,
-			],
+			['invalidate', 'reset_enum', 'reset_strsearch'],
 			strict=True,
 		):
 			if prop_name in deps:
 				for dst_prop_name in deps[prop_name]:
-					log.debug(
-						'%s: "%s" is invalidating "%s"',
-						self.bl_label,
-						prop_name,
-						dst_prop_name,
-					)
-					setattr(
-						self,
-						dst_prop_name,
-						invalidate_signal,
-					)
+					# Mark Dependency for Clearance
+					## -> Duplicates are OK for now, we'll clear them later.
+					blfields_to_clear.append((dst_prop_name, clear_method))
+
+					# Compute Recursive Dependencies for Clearance
+					## -> As we go deeper, 'previous fields' is set.
+					if dst_prop_name in self.blfields:
+						blfields_to_clear += self.trace_blfields_to_clear(
+							dst_prop_name,
+							prev_blfields_to_clear=blfields_to_clear,
+						)
+
+		match (bool(prev_blfields_to_clear), bool(blfields_to_clear)):
+			# Nothing to Clear
+			## -> This is a recursive base case for no-dependency BLFields.
+			case (False, False):
+				return []
+
+			# Only Old: Return Old
+			## -> This is a recursive base case for the deepest field w/o deps.
+			## -> When there are previous BLFields, this cannot be recursive root
+			## -> Otherwise, we'd need to de-duplicate.
+			case (True, False):
+				return prev_blfields_to_clear  ## Is never recursive root
+
+			# Only New: Deduplicate (from right) w/Order Preservation
+			## -> This is the recursive root.
+			## -> The first time there are new BLFields to clear, we dedupe.
+			## -> This is the ONLY case where we need to dedupe.
+			## -> Deduping deeper would be extraneous (though not damaging).
+			case (False, True):
+				return list(reversed(dict.fromkeys(reversed(blfields_to_clear))))
+
+			# New And Old: Concatenate
+			## -> This is merely a "transport" step, sandwiched btwn base/root.
+			## -> As such, deduplication would not be wrong, just extraneous.
+			## -> Since invalidation is in a hot-loop, don't do such things.
+			case (True, True):
+				return blfields_to_clear
+
+	def clear_blfields_after(self, prop_name: str) -> list[str]:
+		"""Clear (invalidate) all `BLField`s that have become invalid as a result of a change to `prop_name`.
+
+		Uses `self.trace_blfields_to_clear()` to deduce the names and unique ordering of `BLField`s to clear.
+		Then, update-less `bl_cache.Signal`s are written in order to invalidate each `BLField` cache without invoking `self.on_prop_changed()`.
+		Finally, the list of cleared `BLField`s is returned.
+
+		Notes:
+			Generally, this should be called from `on_prop_changed()`.
+			The resulting cleared fields can then be analyzed / used in a domain specific way as needed by the particular `BLInstance`.
+
+		Returns:
+			The topologically ordered right-de-duplicated list of BLFields that were cleared.
+		"""
+		blfields_to_clear = self.trace_blfields_to_clear(prop_name)
+
+		# Invalidate BLFields
+		## -> trace_blfields_to_clear only gave us what/how to invalidate.
+		## -> It's the responsibility of on_prop_changed to actually do so.
+		# log.debug(
+		# '%s (NodeSocket): Clearing BLFields after "%s": "%s"',
+		# self.bl_label,
+		# prop_name,
+		# blfields_to_clear,
+		# )
+		for blfield, clear_method in blfields_to_clear:
+			# log.debug(
+			# '%s (NodeSocket): Clearing BLField: %s (%s)',
+			# self.bl_label,
+			# blfield,
+			# clear_method,
+			# )
+			setattr(
+				self,
+				blfield,
+				{
+					'invalidate': bl_cache.Signal.InvalidateCacheNoUpdate,
+					'reset_enum': bl_cache.Signal.ResetEnumItems,  ## No updates
+					'reset_strsearch': bl_cache.Signal.ResetStrSearch,
+				}[clear_method],
+			)
+
+		return [(prop_name, 'invalidate'), *blfields_to_clear]
 
 	def on_bl_prop_changed(self, bl_prop_name: str, _: bpy.types.Context) -> None:
 		"""Called when a property has been updated via the Blender UI.

@@ -50,10 +50,15 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	# - Properties
 	####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'File Path'},
+		# Loaded
 		input_sockets={'File Path'},
 		input_socket_kinds={'File Path': ct.FlowKind.Value},
 		input_sockets_optional={'File Path': True},
+		# Flow
+		## -> See docs in TransformMathNode
+		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_file_path = not ct.FlowSignal.check(input_sockets['File Path'])
@@ -83,7 +88,15 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	####################
 	# - Output Info
 	####################
-	@bl_cache.cached_bl_property(depends_on={'file_path'})
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'output_name',
+			'output_mathtype',
+			'output_physical_type',
+			'output_unit',
+		}
+		| {f'dim_{i}_name' for i in range(6)}
+	)
 	def expr_info(self) -> ct.InfoFlow | None:
 		"""Retrieve the output expression's `InfoFlow`."""
 		info = self.compute_output('Expr', kind=ct.FlowKind.Info)
@@ -184,19 +197,19 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Func,
+		# Loaded
 		input_sockets={'File Path'},
 	)
-	def compute_func(self, input_sockets: dict) -> td.Simulation:
+	def compute_func(self, input_sockets) -> td.Simulation:
 		"""Declare a lazy, composable function that returns the loaded data.
 
 		Returns:
 			A completely empty `ParamsFlow`, ready to be composed.
 		"""
 		file_path = input_sockets['File Path']
+		has_file_path = not ct.FlowSignal.check(file_path)
 
-		has_file_path = not ct.FlowSignal.check(input_sockets['File Path'])
-
-		if has_file_path:
+		if has_file_path and file_path is not None:
 			data_file_format = ct.DataFileFormat.from_path(file_path)
 			if data_file_format is not None:
 				# Jax Compatibility: Lazy Data Loading

@@ -20,10 +20,14 @@ import typing as typ
 from types import MappingProxyType
 
 import jax
+import jaxtyping as jtyp
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
 
+from .array import ArrayFlow
+from .info import InfoFlow
+from .lazy_range import RangeFlow
 from .params import ParamsFlow
 
 log = logger.get(__name__)
@@ -314,13 +318,65 @@ class FuncFlow:
 	) -> typ.Self:
 		if self.supports_jax:
 			return self.func_jax(
-				*params.scaled_func_args(self.func_args, symbol_values),
-				*params.scaled_func_kwargs(self.func_args, symbol_values),
+				*params.scaled_func_args(symbol_values),
+				**params.scaled_func_kwargs(symbol_values),
 			)
 		return self.func(
-			*params.scaled_func_args(self.func_kwargs, symbol_values),
-			*params.scaled_func_kwargs(self.func_kwargs, symbol_values),
+			*params.scaled_func_args(symbol_values),
+			**params.scaled_func_kwargs(symbol_values),
 		)
+
+	def realize_as_data(
+		self,
+		info: InfoFlow,
+		params: ParamsFlow,
+		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
+			{}
+		),
+	) -> dict[sim_symbols.SimSymbol, jtyp.Inexact[jtyp.Array, '...']]:
+		"""Realize as an ordered dictionary mapping each realized `self.dims` entry, with the last entry containing all output data as mapped from the `self.output`."""
+		data = {}
+		for dim, dim_idx in info.dims.items():
+			# Continuous Index (*)
+			## -> Continuous dimensions **must** be symbols in ParamsFlow.
+			## -> ...Since the output data shape is parameterized by it.
+			if info.has_idx_cont(dim):
+				if dim in params.symbols:
+					# Scalar Realization
+					## -> Conform & cast the sympy expr to the dimension.
+					if isinstance(symbol_values[dim], spux.SympyType):
+						data |= {dim: dim.scale(symbol_values[dim])}
+
+					# Array Realization
+					## -> Scale the array to the dimension's unit & get values.
+					if isinstance(symbol_values[dim], RangeFlow | ArrayFlow):
+						data |= {
+							dim: symbol_values[dim].rescale_to_unit(dim.unit).values
+						}
+				else:
+					msg = f'ParamsFlow does not contain dimension symbol {dim} (info={info}, params={params})'
+					raise RuntimeError(msg)
+
+			# Discrete Index (Q|R)
+			## -> Realize ArrayFlow|RangeFlow
+			if info.has_idx_discrete(dim):
+				data |= {dim: dim_idx.values}
+
+			# Labelled Index (Z)
+			## -> Passthrough the string labels.
+			if info.has_idx_labels(dim):
+				data |= {dim: dim_idx}
+
+		return data | {info.output: self.realize(params, symbol_values=symbol_values)}
+
+		# return {
+		# dim: (
+		# dim_idx
+		# if info.has_idx_cont(dim) or info.has_idx_labels(dim)
+		# else ??
+		# )
+		# for dim, dim_idx in self.dims
+		# } | {info.output: output_data}
 
 	####################
 	# - Composition Operations

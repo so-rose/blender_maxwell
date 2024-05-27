@@ -232,8 +232,17 @@ class DataFileExporterNode(base.MaxwellSimNode):
 				dim.name for dim in params.symbols if dim in info.dims
 			}:
 				self.loose_input_sockets = {
-					dim_name: sockets.ExprSocketDef(**expr_info)
-					for dim_name, expr_info in params.sym_expr_infos(info).items()
+					sym.name: sockets.ExprSocketDef(
+						**(
+							expr_info
+							| {
+								'active_kind': ct.FlowKind.Range
+								if sym in info.dims
+								else ct.FlowKind.Value
+							}
+						)
+					)
+					for sym, expr_info in params.sym_expr_infos.items()
 				}
 
 		elif self.loose_input_sockets:

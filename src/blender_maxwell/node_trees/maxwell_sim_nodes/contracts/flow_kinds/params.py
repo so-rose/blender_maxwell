@@ -31,8 +31,6 @@ from .expr_info import ExprInfo
 from .flow_kinds import FlowKind
 from .lazy_range import RangeFlow
 
-# from .info import InfoFlow
-
 log = logger.get(__name__)
 
 
@@ -44,10 +42,17 @@ class ParamsFlow:
 		All symbols valid for use in the expression.
 	"""
 
+	arg_targets: list[sim_symbols.SimSymbol] = dataclasses.field(default_factory=list)
+	kwarg_targets: list[str, sim_symbols.SimSymbol] = dataclasses.field(
+		default_factory=dict
+	)
+
 	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
 	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
 
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
+
+	is_differentiable: bool = False
 
 	####################
 	# - Symbols
@@ -76,8 +81,9 @@ class ParamsFlow:
 	####################
 	# - JIT'ed Callables for Numerical Function Arguments
 	####################
+	@functools.cached_property
 	def func_args_n(
-		self, target_syms: list[sim_symbols.SimSymbol]
+		self,
 	) -> list[
 		typ.Callable[
 			[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
@@ -86,15 +92,12 @@ class ParamsFlow:
 	]:
 		"""Callable functions for evaluating each `self.func_args` entry numerically.
 
-		Before simplification, each `self.func_args` entry will be conformed to the corresponding (by-index) `SimSymbol` in `target_syms`.
+		Before simplification, each `self.func_args` entry will be conformed to the corresponding (by-index) `SimSymbol` in `self.target_syms`.
 
 		Notes:
 			Before using any `sympy` expressions as arguments to the returned callablees, they **must** be fully conformed and scaled to the corresponding `self.symbols` entry using that entry's `SimSymbol.scale()` method.
 
 			This ensures conformance to the `SimSymbol` properties (like units), as well as adherance to a numerical type identity compatible with `sp.lambdify()`.
-
-		Parameters:
-			target_syms: `SimSymbol`s describing how a particular `ParamsFlow` function argument should be scaled when performing a purely numerical insertion.
 		"""
 		return [
 			sp.lambdify(
@@ -102,11 +105,14 @@ class ParamsFlow:
 				target_sym.conform(func_arg, strip_unit=True),
 				'jax',
 			)
-			for func_arg, target_sym in zip(self.func_args, target_syms, strict=True)
+			for func_arg, target_sym in zip(
+				self.func_args, self.arg_targets, strict=True
+			)
 		]
 
+	@functools.cached_property
 	def func_kwargs_n(
-		self, target_syms: dict[str, sim_symbols.SimSymbol]
+		self,
 	) -> dict[
 		str,
 		typ.Callable[
@@ -120,12 +126,12 @@ class ParamsFlow:
 		This ensures conformance to the `SimSymbol` properties, as well as adherance to a numerical type identity compatible with `sp.lambdify()`
 		"""
 		return {
-			func_arg_key: sp.lambdify(
+			key: sp.lambdify(
 				self.sorted_sp_symbols,
-				target_syms[func_arg_key].scale(func_arg),
+				self.kwarg_targets[key].conform(func_arg, strip_unit=True),
 				'jax',
 			)
-			for func_arg_key, func_arg in self.func_kwargs.items()
+			for key, func_arg in self.func_kwargs.items()
 		}
 
 	####################
@@ -182,7 +188,6 @@ class ParamsFlow:
 	####################
 	def scaled_func_args(
 		self,
-		target_syms: list[sim_symbols.SimSymbol] = (),
 		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
 			{}
 		),
@@ -196,32 +201,24 @@ class ParamsFlow:
 		1. Conform Symbols: Arbitrary `sympy` expressions passed as `symbol_values` must first be conformed to match the ex. units of `SimSymbol`s found in `self.symbols`, before they can be used.
 
 		2. Conform Function Arguments: Arbitrary `sympy` expressions encoded in `self.func_args` must, **after** inserting the conformed numerical symbols, themselves be conformed to the expected ex. units of the function that they are to be used within.
-			**`ParamsFlow` doesn't contain information about the `SimSymbol`s that `self.func_args` are expected to conform to** (on purpose).
-			Therefore, the user is required to pass a `target_syms` with identical length to `self.func_args`, describing the `SimSymbol`s to conform the function arguments to.
 
 		Our implementation attempts to utilize simple, powerful primitives to accomplish this in roughly three steps:
 
 		1. **Realize Symbols**: Particular passed symbolic values `symbol_values`, which are arbitrary `sympy` expressions, are conformed to the definitions in `self.symbols` (ex. to match units), then cast to numerical values (pure Python / jax array).
 
-		2. **Lazy Function Arguments**: Stored function arguments `self.func_args`, which are arbitrary `sympy` expressions, are conformed to the definitions in `target_syms` (ex. to match units), then cast to numerical values (pure Python / jax array).
+		2. **Lazy Function Arguments**: Stored function arguments `self.func_args`, which are arbitrary `sympy` expressions, are conformed to the definitions in `self.target_syms` (ex. to match units), then cast to numerical values (pure Python / jax array).
 			_Technically, this happens as part of `self.func_args_n`._
 
 		3. **Numerical Evaluation**: The numerical values for each symbol are passed as parameters to each (callable) element of `self.func_args_n`, which produces a correct numerical value for each function argument.
 
 		Parameters:
-			target_syms: `SimSymbol`s describing how the function arguments returned by this method are intended to be used.
-				**Generally**, the parallel `FuncFlow.func_args` should be inserted here, and guarantees correct results when this output is inserted into `FuncFlow.func(...)`.
-			symbol_values: Particular values for all symbols in `self.symbols`, which will be conformed and used to compute the function arguments (before they are conformed to `target_syms`).
+			symbol_values: Particular values for all symbols in `self.symbols`, which will be conformed and used to compute the function arguments (before they are conformed to `self.target_syms`).
 		"""
 		realized_symbols = list(self.realize_symbols(symbol_values).values())
-		return [
-			func_arg_n(*realized_symbols)
-			for func_arg_n in self.func_args_n(target_syms)
-		]
+		return [func_arg_n(*realized_symbols) for func_arg_n in self.func_args_n]
 
 	def scaled_func_kwargs(
 		self,
-		target_syms: list[sim_symbols.SimSymbol] = (),
 		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
 	) -> dict[
 		str, int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...']
@@ -233,7 +230,7 @@ class ParamsFlow:
 		realized_symbols = self.realize_symbols(symbol_values)
 		return {
 			func_arg_name: func_arg_n(**realized_symbols)
-			for func_arg_name, func_arg_n in self.func_kwargs_n(target_syms).items()
+			for func_arg_name, func_arg_n in self.func_kwargs_n.items()
 		}
 
 	####################
@@ -249,27 +246,41 @@ class ParamsFlow:
 		The next composed function will receive a tuple of two arrays, instead of just one, allowing binary operations to occur.
 		"""
 		return ParamsFlow(
+			arg_targets=self.arg_targets + other.arg_targets,
+			kwarg_targets=self.kwarg_targets | other.kwarg_targets,
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			symbols=self.symbols | other.symbols,
+			is_differentiable=self.is_differentiable & other.is_differentiable,
 		)
 
 	def compose_within(
 		self,
+		enclosing_arg_targets: list[sim_symbols.SimSymbol] = (),
+		enclosing_kwarg_targets: list[sim_symbols.SimSymbol] = (),
 		enclosing_func_args: list[spux.SympyExpr] = (),
 		enclosing_func_kwargs: dict[str, spux.SympyExpr] = MappingProxyType({}),
-		enclosing_symbols: frozenset[spux.Symbol] = frozenset(),
+		enclosing_symbols: frozenset[sim_symbols.SimSymbol] = frozenset(),
+		enclosing_is_differentiable: bool = False,
 	) -> typ.Self:
 		return ParamsFlow(
+			arg_targets=self.arg_targets + list(enclosing_arg_targets),
+			kwarg_targets=self.kwarg_targets | dict(enclosing_kwarg_targets),
 			func_args=self.func_args + list(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			symbols=self.symbols | enclosing_symbols,
+			is_differentiable=(
+				self.is_differentiable
+				if not enclosing_symbols
+				else (self.is_differentiable & enclosing_is_differentiable)
+			),
 		)
 
 	####################
 	# - Generate ExprSocketDef
 	####################
-	def sym_expr_infos(self, use_range: bool = False) -> dict[str, ExprInfo]:
+	@functools.cached_property
+	def sym_expr_infos(self) -> dict[str, ExprInfo]:
 		"""Generate keyword arguments for defining all `ExprSocket`s needed to realize all `self.symbols`.
 
 		Many nodes need actual data, and as such, they require that the user select actual values for any symbols in the `ParamsFlow`.
@@ -284,28 +295,16 @@ class ParamsFlow:
 			}
 			```
 
-		Parameters:
-			info: The InfoFlow associated with the `Expr` being realized.
-				Each symbol in `self.symbols` **must** have an associated same-named dimension in `info`.
-			use_range: Causes the
-
 		The `ExprInfo`s can be directly defererenced `**expr_info`)
 		"""
 		for sym in self.sorted_symbols:
-			if use_range and sym.mathtype is spux.MathType.Complex:
-				msg = 'No support for complex range in ExprInfo'
-				raise NotImplementedError(msg)
-			if use_range and (sym.rows > 1 or sym.cols > 1):
-				msg = 'No support for non-scalar elements of range in ExprInfo'
-				raise NotImplementedError(msg)
 			if sym.rows > 3 or sym.cols > 1:
 				msg = 'No support for >Vec3 / Matrix values in ExprInfo'
 				raise NotImplementedError(msg)
 
 		return {
-			sym.name: {
-				'active_kind': FlowKind.Value if not use_range else FlowKind.Range,
-				'default_steps': 50,
+			sym: {
+				'default_steps': 25,
 			}
 			| sym.expr_info
 			for sym in self.sorted_symbols

@@ -16,7 +16,7 @@
 
 import bpy
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache
 
 from ... import contracts as ct
 from .. import base
@@ -43,7 +43,7 @@ class BoolBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Computation of Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> bool:
 		return self.raw_value
 

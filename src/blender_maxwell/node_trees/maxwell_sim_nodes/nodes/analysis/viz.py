@@ -104,6 +104,7 @@ class VizMode(enum.StrEnum):
 		"""Given the input `InfoFlow`, deduce which visualization modes are valid to use with the described data."""
 		Z = spux.MathType.Integer
 		R = spux.MathType.Real
+		C = spux.MathType.Complex
 		VM = VizMode
 
 		return {
@@ -114,6 +115,9 @@ class VizMode(enum.StrEnum):
 				VM.Curve2D,
 				VM.Points2D,
 				VM.Bar,
+			],
+			((R,), (1, 1, C)): [
+				VM.Curve2D,
 			],
 			((R, Z), (1, 1, R)): [
 				VM.Curves2D,
@@ -231,10 +235,15 @@ class VizNode(base.MaxwellSimNode):
 	## - Properties
 	#####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Expr'},
+		# Loaded
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': ct.FlowKind.Info},
 		input_sockets_optional={'Expr': True},
+		# Flow
+		## -> See docs in TransformMathNode
+		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
 		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
@@ -326,7 +335,7 @@ class VizNode(base.MaxwellSimNode):
 		if self.viz_target is VizTarget.Plot2D:
 			row = col.row(align=True)
 			row.alignment = 'CENTER'
-			row.label(text='Width/Height/DPI')
+			row.label(text='Width | Height | DPI')
 
 			row = col.row(align=True)
 			row.prop(self, self.blfields['plot_width'], text='')
@@ -339,8 +348,10 @@ class VizNode(base.MaxwellSimNode):
 	# - Events
 	####################
 	@events.on_value_changed(
+		# Trigger
 		socket_name='Expr',
 		run_on_init=True,
+		# Loaded
 		input_sockets={'Expr'},
 		input_socket_kinds={'Expr': {ct.FlowKind.Info, ct.FlowKind.Params}},
 		input_sockets_optional={'Expr': True},
@@ -355,14 +366,19 @@ class VizNode(base.MaxwellSimNode):
 		# Declare Loose Sockets that Realize Symbols
 		## -> This happens if Params contains not-yet-realized symbols.
 		if has_info and has_params and params.symbols:
-			if set(self.loose_input_sockets) != {
-				sym.name for sym in params.symbols if sym in info.dims
-			}:
+			if set(self.loose_input_sockets) != {sym.name for sym in params.symbols}:
 				self.loose_input_sockets = {
-					dim_name: sockets.ExprSocketDef(**expr_info)
-					for dim_name, expr_info in params.sym_expr_infos(
-						use_range=True
-					).items()
+					sym.name: sockets.ExprSocketDef(
+						**(
+							expr_info
+							| {
+								'active_kind': ct.FlowKind.Range
+								if sym in info.dims
+								else ct.FlowKind.Value
+							}
+						)
+					)
+					for sym, expr_info in params.sym_expr_infos.items()
 				}
 
 		elif self.loose_input_sockets:
@@ -373,9 +389,10 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	@events.computes_output_socket(
 		'Preview',
-		kind=ct.FlowKind.Value,
+		kind=ct.FlowKind.Previews,
 		# Loaded
 		props={
+			'sim_node_name',
 			'viz_mode',
 			'viz_target',
 			'colormap',
@@ -391,7 +408,7 @@ class VizNode(base.MaxwellSimNode):
 	)
 	def compute_dummy_value(self, props, input_sockets, loose_input_sockets):
 		"""Needed for the plot to regenerate in the viewer."""
-		return ct.FlowSignal.NoFlow
+		return ct.PreviewsFlow(bl_image_name=props['sim_node_name'])
 
 	#####################
 	## - On Show Plot
@@ -416,6 +433,7 @@ class VizNode(base.MaxwellSimNode):
 	def on_show_plot(
 		self, managed_objs, props, input_sockets, loose_input_sockets
 	) -> None:
+		log.critical('Show Plot (too many times)')
 		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
@@ -427,23 +445,17 @@ class VizNode(base.MaxwellSimNode):
 		viz_mode = props['viz_mode']
 		viz_target = props['viz_target']
 		if has_info and has_params and viz_mode is not None and viz_target is not None:
-			# Realize Data w/Realized Symbols
+			# Retrieve Data
 			## -> The loose input socket values are user-selected symbol values.
-			## -> These expressions are used to realize the lazy data.
-			## -> `.realize()` ensures all ex. units  are correctly conformed.
-			realized_syms = {
-				sym: loose_input_sockets[sym.name] for sym in params.sorted_symbols
-			}
-			output_data = lazy_func.realize(params, symbol_values=realized_syms)
-
-			data = {
-				dim: (
-					realized_syms[dim].values
-					if dim in realized_syms
-					else info.dims[dim]
-				)
-				for dim in info.dims
-			} | {info.output: output_data}
+			## -> These are used to get rid of symbols in the ParamsFlow.
+			## -> What's left is a dictionary from SimSymbol -> Data
+			data = lazy_func.realize_as_data(
+				info,
+				params,
+				symbol_values={
+					sym: loose_input_sockets[sym.name] for sym in params.sorted_symbols
+				},
+			)
 
 			# Match Viz Type & Perform Visualization
 			## -> Viz Target determines how to plot.
@@ -459,7 +471,6 @@ class VizNode(base.MaxwellSimNode):
 						width_inches=plot_width,
 						height_inches=plot_height,
 						dpi=plot_dpi,
-						bl_select=True,
 					)
 
 				case VizTarget.Pixels:
@@ -468,7 +479,6 @@ class VizNode(base.MaxwellSimNode):
 						plot.map_2d_to_image(
 							data,
 							colormap=colormap,
-							bl_select=True,
 						)
 
 				case VizTarget.PixelsPlane:

@@ -49,7 +49,7 @@ class MaxwellSimGridBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Computation of Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'min_steps_per_wl'})
 	def value(self) -> td.GridSpec:
 		return td.GridSpec.auto(
 			min_steps_per_wvl=self.min_steps_per_wl,

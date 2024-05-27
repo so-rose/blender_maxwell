@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import enum
+import functools
 import typing as typ
 
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -22,6 +23,17 @@ from blender_maxwell.utils import logger
 from blender_maxwell.utils.staticproperty import staticproperty
 
 log = logger.get(__name__)
+
+_PROPERTY_NAMES = {
+	'capabilities',
+	'previews',
+	'value',
+	'array',
+	'lazy_range',
+	'lazy_func',
+	'params',
+	'info',
+}
 
 
 class FlowKind(enum.StrEnum):
@@ -50,14 +62,15 @@ class FlowKind(enum.StrEnum):
 	"""
 
 	Capabilities = enum.auto()
+	Previews = enum.auto()
 
 	# Values
 	Value = enum.auto()  ## 'value'
 	Array = enum.auto()  ## 'array'
 
 	# Lazy
-	Func = enum.auto()  ## 'lazy_func'
 	Range = enum.auto()  ## 'lazy_range'
+	Func = enum.auto()  ## 'lazy_func'
 
 	# Auxiliary
 	Params = enum.auto()  ## 'params'
@@ -70,12 +83,13 @@ class FlowKind(enum.StrEnum):
 	def to_name(v: typ.Self) -> str:
 		return {
 			FlowKind.Capabilities: 'Capabilities',
+			FlowKind.Previews: 'Previews',
 			# Values
 			FlowKind.Value: 'Value',
 			FlowKind.Array: 'Array',
 			# Lazy
-			FlowKind.Range: 'Range',
 			FlowKind.Func: 'Func',
+			FlowKind.Range: 'Range',
 			# Auxiliary
 			FlowKind.Params: 'Params',
 			FlowKind.Info: 'Info',
@@ -88,6 +102,48 @@ class FlowKind(enum.StrEnum):
 	####################
 	# - Static Properties
 	####################
+	@staticproperty
+	def property_names() -> set[str]:
+		"""Set of strings for (socket) properties associated with a `FlowKind`.
+
+		Usable for optimized O(1) lookup, to check whether a property name can be converted to a `FlowKind`.
+		To actually retrieve the `FlowKind` from one of these names, use `FlowKind.from_property_name()`.
+		"""
+		return _PROPERTY_NAMES
+
+	@functools.cache
+	@staticmethod
+	def from_property_name(prop_name: str) -> typ.Self:
+		"""Retrieve the `FlowKind` associated with a particular property name.
+
+		Parameters:
+			prop_name: The name of the property.
+				**Must** be a string defined in `FlowKind.property_names`.
+		"""
+		return {
+			'capabilities': FlowKind.Capabilities,
+			'previews': FlowKind.Previews,
+			'value': FlowKind.Value,
+			'array': FlowKind.Array,
+			'lazy_range': FlowKind.Range,
+			'lazy_func': FlowKind.Func,
+			'params': FlowKind.Params,
+			'info': FlowKind.Info,
+		}[prop_name]
+
+	@functools.cached_property
+	def property_name(self) -> typ.Self:
+		"""Retrieve the `FlowKind` associated with a particular property name.
+
+		Parameters:
+			prop_name: The name of the property.
+				**Must** be a string defined in `FlowKind.property_names`.
+		"""
+		return {
+			FlowKind.from_property_name(prop_name): prop_name
+			for prop_name in FlowKind.property_names
+		}[self]
+
 	@staticproperty
 	def active_kinds() -> list[typ.Self]:
 		"""Return a list of `FlowKind`s that are able to be considered "active".
@@ -121,6 +177,7 @@ class FlowKind(enum.StrEnum):
 	####################
 	# - Class Methods
 	####################
+	## TODO: Remove this (only events uses it).
 	@classmethod
 	def scale_to_unit_system(
 		cls,

@@ -86,7 +86,9 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Computation of Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(
+		depends_on={'x_pos', 'x_neg', 'y_pos', 'y_neg', 'z_pos', 'z_neg'}
+	)
 	def value(self) -> td.BoundarySpec:
 		"""Compute a user-defined default value for simulation boundary conditions, from certain common/sensible options.
 

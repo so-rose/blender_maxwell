@@ -64,21 +64,21 @@ class InfoDisplayCol(enum.StrEnum):
 
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
+		"""Friendly, single-letter, human-readable column names.
+
+		Must be concise, as there is not a lot of header space to contain these.
+		"""
 		IDC = InfoDisplayCol
 		return {
 			IDC.Length: 'L',
-			IDC.MathType: '∈',
+			IDC.MathType: 'M',
 			IDC.Unit: 'U',
 		}[value]
 
 	@staticmethod
-	def to_icon(value: typ.Self) -> str:
-		IDC = InfoDisplayCol
-		return {
-			IDC.Length: '',
-			IDC.MathType: '',
-			IDC.Unit: '',
-		}[value]
+	def to_icon(_: typ.Self) -> str:
+		"""No icons."""
+		return ''
 
 
 ####################
@@ -109,6 +109,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 	socket_type = ct.SocketType.Expr
 	bl_label = 'Expr'
+	use_socket_color = True
 
 	####################
 	# - Socket Interface
@@ -116,6 +117,58 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	size: spux.NumberSize1D = bl_cache.BLField(spux.NumberSize1D.Scalar)
 	mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real)
 	physical_type: spux.PhysicalType = bl_cache.BLField(spux.PhysicalType.NonPhysical)
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'active_kind',
+			'symbols',
+			'raw_value_spstr',
+			'raw_min_spstr',
+			'raw_max_spstr',
+			'output_name',
+			'mathtype',
+			'physical_type',
+			'unit',
+			'size',
+		}
+	)
+	def output_sym(self) -> sim_symbols.SimSymbol | None:
+		"""Compute an appropriate `SimSymbol` to represent the mathematical and physical properties of the socket's own output.
+
+		For the parsed string expression, functionality is derived heavily from the internal method `self._parse_expr_symbol()`.
+
+		Raises:
+			NotImplementedError: When `active_kind` is neither `Value`, `Func`, or `Range`.
+		"""
+		if self.symbols:
+			if self.active_kind in [ct.FlowKind.Value, ct.FlowKind.Func]:
+				return self._parse_expr_symbol(
+					self._parse_expr_str(self.raw_value_spstr)
+				)
+
+			if self.active_kind is ct.FlowKind.Range:
+				## TODO: Support RangeFlow
+				## -- It's hard; we need a min-span set over bound domains.
+				## -- We... Don't use this anywhere. Yet?
+				# sym_start = self._parse_expr_symbol(
+				# self._parse_expr_str(self.raw_min_spstr)
+				# )
+				# sym_stop = self._parse_expr_symbol(
+				# self._parse_expr_str(self.raw_max_spstr)
+				# )
+				msg = 'RangeFlow support not yet implemented for when self.symbols is not empty'
+				raise NotImplementedError(msg)
+
+			raise NotImplementedError
+
+		return sim_symbols.SimSymbol(
+			sym_name=self.output_name,
+			mathtype=self.mathtype,
+			physical_type=self.physical_type,
+			unit=self.unit,
+			rows=self.size.rows,
+			cols=self.size.cols,
+		)
 
 	####################
 	# - Symbols
@@ -139,6 +192,11 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	def sorted_sp_symbols(self) -> list[sp.Symbol | sp.MatrixSymbol]:
 		"""Computes `sympy` symbols from `self.sorted_symbols`."""
 		return [sym.sp_symbol_matsym for sym in self.sorted_symbols]
+
+	@bl_cache.cached_bl_property(depends_on={'symbols'})
+	def sorted_symbol_names(self) -> list[sp.Symbol | sp.MatrixSymbol]:
+		"""Computes the name of symbols in `self.sorted_symbols`."""
+		return [sym.name for sym in self.sorted_symbols]
 
 	####################
 	# - Units
@@ -171,8 +229,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		return None
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'unit'})
 	def unit_factor(self) -> spux.Unit | None:
+		"""Gets the current active unit as a factor, where unitless is `1`.
+
+		Returns:
+			Same as `self.unit`, except `1` instead of `None` when there is no units.
+		"""
 		return sp.Integer(1) if self.unit is None else self.unit
 
 	prev_unit: str | None = bl_cache.BLField(None)
@@ -228,26 +291,92 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Computed String Expressions
 	####################
-	@bl_cache.cached_bl_property(depends_on={'raw_value_spstr'})
+	@bl_cache.cached_bl_property(
+		depends_on={'raw_value_spstr', 'sorted_symbol_names', 'symbols'}
+	)
 	def raw_value_sp(self) -> spux.SympyExpr:
+		"""Parse the given symbolic `FlowKind.Value` string into a `sympy` expression.
+
+		Notes:
+			The `self.*` properties used by `_parse_expr_str` must be included in the `depends_on` of any `cached_bl_property`s that use it.
+
+		Directly derived from the internal method `self._parse_expr_str()`, which acts on `raw_value_spstr`.
+		"""
 		return self._parse_expr_str(self.raw_value_spstr)
 
-	@bl_cache.cached_bl_property(depends_on={'raw_min_spstr'})
+	@bl_cache.cached_bl_property(
+		depends_on={'raw_min_spstr', 'sorted_symbol_names', 'symbols'}
+	)
 	def raw_min_sp(self) -> spux.SympyExpr:
+		"""Parse the given symbolic `FlowKind.Range` string (for the lower bound) into a `sympy` expression.
+
+		Notes:
+			The `self.*` properties used by `_parse_expr_str` must be included in the `depends_on` of any `cached_bl_property`s that use it.
+
+		Directly derived from the internal method `self._parse_expr_str()`, which acts on `raw_min_spstr`.
+		"""
 		return self._parse_expr_str(self.raw_min_spstr)
 
-	@bl_cache.cached_bl_property(depends_on={'raw_max_spstr'})
+	@bl_cache.cached_bl_property(
+		depends_on={'raw_max_spstr', 'sorted_symbol_names', 'symbols'}
+	)
 	def raw_max_sp(self) -> spux.SympyExpr:
+		"""Parse the given symbolic `FlowKind.Range` string (for the upper bound) into a `sympy` expression.
+
+		Notes:
+			The `self.*` properties used by `_parse_expr_str` must be included in the `depends_on` of any `cached_bl_property`s that use it.
+
+		Directly derived from the internal method `self._parse_expr_str()`, which acts on `raw_max_spstr`.
+		"""
 		return self._parse_expr_str(self.raw_max_spstr)
 
 	####################
-	# - Prop-Change Callback
+	# - Event Callbacks
 	####################
-	def on_socket_prop_changed(self, prop_name: str) -> None:
+	def on_socket_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
+		"""Alter the socket's color in response to flow.
+
+		- `FlowKind.Info`: Any change causes the socket color to be updated with the physical type of the output symbol.
+
+		Notes:
+			Overridden method called whenever `FlowEvent.LinkChanged` is generated on this socket, in response to link add/link remove.
+
+			See `MaxwellSimTree` for more detail on the link callbacks.
+		"""
+		## NODE: Depends on suppressed on_prop_changed
+
+		if ct.FlowKind.Info in socket_kinds:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			has_info = not ct.FlowSignal.check(info)
+
+			# Alter Color
+			pt_color = (
+				info.output.physical_type.color
+				if has_info
+				else self.physical_type.color
+			)
+			if self.socket_color != pt_color:
+				self.socket_color = pt_color
+
+	def on_socket_props_changed(
+		self,
+		cleared_blfields: set[
+			tuple[str, typ.Literal['invalidate', 'reset_enum', 'reset_strsearch']]
+		],
+	) -> None:
+		"""Alter the socket in response to local property changes.
+
+		Notes:
+			Overridden method called whenever `FlowEvent.LinkChanged` is generated on this socket, in response to link add/link remove.
+
+			See `MaxwellSimTree` for more detail on the link callbacks.
+		"""
+		## NODE: Depends on suppressed on_prop_changed
+
 		# Conditional Unit-Conversion
 		## -> This is niche functionality, but the only way to convert units.
 		## -> We can only catch 'unit' since it's at the end of a depschain.
-		if prop_name == 'unit':
+		if ('unit', 'invalidate') in cleared_blfields:
 			# Check Unit Change
 			## -> self.prev_unit only updates here; "lags" behind self.unit.
 			## -> 1. "Laggy" unit must be different than new unit.
@@ -272,37 +401,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Value Utilities
 	####################
-	def _parse_expr_info(
-		self, expr: spux.SympyExpr
-	) -> tuple[spux.MathType, tuple[int, ...] | None, spux.UnitDimension]:
-		"""Parse a given expression for mathtype and size information.
-
-		Various compatibility checks are also performed, allowing this method to serve as a generic runtime validator/parser for any expressions that need to enter the socket.
-		"""
-		# Parse MathType
-		mathtype = spux.MathType.from_expr(expr)
-		if not self.mathtype.is_compatible(mathtype):
-			msg = f'MathType is {self.mathtype}, but tried to set expr {expr} with mathtype {mathtype}'
-			raise ValueError(msg)
-
-		# Parse Symbols
-		if expr.free_symbols and not expr.free_symbols.issubset(self.sp_symbols):
-			msg = f'Tried to set expr {expr} with free symbols {expr.free_symbols}, which is incompatible with socket symbols {self.symbols}'
-			raise ValueError(msg)
-
-		# Parse Dimensions
-		shape = spux.parse_shape(expr)
-		if not self.size.supports_shape(shape):
-			msg = f'Expr {expr} has non-1D shape {shape}, which is incompatible with the expr socket (shape {self.shape})'
-			raise ValueError(msg)
-
-		size = spux.NumberSize1D.from_shape(shape)
-		if self.size != size:
-			msg = f'Expr {expr} has 1D size {size}, which is incompatible with the expr socket (size {self.size})'
-			raise ValueError(msg)
-
-		return mathtype, size
-
 	def _to_raw_value(self, expr: spux.SympyExpr, force_complex: bool = False):
 		"""Cast the given expression to the appropriate raw value, with scaling guided by `self.unit`."""
 		if self.unit is not None:
@@ -324,38 +422,117 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		return pyvalue
 
+	def _parse_expr_symbol(
+		self, expr: spux.SympyExpr | None
+	) -> sim_symbols.SimSymbol | None:
+		"""Deduce the `SimSymbol` corresponding to the given `expr`, else None."""
+		if expr is not None and (
+			not expr.free_symbols or expr.free_symbols.issubset(self.sp_symbols)
+		):
+			# Compute Units of Expression
+			## -> The output units may not be physically meaningful.
+			## -> However, "weird units" may be a good indicator of problems.
+			## -> So, we let the user shoot their foot off.
+			unit_expr = expr.subs(
+				{sym.sp_symbol: sym.unit_factor for sym in self.symbols}
+			)
+
+			return sim_symbols.SimSymbol.from_expr(
+				self.output_name, expr, unit_expr, optional=True
+			)
+
+		return None
+
 	def _parse_expr_str(self, expr_spstr: str) -> spux.SympyExpr | None:
 		"""Parse an expression string by choosing opinionated options for `sp.sympify`.
 
-		Uses `self._parse_expr_info()` to validate the parsed result.
+		Uses `self._parse_expr_symbol()` to validate the parsed result.
 
 		Returns:
 			The parsed expression, if it manages to validate; else None.
 		"""
-		expr = sp.sympify(
+		expr = sp.parsing.sympy_parser.parse_expr(
 			expr_spstr,
-			locals={sym.name: sym.sp_symbol_matsym for sym in self.symbols},
-			strict=False,
-			convert_xor=True,
-		).subs(spux.UNIT_BY_SYMBOL)
+			local_dict=(
+				{sym.name: sym.sp_symbol_matsym for sym in self.symbols}
+				| {sym.name: unit for sym, unit in spux.UNIT_BY_SYMBOL.items()}
+			),
+			transformations=[
+				# Lambda Notation: Symbolic Anonymous Functions
+				## -> Interpret 'lambda: x/8' to sp.Lambda((), x/0)
+				sp.parsing.sympy_parser.lambda_notation,
+				# Automatic Symbols
+				## -> Interpret known functions as their sympy equivs.
+				## -> Interpret unknown 'x' as sp.Symbol('x')
+				## -> NOTE: Must check for extraneous/unwelcome unknowns.
+				sp.parsing.sympy_parser.auto_symbol,
+				# Repeated Decimals
+				## -> Interpret '0.2[1]' as 0.211111...
+				sp.parsing.sympy_parser.repeated_decimals,
+				# Number Literals
+				## -> Interpret ints/float literals.
+				## -> Interpret 'I' as the imaginary number literal.
+				## -> TODO: Maybe special-case the variable name 'I'?
+				sp.parsing.sympy_parser.auto_number,
+				# Factorial Notation
+				## -> Allow 'x!' to be the factorial of x.
+				sp.parsing.sympy_parser.factorial_notation,
+				# Rationalize Float -> Rational
+				## -> Helps numerical stability for pure-symbolic math.
+				## -> AFTER auto_number
+				sp.parsing.sympy_parser.rationalize,
+				# Carrot Exponentiation
+				## -> Interpret '^' as power, instead of as XOR.
+				sp.parsing.sympy_parser.convert_xor,
+				# Symbol Splitting
+				## -> Interpret 'xyz' as 'x*y*z' for convenience.
+				## -> NEVER split greek character names (ex. theta).
+				## -> NEVER split symbol names in 'self.symbols'.
+				sp.parsing.sympy_parser.split_symbols_custom(
+					predicate=lambda sym_name: (
+						sp.parsing.sympy_parser._token_splittable(sym_name)  # noqa: SLF001
+						if sym_name not in self.sorted_symbol_names
+						else False
+					)
+				),
+				# Implicit Mult/Call
+				## -> Most times, allow '2x' as '2*x' / '2 x y' as '2*x*y'.
+				## -> Sometimes, allow 'sin 2x' as 'sin(2*x)'
+				## -> Allow functions to be exponentiated ex. 'sin^2 x'
+				sp.parsing.sympy_parser.implicit_multiplication,
+				sp.parsing.sympy_parser.implicit_application,
+				sp.parsing.sympy_parser.function_exponentiation,
+			],
+		)
 
-		# Try Parsing and Returning the Expression
-		try:
-			self._parse_expr_info(expr)
-		except ValueError:
-			log.exception(
-				'Couldn\'t parse expression "%s" in Expr socket.',
-				expr_spstr,
-			)
-		else:
+		if self._parse_expr_symbol(expr) is not None:
 			return expr
-
 		return None
 
 	####################
 	# - FlowKind: Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'symbols',
+			'unit',
+			'mathtype',
+			'size',
+			'raw_value_sp',
+			'raw_value_int',
+			'raw_value_rat',
+			'raw_value_float',
+			'raw_value_complex',
+			'raw_value_int2',
+			'raw_value_rat2',
+			'raw_value_float2',
+			'raw_value_complex2',
+			'raw_value_int3',
+			'raw_value_rat3',
+			'raw_value_float3',
+			'raw_value_complex3',
+		}
+	)
 	def value(self) -> spux.SympyExpr:
 		"""Return the expression defined by the socket as `FlowKind.Value`.
 
@@ -382,8 +559,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## -> ExprSocket doesn't support Vec4 (yet?).
 		## -> I mean, have you _seen_ that mess of attributes up top?
 		NS = spux.NumberSize1D
-		if self.size == NS.Vec4:
-			return ct.Flow
+		if self.size is NS.Vec4:
+			return ct.FlowSignal.NoFlow
 
 		MT_Z = spux.MathType.Integer
 		MT_Q = spux.MathType.Rational
@@ -430,7 +607,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Called to set the internal `FlowKind.Value` of this socket.
 		"""
-		_mathtype, _size = self._parse_expr_info(expr)
 		if self.symbols:
 			self.raw_value_spstr = sp.sstr(expr)
 		else:
@@ -473,7 +649,22 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - FlowKind: Range
 	####################
-	@property
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'symbols',
+			'unit',
+			'mathtype',
+			'size',
+			'steps',
+			'scaling',
+			'raw_min_sp',
+			'raw_max_sp',
+			'raw_range_int',
+			'raw_range_rat',
+			'raw_range_float',
+			'raw_range_complex',
+		}
+	)
 	def lazy_range(self) -> ct.RangeFlow:
 		"""Return the not-yet-computed uniform array defined by the socket.
 
@@ -519,18 +710,18 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		)
 
 	@lazy_range.setter
-	def lazy_range(self, value: ct.RangeFlow) -> None:
+	def lazy_range(self, lazy_range: ct.RangeFlow) -> None:
 		"""Set the not-yet-computed uniform array defined by the socket.
 
 		Notes:
 			Called to compute the internal `FlowKind.Range` of this socket.
 		"""
-		self.steps = value.steps
-		self.scaling = value.scaling
+		self.steps = lazy_range.steps
+		self.scaling = lazy_range.scaling
 
 		if self.symbols:
-			self.raw_min_spstr = sp.sstr(value.start)
-			self.raw_max_spstr = sp.sstr(value.stop)
+			self.raw_min_spstr = sp.sstr(lazy_range.start)
+			self.raw_max_spstr = sp.sstr(lazy_range.stop)
 
 		else:
 			MT_Z = spux.MathType.Integer
@@ -538,32 +729,40 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			MT_R = spux.MathType.Real
 			MT_C = spux.MathType.Complex
 
-			unit = value.unit if value.unit is not None else 1
+			unit = lazy_range.unit if lazy_range.unit is not None else 1
 			if self.mathtype == MT_Z:
 				self.raw_range_int = [
 					self._to_raw_value(bound * unit)
-					for bound in [value.start, value.stop]
+					for bound in [lazy_range.start, lazy_range.stop]
 				]
 			elif self.mathtype == MT_Q:
 				self.raw_range_rat = [
 					self._to_raw_value(bound * unit)
-					for bound in [value.start, value.stop]
+					for bound in [lazy_range.start, lazy_range.stop]
 				]
 			elif self.mathtype == MT_R:
 				self.raw_range_float = [
 					self._to_raw_value(bound * unit)
-					for bound in [value.start, value.stop]
+					for bound in [lazy_range.start, lazy_range.stop]
 				]
 			elif self.mathtype == MT_C:
 				self.raw_range_complex = [
 					self._to_raw_value(bound * unit, force_complex=True)
-					for bound in [value.start, value.stop]
+					for bound in [lazy_range.start, lazy_range.stop]
 				]
 
 	####################
 	# - FlowKind: Func (w/Params if Constant)
 	####################
-	@property
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'value',
+			'symbols',
+			'sorted_sp_symbols',
+			'sorted_symbols',
+			'output_sym',
+		}
+	)
 	def lazy_func(self) -> ct.FuncFlow:
 		"""Returns a lazy value that computes the expression returned by `self.value`.
 
@@ -574,15 +773,21 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## -> `self.value` is guaranteed to be an expression with unknowns.
 		## -> The function computes `self.value` with unknowns as arguments.
 		if self.symbols:
-			return ct.FuncFlow(
-				func=sp.lambdify(
-					self.sorted_sp_symbols,
-					spux.strip_unit_system(self.value),
-					'jax',
-				),
-				func_args=list(self.sorted_symbols),
-				supports_jax=True,
-			)
+			value = self.value
+			has_value = not ct.FlowSignal.check(value)
+
+			output_sym = self.output_sym
+			if output_sym is not None and has_value:
+				return ct.FuncFlow(
+					func=sp.lambdify(
+						self.sorted_sp_symbols,
+						output_sym.conform(value, strip_unit=True),
+						'jax',
+					),
+					func_args=list(self.sorted_symbols),
+					supports_jax=True,
+				)
+			return ct.FlowSignal.FlowPending
 
 		# Constant
 		## -> When a `self.value` has no unknowns, use a dummy function.
@@ -591,15 +796,25 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## -> Generally only useful for operations with other expressions.
 		return ct.FuncFlow(
 			func=lambda v: v,
-			func_args=[
-				sim_symbols.SimSymbol.from_expr(
-					sim_symbols.SimSymbolName.Constant, self.value, self.unit_factor
-				)
-			],
+			func_args=[self.output_sym],
 			supports_jax=True,
 		)
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'sorted_symbols'})
+	def is_differentiable(self) -> bool:
+		"""Whether all symbols are differentiable.
+
+		If there are no symbols, then there is nothing to differentiate, and thus the expression is differentiable.
+		"""
+		if not self.sorted_symbols:
+			return True
+
+		return all(
+			sym.mathtype in [spux.MathType.Real, spux.MathType.Complex]
+			for sym in self.sorted_symbols
+		)
+
+	@bl_cache.cached_bl_property(depends_on={'sorted_symbols', 'output_sym', 'value'})
 	def params(self) -> ct.ParamsFlow:
 		"""Returns parameter symbols/values to accompany `self.lazy_func`.
 
@@ -611,19 +826,28 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## -> They should be realized later, ex. in a Viz node.
 		## -> Therefore, we just dump the symbols. Easy!
 		## -> NOTE: func_args must have the same symbol order as was lambdified.
-		if self.symbols:
-			return ct.ParamsFlow(
-				func_args=[sym.sp_symbol_phy for sym in self.sorted_symbols],
-				symbols=self.sorted_symbols,
-			)
+		if self.sorted_symbols:
+			output_sym = self.output_sym
+			if output_sym is not None:
+				return ct.ParamsFlow(
+					arg_targets=list(self.sorted_symbols),
+					func_args=[sym.sp_symbol for sym in self.sorted_symbols],
+					symbols=self.sorted_symbols,
+					is_differentiable=self.is_differentiable,
+				)
+			return ct.FlowSignal.FlowPending
 
 		# Constant
 		## -> Simply pass self.value verbatim as a function argument.
 		## -> Easy dice, easy life!
-		return ct.ParamsFlow(func_args=[self.value])
+		return ct.ParamsFlow(
+			arg_targets=[self.output_sym],
+			func_args=[self.value],
+			is_differentiable=self.is_differentiable,
+		)
 
-	@property
-	def info(self) -> ct.ArrayFlow:
+	@bl_cache.cached_bl_property(depends_on={'sorted_symbols', 'output_sym'})
+	def info(self) -> ct.InfoFlow:
 		r"""Returns parameter symbols/values to accompany `self.lazy_func`.
 
 		The output name/size/mathtype/unit corresponds directly the `ExprSocket`.
@@ -634,37 +858,78 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		Otherwise, only the output name/size/mathtype/unit corresponding to the socket is passed along.
 		"""
-		output_sym = sim_symbols.SimSymbol(
-			sym_name=self.output_name,
-			mathtype=self.mathtype,
-			physical_type=self.physical_type,
-			unit=self.unit,
-			rows=self.size.rows,
-			cols=self.size.cols,
-		)
-
 		# Constant
 		## -> The input SimSymbols become continuous dimensional indices.
 		## -> All domain validity information is defined on the SimSymbol keys.
-		if self.symbols:
-			return ct.InfoFlow(
-				dims={sym: None for sym in self.sorted_symbols},
-				output=output_sym,
-			)
+		if self.sorted_symbols:
+			output_sym = self.output_sym
+			if output_sym is not None:
+				return ct.InfoFlow(
+					dims={sym: None for sym in self.sorted_symbols},
+					output=self.output_sym,
+				)
+			return ct.FlowSignal.FlowPending
 
 		# Constant
 		## -> We only need the output symbol to describe the raw data.
-		return ct.InfoFlow(output=output_sym)
+		return ct.InfoFlow(output=self.output_sym)
 
 	####################
 	# - FlowKind: Capabilities
 	####################
-	@property
-	def capabilities(self) -> None:
+	def linked_capabilities(self, info: ct.InfoFlow) -> ct.CapabilitiesFlow:
+		"""When this socket is linked as an output socket, expose these capabilities instead of querying `self.capabilities`.
+
+		Only used when `use_linked_capabilities == True`.
+		"""
 		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
-			allow_out_to_in={ct.FlowKind.Func: ct.FlowKind.Value},
+			allow_out_to_in={
+				ct.FlowKind.Func: ct.FlowKind.Value,
+			},
+			allow_out_to_in_if_matches={
+				ct.FlowKind.Value: (
+					ct.FlowKind.Func,
+					(
+						info.output.physical_type,
+						info.output.mathtype,
+						info.output.rows,
+						info.output.cols,
+					),
+				),
+			},
+		)
+
+	@bl_cache.cached_bl_property(depends_on={'active_kind', 'output_sym'})
+	def capabilities(self) -> ct.CapabilitiesFlow:
+		"""Expose capabilities for use when checking socket link compatibility.
+
+		Only used when `use_linked_capabilities == True`.
+		"""
+		output_sym = self.output_sym
+		if output_sym is not None:
+			allow_out_to_in_if_matches = {
+				ct.FlowKind.Value: (
+					ct.FlowKind.Func,
+					(
+						output_sym.physical_type,
+						output_sym.mathtype,
+						output_sym.rows,
+						output_sym.cols,
+					),
+				),
+			}
+		else:
+			allow_out_to_in_if_matches = {}
+
+		return ct.CapabilitiesFlow(
+			socket_type=self.socket_type,
+			active_kind=self.active_kind,
+			allow_out_to_in={
+				ct.FlowKind.Func: ct.FlowKind.Value,
+			},
+			allow_out_to_in_if_matches=allow_out_to_in_if_matches,
 		)
 
 	####################
@@ -692,29 +957,32 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Whether information about the expression passing through a linked socket is shown is governed by `self.show_info_columns`.
 		"""
-		info = self.compute_data(kind=ct.FlowKind.Info)
-		has_info = not ct.FlowSignal.check(info)
+		if self.active_kind is ct.FlowKind.Func:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			has_info = not ct.FlowSignal.check(info)
 
-		if has_info:
-			split = row.split(factor=0.85, align=True)
-			_row = split.row(align=False)
+			if has_info:
+				split = row.split(factor=0.85, align=True)
+				_row = split.row(align=False)
+			else:
+				_row = row
+
+			_row.label(text=text)
+			if has_info:
+				if self.show_info_columns:
+					_row.prop(self, self.blfields['info_columns'])
+
+				_row = split.row(align=True)
+				_row.alignment = 'RIGHT'
+				_row.prop(
+					self,
+					self.blfields['show_info_columns'],
+					toggle=True,
+					text='',
+					icon=ct.Icon.ToggleSocketInfo,
+				)
 		else:
-			_row = row
-
-		_row.label(text=text)
-		if has_info:
-			if self.show_info_columns:
-				_row.prop(self, self.blfields['info_columns'])
-
-			_row = split.row(align=True)
-			_row.alignment = 'RIGHT'
-			_row.prop(
-				self,
-				self.blfields['show_info_columns'],
-				toggle=True,
-				text='',
-				icon=ct.Icon.ToggleSocketInfo,
-			)
+			row.label(text=text)
 
 	def draw_output_label_row(self, row: bpy.types.UILayout, text) -> None:
 		"""Provide a dropdown for enabling the `InfoFlow` UI in the linked output label row.
@@ -724,29 +992,32 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Whether information about the expression passing through a linked socket is shown is governed by `self.show_info_columns`.
 		"""
-		info = self.compute_data(kind=ct.FlowKind.Info)
-		has_info = not ct.FlowSignal.check(info)
+		if self.active_kind is ct.FlowKind.Func:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			has_info = not ct.FlowSignal.check(info)
 
-		if has_info:
-			split = row.split(factor=0.15, align=True)
+			if has_info:
+				split = row.split(factor=0.15, align=True)
 
-			_row = split.row(align=True)
-			_row.prop(
-				self,
-				self.blfields['show_info_columns'],
-				toggle=True,
-				text='',
-				icon=ct.Icon.ToggleSocketInfo,
-			)
+				_row = split.row(align=True)
+				_row.prop(
+					self,
+					self.blfields['show_info_columns'],
+					toggle=True,
+					text='',
+					icon=ct.Icon.ToggleSocketInfo,
+				)
 
-			_row = split.row(align=False)
-			_row.alignment = 'RIGHT'
-			if self.show_info_columns:
-				_row.prop(self, self.blfields['info_columns'])
+				_row = split.row(align=False)
+				_row.alignment = 'RIGHT'
+				if self.show_info_columns:
+					_row.prop(self, self.blfields['info_columns'])
+				else:
+					_col = _row.column()
+					_col.alignment = 'EXPAND'
+					_col.label(text='')
 			else:
-				_col = _row.column()
-				_col.alignment = 'EXPAND'
-				_col.label(text='')
+				_row = row
 		else:
 			_row = row
 
@@ -860,32 +1131,28 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			Uses `draw_value` to draw the base UI
 		"""
 		if self.show_func_ui:
-			# Non-Symbolic: Size/Mathtype Selector
-			## -> Symbols imply str expr input.
-			## -> For arbitrary str exprs, size/mathtype are derived from the expr.
-			## -> Otherwise, size/mathtype must be pre-specified for a nice UI.
-			if not self.symbols:
-				row = col.row(align=True)
-				row.prop(self, self.blfields['size'], text='')
-				row.prop(self, self.blfields['mathtype'], text='')
-
-			# Base UI
-			## -> Draws the UI appropriate for the above choice of constraints.
-			self.draw_value(col)
-
-			# Physical Type Selector
-			## -> Determines whether/which unit-dropdown will be shown.
-			col.prop(self, self.blfields['physical_type'], text='')
-
-			# Symbol UI
-			## -> Draws the UI appropriate for the above choice of constraints.
-			## -> TODO
-
 			# Output Name Selector
 			## -> The name of the output
 			if self.show_name_selector:
 				row = col.row()
+				row.alignment = 'CENTER'
 				row.prop(self, self.blfields['output_name'], text='Name')
+
+			# Non-Symbolic: Size/Mathtype Selector
+			## -> Symbols imply str expr input.
+			## -> For arbitrary str exprs, size/mathtype are derived from the expr.
+			## -> Otherwise, size/mathtype must be pre-specified for a nice UI.
+			if self.symbols:
+				self.draw_value(col)
+
+				# TODO: Symbol UI
+			else:
+				row = col.row(align=True)
+				row.prop(self, self.blfields['size'], text='')
+				row.prop(self, self.blfields['mathtype'], text='')
+
+				self.draw_value(col)
+				col.prop(self, self.blfields['physical_type'], text='')
 
 	####################
 	# - UI: InfoFlow
@@ -893,9 +1160,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
 		"""Visualize the `InfoFlow` information passing through the socket."""
 		if (
-			self.active_kind == ct.FlowKind.Func
+			self.active_kind is ct.FlowKind.Func
 			and self.show_info_columns
-			and self.is_linked
+			and (self.is_linked or self.is_output)
 		):
 			row = col.row()
 			box = row.box()
@@ -922,7 +1189,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			if InfoDisplayCol.Length in self.info_columns:
 				grid.label(text='', icon=ct.Icon.DataSocketOutput)
 			if InfoDisplayCol.MathType in self.info_columns:
-				grid.label(text=info.output.def_label)
+				grid.label(text=info.output.mathtype_size_label)
 			if InfoDisplayCol.Unit in self.info_columns:
 				grid.label(text=info.output.unit_label)
 
@@ -935,7 +1202,6 @@ class ExprSocketDef(base.SocketDef):
 	active_kind: typ.Literal[
 		ct.FlowKind.Value,
 		ct.FlowKind.Range,
-		ct.FlowKind.Array,
 		ct.FlowKind.Func,
 	] = ct.FlowKind.Value
 	output_name: sim_symbols.SimSymbolName = sim_symbols.SimSymbolName.Expr
@@ -1240,6 +1506,7 @@ class ExprSocketDef(base.SocketDef):
 	def init(self, bl_socket: ExprBLSocket) -> None:
 		bl_socket.active_kind = self.active_kind
 		bl_socket.output_name = self.output_name
+		bl_socket.use_linked_capabilities = True
 
 		# Socket Interface
 		## -> Recall that auto-updates are turned off during init()

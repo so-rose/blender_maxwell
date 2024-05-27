@@ -218,9 +218,6 @@ class RangeFlow:
 		)
 		return combined_mathtype
 
-	####################
-	# - Methods
-	####################
 	@property
 	def ideal_midpoint(self) -> spux.SympyExpr:
 		return (self.stop + self.start) / 2
@@ -228,6 +225,41 @@ class RangeFlow:
 	@property
 	def ideal_range(self) -> spux.SympyExpr:
 		return self.stop - self.start
+
+	####################
+	# - Methods
+	####################
+	@staticmethod
+	def try_from_array(
+		array: ArrayFlow, uniformity_tolerance: float = 1e-9
+	) -> ArrayFlow | typ.Self:
+		"""Attempt to create a RangeFlow from a potentially uniform ArrayFlow, falling back to that same ArrayFlow if it isn't uniform.
+
+		For functional (ex. Fourier Transform) and memory-related reasons, it's important to be explicit about the uniformity of index elements.
+		For this reason, only `RangeFlow`s are considered uniform - `ArrayFlow`s are not, as it's expensive to check in a hot loop, while `RangeFlow`s have this property simply by existing.
+
+		Of course, real-world data sources may not come in a memory-efficient configuration, even if they are, in fact, monotonically increasing with uniform finite differences.
+		This method bridges that gap: If (within `uniformity_tolerance`) **all** finite differences are the same, then the `ArrayFlow` can be converted losslessly to a `RangeFlow.
+		**Otherwise**, the `ArrayFlow` is returned verbatim.
+
+		Notes:
+			A few other checks are also performed to guarantee the semantics of a resulting `RangeFlow`: The array must be sorted, there must be at least two values, and the first value must be strictly smaller than the last value.
+		"""
+		diffs = jnp.diff(array.values)
+
+		if (
+			jnp.all(jnp.abs(diffs - diffs[0]) < uniformity_tolerance)
+			and len(array.values) > 2  # noqa: PLR2004
+			and array.values[0] < array.values[-1]
+			and array.is_sorted
+		):
+			return RangeFlow(
+				start=sp.S(array.values[0]),
+				stop=sp.S(array.values[-1]),
+				steps=len(array.values),
+				unit=array.unit,
+			)
+		return array
 
 	def rescale(
 		self, rescale_func, reverse: bool = False, new_unit: spux.Unit | None = None
@@ -612,8 +644,8 @@ class RangeFlow:
 				symbols=self.symbols,
 			)
 		return RangeFlow(
-			start=self.start * unit,
-			stop=self.stop * unit,
+			start=self.start,
+			stop=self.stop,
 			steps=self.steps,
 			scaling=self.scaling,
 			unit=unit,

@@ -50,8 +50,10 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
+		log.debug('%s: Start Socket Preinit', bl_socket.bl_label)
 		bl_socket.reset_instance_id()
 		bl_socket.regenerate_dynamic_field_persistance()
+		log.debug('%s: End Socket Preinit', bl_socket.bl_label)
 
 	def postinit(self, bl_socket: bpy.types.NodeSocket) -> None:
 		"""Pre-initialize a real Blender node socket from this socket definition.
@@ -59,8 +61,12 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
+		log.debug('%s: Start Socket Postinit', bl_socket.bl_label)
 		bl_socket.is_initializing = False
 		bl_socket.on_active_kind_changed()
+		bl_socket.on_socket_props_changed(set(bl_socket.blfields))
+		bl_socket.on_data_changed(set(ct.FlowKind))
+		log.debug('%s: End Socket Postinit', bl_socket.bl_label)
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
@@ -135,6 +141,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	socket_type: ct.SocketType
 	bl_label: str
 
+	use_linked_capabilities: bool = bl_cache.BLField(False, use_prop_update=False)
+
 	## Computed by Subclass
 	bl_idname: str
 
@@ -181,17 +189,17 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		"""
 		self.display_shape = self.active_kind.socket_shape
 
-	def on_socket_prop_changed(self, prop_name: str) -> None:
-		"""Called when a property has been updated.
+	def on_socket_props_changed(self, prop_names: set[str]) -> None:
+		"""Called when a set of properties has been updated.
 
 		Notes:
-			Can be overridden if a socket needs to respond to a property change.
+			Can be overridden if a socket needs to respond to property changes.
 
 			**Always prefer using node events instead of overriding this in a socket**.
 			Think **very carefully** before using this, and use it with the greatest of care.
 
 		Attributes:
-			prop_name: The name of the property that was changed.
+			prop_names: The set of property names that were changed.
 		"""
 
 	def on_prop_changed(self, prop_name: str) -> None:
@@ -207,30 +215,49 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Attributes:
 			prop_name: The name of the property that was changed.
 		"""
-		# All Attributes: Trigger Local Event
-		## -> While initializing, only `DataChanged` won't trigger.
-		if hasattr(self, prop_name):
-			# Property Callbacks: Active Kind
-			## -> WARNING: May NOT rely on flow.
-			if prop_name == 'active_kind':
+		# BLField Attributes: Invalidate BLField Dependents
+		## -> All invalidated blfields will have their caches cleared.
+		## -> The (topologically) ordered list of cleared blfields is returned.
+		## -> WARNING: The chain is not checked for ex. cycles.
+		if not self.is_initializing and prop_name in self.blfields:
+			cleared_blfields = self.clear_blfields_after(prop_name)
+			set_of_cleared_blfields = set(cleared_blfields)
+
+			# Property Callbacks: Internal
+			## -> NOTE: May NOT recurse on_prop_changed.
+			if ('active_kind', 'invalidate') in set_of_cleared_blfields:
+				# log.debug(
+				# '%s (NodeSocket): Changed Active Kind',
+				# self.bl_label,
+				# )
 				self.on_active_kind_changed()
 
 			# Property Callbacks: Per-Socket
-			## -> WARNING: May NOT rely on flow.
-			self.on_socket_prop_changed(prop_name)
+			## -> NOTE: User-defined handlers might recurse on_prop_changed.
+			self.is_initializing = True
+			self.on_socket_props_changed(set_of_cleared_blfields)
+			self.is_initializing = False
 
-			# Not Initializing: Trigger Event
-			## -> This declares that the socket has changed.
-			## -> This should happen first, in case dependents need a cache.
-			if not self.is_initializing:
-				self.trigger_event(ct.FlowEvent.DataChanged)
-
-		# BLField Attributes: Invalidate BLField Dependents
-		## -> Dependent props will generally also trigger on_prop_changed.
-		## -> The recursion ends with the depschain.
-		## -> WARNING: The chain is not checked for ex. cycles.
-		if prop_name in self.blfields:
-			self.invalidate_blfield_deps(prop_name)
+			# Trigger Event
+			## -> Before SocketDef.postinit(), never emit DataChanged.
+			## -> ONLY emit DataChanged if a FlowKind-bound prop was cleared.
+			## -> ONLY emit a single DataChanged w/set of altered FlowKinds.
+			## w/node's trigger_event, we've guaranteed a minimal action.
+			socket_kinds = {
+				ct.FlowKind.from_property_name(prop_name)
+				for prop_name in {
+					prop_name
+					for prop_name, clear_method in set_of_cleared_blfields
+					if clear_method == 'invalidate'
+				}.intersection(ct.FlowKind.property_names)
+			}
+			# log.debug(
+			# '%s (NodeSocket): Computed SocketKind Frontier: %s',
+			# self.bl_label,
+			# str(socket_kinds),
+			# )
+			if socket_kinds:
+				self.trigger_event(ct.FlowEvent.DataChanged, socket_kinds=socket_kinds)
 
 	####################
 	# - Link Event: Consent / On Change
@@ -273,11 +300,29 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			return False
 
 		# Capability Check
-		if not link.from_socket.capabilities.is_compatible_with(self.capabilities):
+		## -> "Use Linked Capabilities" allow sockets flow-dependent caps.
+		## -> The tradeoff: No link if there is no InfoFlow.
+		if self.use_linked_capabilities:
+			info = self.compute_data(kind=ct.FlowKind.Info)
+			has_info = not ct.FlowSignal.check(info)
+			if has_info:
+				incoming_capabilities = link.from_socket.linked_capabilities(info)
+			else:
+				log.error(
+					'Attempted to link output socket "%s" to input socket "%s" (%s), but linked capabilities of the output socket could not be determined',
+					link.from_socket.bl_label,
+					self.bl_label,
+					self.capabilities,
+				)
+				return False
+		else:
+			incoming_capabilities = link.from_socket.capabilities
+
+		if not incoming_capabilities.is_compatible_with(self.capabilities):
 			log.error(
 				'Attempted to link output socket "%s" (%s) to input socket "%s" (%s), but capabilities are incompatible',
 				link.from_socket.bl_label,
-				link.from_socket.capabilities,
+				incoming_capabilities,
 				self.bl_label,
 				self.capabilities,
 			)
@@ -288,6 +333,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	def on_link_added(self, link: bpy.types.NodeLink) -> None:  # noqa: ARG002
 		"""Triggers a `ct.FlowEvent.LinkChanged` event when a link is added.
 
+		Calls `self.trigger_event()` with `FlowKind`s, since an added link requires recomputing **all** data that depends on flow.
+
 		Notes:
 			Called by the node tree, generally (but not guaranteed) after `self.allow_add_link()` has given consent to add the link.
 
@@ -295,7 +342,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			link: The node link that was added.
 				Currently unused.
 		"""
-		self.trigger_event(ct.FlowEvent.LinkChanged)
+		self.trigger_event(ct.FlowEvent.LinkChanged, socket_kinds=set(ct.FlowKind))
 
 	def allow_remove_link(self, from_socket: bpy.types.NodeSocket) -> bool:  # noqa: ARG002
 		"""Called to ask whether a link may be removed from this `to_socket`.
@@ -333,6 +380,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	def on_link_removed(self, from_socket: bpy.types.NodeSocket) -> None:  # noqa: ARG002
 		"""Triggers a `ct.FlowEvent.LinkChanged` event when a link is removed.
 
+		Calls `self.trigger_event()` with `FlowKind`s, since a removed link requires recomputing **all** data that depends on flow.
+
 		Notes:
 			Called by the node tree, generally (but not guaranteed) after `self.allow_remove_link()` has given consent to remove the link.
 
@@ -340,7 +389,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			from_socket: The node socket that was attached to before link removal.
 				Currently unused.
 		"""
-		self.trigger_event(ct.FlowEvent.LinkChanged)
+		self.trigger_event(ct.FlowEvent.LinkChanged, socket_kinds=set(ct.FlowKind))
 
 	def remove_invalidated_links(self) -> None:
 		"""Reevaluates the capabilities of all socket links, and removes any that no longer match.
@@ -371,6 +420,41 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	####################
 	# - Event Chain
 	####################
+	def on_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
+		"""Called when `ct.FlowEvent.DataChanged` flows through this socket.
+
+		Parameters:
+			socket_kinds: The altered `ct.FlowKind`s flowing through.
+		"""
+		self.on_socket_data_changed(socket_kinds)
+
+	def on_socket_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
+		"""Called when `ct.FlowEvent.DataChanged` flows through this socket.
+
+		Notes:
+			Can be overridden if a socket needs to respond to `DataChanged` in a custom way.
+
+			**Always prefer using node events instead of overriding this in a socket**.
+			Think **very carefully** before using this, and use it with the greatest of care.
+
+		Parameters:
+			socket_kinds: The altered `ct.FlowKind`s flowing through.
+		"""
+
+	def on_link_changed(self) -> None:
+		"""Called when `ct.FlowEvent.LinkChanged` flows through this socket."""
+		self.on_socket_link_changed()
+
+	def on_socket_link_changed(self) -> None:
+		"""Called when `ct.FlowEvent.LinkChanged` flows through this socket.
+
+		Notes:
+			Can be overridden if a socket needs to respond to `LinkChanged` in a custom way.
+
+			**Always prefer using node events instead of overriding this in a socket**.
+			Think **very carefully** before using this, and use it with the greatest of care.
+		"""
+
 	def trigger_event(
 		self,
 		event: ct.FlowEvent,
@@ -384,7 +468,6 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		- **Output Socket -> Input**: Trigger event on node (w/`socket_name`).
 		- **Output Socket -> Output**: Trigger event on `to_socket`s along output links.
 
-
 		Notes:
 			This can be an unpredictably heavy function, depending on the node graph topology.
 
@@ -395,11 +478,41 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			event: The event to report along the node tree.
 				The value of `ct.FlowEvent.flow_direction[event]` (`input` or `output`) determines the direction that an event flows.
 		"""
+		# log.debug(
+		# '[%s] [%s] Triggered (socket_kinds=%s)',
+		# self.name,
+		# event,
+		# str(socket_kinds),
+		# )
+		# Local DataChanged Callbacks
+		## -> socket_kinds MUST NOT be None
+		if event is ct.FlowEvent.DataChanged:
+			# WORKAROUND
+			## -> Altering value/lazy_range like this causes MANY DataChanged
+			## -> If we pretend we're initializing, we can block on_prop_changed
+			## -> This works because _unit conversion doesn't change the value_
+			## -> Only the displayed values change - which are inv. on __set__.
+			## -> For this reason alone, we can get away with it :)
+			## -> TODO: This is not clean :)
+			self.is_initializing = True
+			self.on_data_changed(socket_kinds)
+			self.is_initializing = False
+
+		# Local LinkChanged Callbacks
+		## -> socket_kinds MUST NOT be None
+		if event is ct.FlowEvent.LinkChanged:
+			self.is_initializing = True
+			self.on_link_changed()
+			self.on_data_changed(socket_kinds)
+			self.is_initializing = False
+
 		flow_direction = ct.FlowEvent.flow_direction[event]
 
 		# Locking
-		if event in [ct.FlowEvent.EnableLock, ct.FlowEvent.DisableLock]:
-			self.locked = event == ct.FlowEvent.EnableLock
+		if event is ct.FlowEvent.EnableLock:
+			self.locked = True
+		elif event is ct.FlowEvent.DisableLock:
+			self.locked = False
 
 		# Event by Socket Orientation | Flow Direction
 		match (self.is_output, flow_direction):
@@ -408,7 +521,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 					link.from_socket.trigger_event(event, socket_kinds=socket_kinds)
 
 			case (False, 'output'):
-				if event == ct.FlowEvent.LinkChanged:
+				if event is ct.FlowEvent.LinkChanged:
 					self.node.trigger_event(
 						ct.FlowEvent.DataChanged,
 						socket_name=self.name,
@@ -432,6 +545,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	# - FlowKind: Auxiliary
 	####################
 	# Capabilities
+	def linked_capabilities(self, info: ct.InfoFlow) -> ct.CapabilitiesFlow:
+		"""Try this first when `is_linked and use_linked_capabilities`."""
+		raise NotImplementedError
+
 	@property
 	def capabilities(self) -> None:
 		"""By default, the socket is linkeable with any other socket of the same type and active kind.
@@ -592,21 +709,16 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			ValueError: When referencing a socket that's meant to be directly referenced.
 		"""
-		kind_data_map = {
+		return {
 			ct.FlowKind.Capabilities: lambda: self.capabilities,
+			ct.FlowKind.Previews: lambda: ct.PreviewsFlow(),
 			ct.FlowKind.Value: lambda: self.value,
 			ct.FlowKind.Array: lambda: self.array,
 			ct.FlowKind.Func: lambda: self.lazy_func,
 			ct.FlowKind.Range: lambda: self.lazy_range,
 			ct.FlowKind.Params: lambda: self.params,
 			ct.FlowKind.Info: lambda: self.info,
-		}
-		if kind in kind_data_map:
-			return kind_data_map[kind]()
-
-		## TODO: Reflect this constraint in the type
-		msg = f'Socket {self.bl_label} ({self.socket_type}): Kind {kind} cannot be computed within a socket "compute_data", as it is meant to be referenced directly'
-		raise ValueError(msg)
+		}[kind]()
 
 	def compute_data(
 		self,
@@ -635,7 +747,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			return self.node.compute_output(self.name, kind=kind)
 
 		# Compute Input Socket
-		## Unlinked: Retrieve Socket Value
+		## -> Unlinked: Retrieve Socket Value
 		if not self.is_linked:
 			return self._compute_data(kind)
 
@@ -645,7 +757,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
 		# Return Single Value / List of Values
-		if len(linked_values) == 1:
+		## -> Multi-input sockets are not yet supported.
+		if linked_values:
 			return linked_values[0]
 
 		# Edge Case: While Dragging Link (but not yet removed)
@@ -653,11 +766,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		## - self.is_linked = True, since the user hasn't confirmed anything.
 		## - self.links will be empty, since the link object was freed.
 		## When this particular condition is met, pretend that we're not linked.
-		if len(linked_values) == 0:
-			return self._compute_data(kind)
-
-		msg = f'Socket {self.bl_label} ({self.socket_type}): Multi-input sockets are not yet supported'
-		raise NotImplementedError(msg)
+		return self._compute_data(kind)
 
 	####################
 	# - UI - Color

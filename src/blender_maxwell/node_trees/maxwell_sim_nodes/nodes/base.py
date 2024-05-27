@@ -21,6 +21,7 @@ Attributes:
 """
 
 import enum
+import functools
 import typing as typ
 from collections import defaultdict
 from types import MappingProxyType
@@ -62,7 +63,6 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			Used as a node-specific cache index.
 		sim_node_name: A unique human-readable name identifying the node.
 			Used when naming managed objects and exporting.
-		preview_active: Whether the preview (if any) is currently active.
 		locked: Whether the node is currently 'locked' aka. non-editable.
 	"""
 
@@ -98,7 +98,6 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 	loose_output_sockets: dict[str, sockets.base.SocketDef] = bl_cache.BLField({})
 
 	# UI Options
-	preview_active: bool = bl_cache.BLField(False)
 	locked: bool = bl_cache.BLField(False, use_prop_update=False)
 
 	# Active Socket Set
@@ -263,35 +262,6 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 
 				## TODO: Account for FlowKind
 				bl_socket.value = socket_value
-
-	####################
-	# - Events: Preview | Plot
-	####################
-	@events.on_show_plot(stop_propagation=False)
-	def _on_show_plot(self):
-		node_tree = self.id_data
-		if len(self.event_methods_by_event[ct.FlowEvent.ShowPlot]) > 1:
-			## TODO: Is this check good enough?
-			## TODO: Set icon/indicator/something to make it clear which node is being previewed.
-			node_tree.report_show_plot(self)
-
-	@events.on_show_preview()
-	def _on_show_preview(self):
-		node_tree = self.id_data
-		node_tree.report_show_preview(self)
-
-		# Set Preview to Active
-		## Implicitly triggers any @on_value_changed for preview_active.
-		if not self.preview_active:
-			self.preview_active = True
-
-	@events.on_value_changed(
-		prop_name='preview_active', props={'preview_active'}, stop_propagation=True
-	)
-	def _on_preview_changed(self, props):
-		if not props['preview_active']:
-			for mobj in self.managed_objs.values():
-				mobj.hide_preview()
 
 	####################
 	# - Events: Lock
@@ -521,14 +491,17 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		return {
 			ct.FlowEvent.EnableLock: lambda *_: True,
 			ct.FlowEvent.DisableLock: lambda *_: True,
-			ct.FlowEvent.DataChanged: lambda event_method, socket_name, prop_name, _: (
+			ct.FlowEvent.DataChanged: lambda event_method, socket_name, prop_names, _: (
 				(
 					socket_name
 					and socket_name in event_method.callback_info.on_changed_sockets
 				)
 				or (
-					prop_name
-					and prop_name in event_method.callback_info.on_changed_props
+					prop_names
+					and any(
+						prop_name in event_method.callback_info.on_changed_props
+						for prop_name in prop_names
+					)
 				)
 				or (
 					socket_name
@@ -536,6 +509,7 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 					and socket_name in self.loose_input_sockets
 				)
 			),
+			# Non-Triggered
 			ct.FlowEvent.OutputRequested: lambda output_socket_method,
 			output_socket_name,
 			_,
@@ -546,7 +520,6 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 					== output_socket_method.callback_info.output_socket_name
 				)
 			),
-			ct.FlowEvent.ShowPreview: lambda *_: True,
 			ct.FlowEvent.ShowPlot: lambda *_: True,
 		}
 
@@ -595,6 +568,9 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		bl_socket = self.inputs.get(input_socket_name)
 		if bl_socket is not None:
 			if bl_socket.instance_id:
+				if kind is ct.FlowKind.Previews:
+					return bl_socket.compute_data(kind=kind)
+
 				return (
 					ct.FlowKind.scale_to_unit_system(
 						kind,
@@ -610,11 +586,9 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			## -> Anyone needing results will need to wait on preinit().
 			return ct.FlowSignal.FlowInitializing
 
-		# if optional:
+		if kind is ct.FlowKind.Previews:
+			return ct.PreviewsFlow()
 		return ct.FlowSignal.NoFlow
-
-		msg = f'{self.sim_node_name}: Input socket "{input_socket_name}" cannot be computed, as it is not an active input socket'
-		raise ValueError(msg)
 
 	####################
 	# - Compute Event: Output Socket
@@ -638,33 +612,64 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			The value of the output socket, as computed by the dedicated method
 			registered using the `@computes_output_socket` decorator.
 		"""
-		if self.outputs.get(output_socket_name) is None:
-			if optional:
-				return None
+		# Previews: Aggregate All Input Sockets
+		## -> All PreviewsFlows on all input sockets are combined.
+		## -> Output Socket Methods can add additional PreviewsFlows.
+		if kind is ct.FlowKind.Previews:
+			input_previews = functools.reduce(
+				lambda a, b: a | b,
+				[
+					self._compute_input(
+						socket, kind=ct.FlowKind.Previews, unit_system=None
+					)
+					for socket in [bl_socket.name for bl_socket in self.inputs]
+				],
+				ct.PreviewsFlow(),
+			)
 
-			msg = f"Can't compute nonexistent output socket name {output_socket_name}, as it's not currently active"
-			raise RuntimeError(msg)
+		# No Output Socket: No Flow
+		## -> All PreviewsFlows on all input sockets are combined.
+		## -> Output Socket Methods can add additional PreviewsFlows.
+		if self.outputs.get(output_socket_name) is None:
+			return ct.FlowSignal.NoFlow
 
 		output_socket_methods = self.filtered_event_methods_by_event(
 			ct.FlowEvent.OutputRequested,
 			(output_socket_name, None, kind),
 		)
 
-		# Run (=1) Method
-		if output_socket_methods:
-			if len(output_socket_methods) > 1:
-				msg = f'More than one method found for ({output_socket_name}, {kind.value!s}.'
-				raise RuntimeError(msg)
+		# Exactly One Output Socket Method
+		## -> All PreviewsFlows on all input sockets are combined.
+		## -> Output Socket Methods can add additional PreviewsFlows.
+		if len(output_socket_methods) == 1:
+			res = output_socket_methods[0](self)
 
-			return output_socket_methods[0](self)
+			# Res is PreviewsFlow: Concatenate
+			## -> This will add the elements within the returned PreviewsFluw.
+			if kind is ct.FlowKind.Previews and not ct.FlowSignal.check(res):
+				input_previews |= res
 
-		# Auxiliary Fallbacks
+			return res
+
+		# > One Output Socket Method: Error
+		if len(output_socket_methods) > 1:
+			msg = (
+				f'More than one method found for ({output_socket_name}, {kind.value!s}.'
+			)
+			raise RuntimeError(msg)
+
+		if kind is ct.FlowKind.Previews:
+			return input_previews
 		return ct.FlowSignal.NoFlow
-		# if optional or kind in [ct.FlowKind.Info, ct.FlowKind.Params]:
-		# return ct.FlowSignal.NoFlow
 
-		# msg = f'No output method for ({output_socket_name}, {kind})'
-		# raise ValueError(msg)
+	####################
+	# - Plot
+	####################
+	def compute_plot(self):
+		plot_methods = self.filtered_event_methods_by_event(ct.FlowEvent.ShowPlot, ())
+
+		for plot_method in plot_methods:
+			plot_method(self)
 
 	####################
 	# - Event Trigger
@@ -674,11 +679,11 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		method_info: events.InfoOutputRequested,
 		input_socket_name: ct.SocketName | None,
 		input_socket_kinds: set[ct.FlowKind] | None,
-		prop_name: str | None,
+		prop_names: set[str] | None,
 	) -> bool:
 		return (
-			prop_name is not None
-			and prop_name in method_info.depon_props
+			prop_names is not None
+			and any(prop_name in method_info.depon_props for prop_name in prop_names)
 			or input_socket_name is not None
 			and (
 				input_socket_name in method_info.depon_input_sockets
@@ -704,41 +709,63 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		)
 
 	@bl_cache.cached_bl_property()
-	def _dependent_outputs(
+	def output_socket_invalidates(
 		self,
 	) -> dict[
 		tuple[ct.SocketName, ct.FlowKind], set[tuple[ct.SocketName, ct.FlowKind]]
 	]:
-		## TODO: Cleanup
-		## TODO: Detect cycles?
-		## TODO: Networkx?
+		"""Deduce which output socket | `FlowKind` combos are altered in response to a given output socket | `FlowKind` combo.
+
+		Returns:
+			A dictionary, wher eeach key is a tuple representing an output socket name and its flow kind that has been altered, and each value is a set of tuples representing output socket names and flow kind.
+
+			Indexing by any particular `(output_socket_name, flow_kind)` will produce a set of all `{(output_socket_name, flow_kind)}` that rely on it.
+		"""
 		altered_to_invalidated = defaultdict(set)
+
+		# Iterate ALL Methods that Compute Output Sockets
+		## -> We call it the "altered method".
+		## -> Our approach will be to deduce what relies on it.
 		output_requested_methods = self.event_methods_by_event[
 			ct.FlowEvent.OutputRequested
 		]
-
 		for altered_method in output_requested_methods:
 			altered_info = altered_method.callback_info
 			altered_key = (altered_info.output_socket_name, altered_info.kind)
 
+			# Inner: Iterate ALL Methods that Compute Output Sockets
+			## -> We call it the "invalidated method".
+			## -> While O(n^2), it runs only once per-node, and is then cached.
+			## -> `n` is rarely so large as to be a startup-time concern.
+			## -> Thus, in this case, using a simple implementation is better.
 			for invalidated_method in output_requested_methods:
 				invalidated_info = invalidated_method.callback_info
 
+				# Check #0: Inv. Socket depends on Altered Socket
+				## -> Simply check if the altered name is in the dependencies.
 				if (
 					altered_info.output_socket_name
 					in invalidated_info.depon_output_sockets
 				):
+					# Check #2: FlowKinds Match
+					## -> Case 1: Single Altered Kind was Requested by Inv
+					## -> Case 2: Altered Kind in set[Requested Kinds] is
+					## -> Case 3: Altered Kind is FlowKind.Value
+					## This encapsulates the actual events decorator semantics.
 					is_same_kind = (
 						altered_info.kind
-						== (
+						is (
 							_kind := invalidated_info.depon_output_socket_kinds.get(
 								altered_info.output_socket_name
 							)
 						)
 						or (isinstance(_kind, set) and altered_info.kind in _kind)
-						or altered_info.kind == ct.FlowKind.Value
+						or altered_info.kind is ct.FlowKind.Value
 					)
 
+					# Check Success: Add Invalidated (name,kind) to Altered Set
+					## -> We've now confirmed a dependency.
+					## -> Thus, this name|kind should be included.
 					if is_same_kind:
 						invalidated_key = (
 							invalidated_info.output_socket_name,
@@ -753,7 +780,7 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		event: ct.FlowEvent,
 		socket_name: ct.SocketName | None = None,
 		socket_kinds: set[ct.FlowKind] | None = None,
-		prop_name: ct.SocketName | None = None,
+		prop_names: set[str] | None = None,
 	) -> None:
 		"""Recursively triggers events forwards or backwards along the node tree, allowing nodes in the update path to react.
 
@@ -770,124 +797,141 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			socket_name: The input socket that was altered, if any, in order to trigger this event.
 			pop_name: The property that was altered, if any, in order to trigger this event.
 		"""
-		log.debug(
-			'%s: Triggered Event %s (socket_name=%s, socket_kinds=%s, prop_name=%s)',
-			self.sim_node_name,
-			event,
-			str(socket_name),
-			str(socket_kinds),
-			str(prop_name),
-		)
-		# Outflow Socket Kinds
-		## -> Something has happened!
-		## -> The effect is yet to be determined...
-		## -> We will watch for which kinds actually invalidate.
-		## -> ...Then ONLY propagate kinds that have an invalidated outsck.
-		## -> This way, kinds get "their own" invalidation chains.
-		## -> ...While still respecting "crossovers".
-		altered_socket_kinds = set()
+		# log.debug(
+		# '[%s] [%s] Triggered (socket_name=%s, socket_kinds=%s, prop_names=%s)',
+		# self.sim_node_name,
+		# event,
+		# str(socket_name),
+		# str(socket_kinds),
+		# str(prop_names),
+		# )
 
 		# Invalidate Caches on DataChanged
+		## -> socket_kinds MUST NOT be None
+		## -> Trigger direction is always 'forwards' for DataChanged
+		## -> Track which FlowKinds are actually altered per-output-socket.
+		altered_socket_kinds: dict[ct.SocketName, set[ct.FlowKind]] = defaultdict(set)
 		if event is ct.FlowEvent.DataChanged:
-			input_socket_name = socket_name  ## Trigger direction is forwards
+			in_sckname = socket_name
 
-			# Invalidate Input Socket Cache
-			if input_socket_name is not None:
-				if socket_kinds is None:
+			# Clear Input Socket Cache(s)
+			## -> The input socket cache for each altered FlowKinds is cleared.
+			## -> Since it's non-persistent, it will be lazily re-filled.
+			if in_sckname is not None:
+				for in_kind in socket_kinds:
+					# log.debug(
+					# '![%s] Clear Input Socket Cache (%s, %s)',
+					# self.sim_node_name,
+					# in_sckname,
+					# in_kind,
+					# )
 					self._compute_input.invalidate(
-						input_socket_name=input_socket_name,
-						kind=...,
+						input_socket_name=in_sckname,
+						kind=in_kind,
 						unit_system=...,
 					)
-				else:
-					for socket_kind in socket_kinds:
-						self._compute_input.invalidate(
-							input_socket_name=input_socket_name,
-							kind=socket_kind,
-							unit_system=...,
-						)
 
-			# Invalidate Output Socket Cache
+			# Clear Output Socket Cache(s)
 			for output_socket_method in self.event_methods_by_event[
 				ct.FlowEvent.OutputRequested
 			]:
+				# Determine Consequences of Changed (Socket|Kind) / Prop
+				## -> Each '@computes_output_socket' declares data to load.
+				## -> Compare what was changed to what each output socket needs.
+				## -> IF what is needed, was changed, THEN:
+				## --- The output socket needs recomputing.
 				method_info = output_socket_method.callback_info
 				if self._should_recompute_output_socket(
-					method_info, socket_name, socket_kinds, prop_name
+					method_info, socket_name, socket_kinds, prop_names
 				):
 					out_sckname = method_info.output_socket_name
-					kind = method_info.kind
+					out_kind = method_info.kind
 
-					# Invalidate Output Directly
-					# log.critical(
-					# '[%s] Invalidating: (%s, %s)',
+					# log.debug(
+					# '![%s] Clear Output Socket Cache (%s, %s)',
 					# self.sim_node_name,
 					# out_sckname,
-					# str(kind),
+					# out_kind,
 					# )
-					altered_socket_kinds.add(kind)
 					self.compute_output.invalidate(
 						output_socket_name=out_sckname,
-						kind=kind,
+						kind=out_kind,
 					)
+					altered_socket_kinds[out_sckname].add(out_kind)
 
-					# Invalidate Any Dependent Outputs
-					if (
-						dep_outs := self._dependent_outputs.get((out_sckname, kind))
-					) is not None:
-						for dep_out in dep_outs:
-							# log.critical(
-							# '![%s] Invalidating: (%s, %s)',
+					# Invalidate Dependent Output Sockets
+					## -> Other outscks may depend on the altered outsck.
+					## -> The property 'output_socket_invalidates' encodes this.
+					## -> The property 'output_socket_invalidates' encodes this.
+					cleared_outscks_kinds = self.output_socket_invalidates.get(
+						(out_sckname, out_kind)
+					)
+					if cleared_outscks_kinds is not None:
+						for dep_out_sckname, dep_out_kind in cleared_outscks_kinds:
+							# log.debug(
+							# '!![%s] Clear Output Socket Cache (%s, %s)',
 							# self.sim_node_name,
-							# dep_out[0],
-							# dep_out[1],
+							# out_sckname,
+							# out_kind,
 							# )
-							altered_socket_kinds.add(dep_out[1])
 							self.compute_output.invalidate(
-								output_socket_name=dep_out[0],
-								kind=dep_out[1],
+								output_socket_name=dep_out_sckname,
+								kind=dep_out_kind,
 							)
+							altered_socket_kinds[dep_out_sckname].add(dep_out_kind)
 
 		# Run Triggered Event Methods
+		## -> A triggered event method may request to stop propagation.
+		## -> A triggered event method may request to stop propagation.
 		stop_propagation = False
 		triggered_event_methods = self.filtered_event_methods_by_event(
-			event, (socket_name, prop_name, None)
+			event, (socket_name, prop_names, None)
 		)
 		for event_method in triggered_event_methods:
 			stop_propagation |= event_method.stop_propagation
-			# log.critical(
-			# '%s: Running %s',
+			# log.debug(
+			# '![%s] Running: %s',
 			# self.sim_node_name,
 			# str(event_method.callback_info),
 			# )
 			event_method(self)
 
-		# DataChanged Propagation Stop: No Altered Socket Kinds
-		## -> If no FlowKinds were altered, then propagation makes no sense.
-		## -> Semantically, **nothing has changed** == no DataChanged!
-		if event is ct.FlowEvent.DataChanged and not altered_socket_kinds:
-			return
-
-		# Constrain ShowPlot to First Node: Workaround
-		if event is ct.FlowEvent.ShowPlot:
-			return
-
-		# Propagate Event to All Sockets in "Trigger Direction"
+		# Propagate Event
+		## -> If 'stop_propagation' was tripped, don't propagate.
+		## -> If no sockets were altered during DataChanged, don't propagate.
+		## -> Each FlowEvent decides whether to flow forwards/backwards.
 		## -> The trigger chain goes node/socket/socket/node/socket/...
+		## -> Unlinked sockets naturally stop the propagation.
 		if not stop_propagation:
 			direc = ct.FlowEvent.flow_direction[event]
-			triggered_sockets = self._bl_sockets(direc=direc)
-			for bl_socket in triggered_sockets:
-				if direc == 'output' and not bl_socket.is_linked:
-					continue
+			for bl_socket in self._bl_sockets(direc=direc):
+				# DataChanged: Propagate Altered SocketKinds
+				## -> Only altered FlowKinds for the socket will propagate.
+				## -> In this way, we guarantee no extraneous (noop) flow.
+				if event is ct.FlowEvent.DataChanged:
+					if bl_socket.name in altered_socket_kinds:
+						# log.debug(
+						# '![%s] [%s] Propagating (direction=%s, altered_socket_kinds=%s)',
+						# self.sim_node_name,
+						# event,
+						# direc,
+						# altered_socket_kinds[bl_socket.name],
+						# )
+						bl_socket.trigger_event(
+							event, socket_kinds=altered_socket_kinds[bl_socket.name]
+						)
 
-				# log.critical(
-				# '![%s] Propagating: (%s, %s)',
-				# self.sim_node_name,
-				# event,
-				# altered_socket_kinds,
-				# )
-				bl_socket.trigger_event(event, socket_kinds=altered_socket_kinds)
+					## -> Otherwise, do nothing - guarantee no extraneous flow.
+
+				# Propagate Normally
+				else:
+					# log.debug(
+					# '![%s] [%s] Propagating (direction=%s)',
+					# self.sim_node_name,
+					# event,
+					# direc,
+					# )
+					bl_socket.trigger_event(event)
 
 	####################
 	# - Property Event: On Update
@@ -903,18 +947,22 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		Parameters:
 			prop_name: The name of the property that changed.
 		"""
-		# All Attributes: Trigger Event
-		## -> This declares that the single property has changed.
-		## -> This should happen first, in case dependents need a cache.
-		if hasattr(self, prop_name):
-			self.trigger_event(ct.FlowEvent.DataChanged, prop_name=prop_name)
-
 		# BLField Attributes: Invalidate BLField Dependents
-		## -> Dependent props will generally also trigger on_prop_changed.
-		## -> The recursion ends with the depschain.
+		## -> All invalidated blfields will have their caches cleared.
+		## -> The (topologically) ordered list of cleared blfields is returned.
 		## -> WARNING: The chain is not checked for ex. cycles.
 		if prop_name in self.blfields:
-			self.invalidate_blfield_deps(prop_name)
+			cleared_blfields = self.clear_blfields_after(prop_name)
+
+			# log.debug(
+			# '%s (Node): Set of Cleared BLFields: %s',
+			# self.bl_label,
+			# str(cleared_blfields),
+			# )
+			self.trigger_event(
+				ct.FlowEvent.DataChanged,
+				prop_names={prop_name for prop_name, _ in cleared_blfields},
+			)
 
 	####################
 	# - UI Methods

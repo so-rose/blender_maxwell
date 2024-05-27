@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import bpy
+import pydantic as pyd
 import tidy3d as td
 
 from blender_maxwell.utils import bl_cache, logger
@@ -59,7 +60,9 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 	####################
 	# - FlowKind
 	####################
-	@property
+	@bl_cache.cached_bl_property(
+		depends_on={'active_kind', 'allow_axes', 'present_axes'}
+	)
 	def capabilities(self) -> ct.CapabilitiesFlow:
 		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
@@ -68,7 +71,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 			present_any=self.present_axes,
 		)
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'default'})
 	def value(self) -> td.BoundaryEdge:
 		return self.default.tidy3d_boundary_edge
 
@@ -84,16 +87,20 @@ class MaxwellBoundCondSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellBoundCond
 
 	default: ct.BoundCondType = ct.BoundCondType.Pml
-	allow_axes: set[ct.SimSpaceAxis] = {
-		ct.SimSpaceAxis.X,
-		ct.SimSpaceAxis.Y,
-		ct.SimSpaceAxis.Z,
-	}
-	present_axes: set[ct.SimSpaceAxis] = {
-		ct.SimSpaceAxis.X,
-		ct.SimSpaceAxis.Y,
-		ct.SimSpaceAxis.Z,
-	}
+	allow_axes: set[ct.SimSpaceAxis] = pyd.Field(
+		default={
+			ct.SimSpaceAxis.X,
+			ct.SimSpaceAxis.Y,
+			ct.SimSpaceAxis.Z,
+		}
+	)
+	present_axes: set[ct.SimSpaceAxis] = pyd.Field(
+		default={
+			ct.SimSpaceAxis.X,
+			ct.SimSpaceAxis.Y,
+			ct.SimSpaceAxis.Z,
+		}
+	)
 
 	def init(self, bl_socket: MaxwellBoundCondBLSocket) -> None:
 		bl_socket.default = self.default

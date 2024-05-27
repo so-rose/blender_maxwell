@@ -21,7 +21,6 @@ import typing as typ
 import jaxtyping as jtyp
 import numpy as np
 import sympy as sp
-import sympy.physics.units as spu
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
@@ -117,13 +116,19 @@ class ArrayFlow:
 			new_unit: An (optional) new unit to scale the result to.
 		"""
 		# Compile JAX-Compatible Rescale Function
+		## -> Generally, we try to keep things nice and rational.
+		## -> However, too-large ints may cause JAX to suffer from an overflow.
+		## -> Jax works in 32-bit domain by default, for performance.
+		## -> While it can be adjusted, that would also have tradeoffs.
+		## -> Instead, a quick .n() turns all the big-ints into floats.
+		## -> Not super satisfying, but hey - it's all numerical anyway.
 		a = self.mathtype.sp_symbol_a
 		rescale_expr = (
 			spux.scale_to_unit(rescale_func(a * self.unit), new_unit)
 			if self.unit is not None
 			else rescale_func(a)
 		)
-		_rescale_func = sp.lambdify(a, rescale_expr, 'jax')
+		_rescale_func = sp.lambdify(a, rescale_expr.n(), 'jax')
 		values = _rescale_func(self.values)
 
 		# Return ArrayFlow

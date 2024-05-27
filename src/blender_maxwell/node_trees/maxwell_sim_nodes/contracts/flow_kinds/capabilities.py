@@ -24,9 +24,30 @@ from .flow_kinds import FlowKind
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class CapabilitiesFlow:
+	"""Describes the compatibility relationship between two sockets, which governs whether they can be linked.
+
+	By default, socket type (which may impact color) and active `FlowKind` (which impacts shape) must match in order for two sockets to be compatible.
+
+	However, in many cases, more expressiveness beyond this naive constraint is desirable.
+	For example:
+
+	- Allow any socket to be linked to the `ViewerNode` input.
+	- Allow only _angled_ sources to be passed as inputs to the input-derived `BlochBoundCond` node.
+	- Allow `Expr:Value` to connect to `Expr:Func`, but only allow the converse if `PhysicalType`, `MathType`, and `Size` match.
+
+	In many cases, it's desirable
+
+	"""
+
+	# Defaults
 	socket_type: SocketType
 	active_kind: FlowKind
+
+	# Relationships
 	allow_out_to_in: dict[FlowKind, FlowKind] = dataclasses.field(default_factory=dict)
+	allow_out_to_in_if_matches: dict[FlowKind, (FlowKind, bool)] = dataclasses.field(
+		default_factory=dict
+	)
 
 	is_universal: bool = False
 
@@ -41,12 +62,19 @@ class CapabilitiesFlow:
 
 	def is_compatible_with(self, other: typ.Self) -> bool:
 		return other.is_universal or (
-			self.socket_type == other.socket_type
+			self.socket_type is other.socket_type
 			and (
-				self.active_kind == other.active_kind
+				self.active_kind is other.active_kind
 				or (
 					other.active_kind in other.allow_out_to_in
-					and self.active_kind == other.allow_out_to_in[other.active_kind]
+					and self.active_kind is other.allow_out_to_in[other.active_kind]
+				)
+				or (
+					other.active_kind in other.allow_out_to_in_if_matches
+					and self.active_kind
+					is other.allow_out_to_in_if_matches[other.active_kind][0]
+					and self.allow_out_to_in_if_matches[other.active_kind][1]
+					== other.allow_out_to_in_if_matches[other.active_kind][1]
 				)
 			)
 			# == Constraint

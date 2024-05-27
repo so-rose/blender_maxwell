@@ -16,6 +16,8 @@
 
 import bpy
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
 
@@ -30,12 +32,7 @@ class BlenderImageBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.PointerProperty(
-		name='Blender Image',
-		description='Represents a Blender Image',
-		type=bpy.types.Image,
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: bpy.types.Image = bl_cache.BLField()
 
 	####################
 	# - UI
@@ -46,7 +43,7 @@ class BlenderImageBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> bpy.types.Image | None:
 		return self.raw_value
 

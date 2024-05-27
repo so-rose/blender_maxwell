@@ -86,11 +86,13 @@ def extract_info(monitor_data, monitor_attr: str) -> ct.InfoFlow | None:  # noqa
 	if xarr is None:
 		return None
 
-	def mk_idx_array(axis: str) -> ct.ArrayFlow:
-		return ct.ArrayFlow(
-			values=xarr.get_index(axis).values,
-			unit=symbols[axis].unit,
-			is_sorted=True,
+	def mk_idx_array(axis: str) -> ct.RangeFlow | ct.ArrayFlow:
+		return ct.RangeFlow.try_from_array(
+			ct.ArrayFlow(
+				values=xarr.get_index(axis).values,
+				unit=symbols[axis].unit,
+				is_sorted=True,
+			)
 		)
 
 	# Compute InfoFlow from XArray

@@ -16,8 +16,12 @@
 
 import bpy
 
+from blender_maxwell.utils import bl_cache, logger
+
 from ... import contracts as ct
 from .. import base
+
+log = logger.get(__name__)
 
 
 ####################
@@ -30,12 +34,7 @@ class BlenderTextBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	raw_value: bpy.props.PointerProperty(
-		name='Blender Text',
-		description='Represents a Blender text datablock',
-		type=bpy.types.Text,
-		update=(lambda self, context: self.on_prop_changed('raw_value', context)),
-	)
+	raw_value: bpy.types.Text = bl_cache.BLField()
 
 	####################
 	# - UI
@@ -46,7 +45,7 @@ class BlenderTextBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> bpy.types.Text:
 		return self.raw_value
 

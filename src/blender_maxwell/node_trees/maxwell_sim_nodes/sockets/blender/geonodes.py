@@ -71,7 +71,7 @@ class BlenderGeoNodesBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Default Value
 	####################
-	@property
+	@bl_cache.cached_bl_property(depends_on={'raw_value'})
 	def value(self) -> bpy.types.NodeTree | ct.FlowSignal:
 		return self.raw_value if self.raw_value is not None else ct.FlowSignal.NoFlow
 

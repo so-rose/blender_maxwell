@@ -16,6 +16,7 @@
 
 """Implements various key caches on instances of Blender objects, especially nodes and sockets."""
 
+import contextlib
 import functools
 import inspect
 import typing as typ
@@ -166,7 +167,7 @@ class BLField:
 		self.cb_depends_on: set[str] | None = cb_depends_on
 
 		# Update Suppressing
-		self.suppress_update: dict[str, bool] = {}
+		self.suppressed_update: dict[str, bool] = {}
 
 	####################
 	# - Descriptor Setup
@@ -253,9 +254,38 @@ class BLField:
 			return self.bl_prop.default_value  ## TODO: Good idea?
 		return cached_value
 
-	def suppress_next_update(self, bl_instance) -> None:
-		self.suppress_update[bl_instance.instance_id] = True
-		## TODO: Make it a context manager to prevent the worst of surprises
+	@contextlib.contextmanager
+	def suppress_update(self, bl_instance: bl_instance.BLInstance) -> None:
+		"""A context manager that suppresses all calls to `on_prop_changed()` for fields of the given `bl_instance` while active.
+
+		Any change to a `BLProp` managed by this descriptor inevitably trips `bl_instance.on_bl_prop_changed()`.
+		In response to these changes, `bl_instance.on_bl_prop_changed()` always signals the `Signal.InvalidateCache` via this descriptor.
+		Unless something interferes, this results in a call to `bl_instance.on_prop_changed()`.
+
+		Usually, this is great.
+		But sometimes, like when ex. refreshing enum items, we **want** to be able to set the value of the `BLProp` **without** triggering that `bl_instance.on_prop_changed()`.
+		By default, there is absolutely no way to accomplish this.
+
+		That's where this context manager comes into play.
+		While active, all calls to `bl_instance.on_prop_changed()` will be ignored for the given `bl_instance`, allowing us to freely set persistent properties without side effects.
+
+		Examples:
+			A simple illustrative example could look something like:
+
+			```python
+			with self.suppress_update(bl_instance):
+				self.bl_prop.write(bl_instance, 'I won't trigger an update')
+
+			self.bl_prop.write(bl_instance, 'I will trigger an update')
+			```
+		"""
+		self.suppressed_update[bl_instance.instance_id] = True
+		try:
+			yield
+		finally:
+			self.suppressed_update[bl_instance.instance_id] = False
+			## -> We could .pop(None).
+			## -> But keeping a reused memory location around is GC friendly.
 
 	def __set__(
 		self, bl_instance: bl_instance.BLInstance | None, value: typ.Any
@@ -263,7 +293,7 @@ class BLField:
 		"""Sets the value described by the BLField.
 
 		In general, any BLField modified in the UI will set `InvalidateCache` on this descriptor.
-		If `self.prop_info['use_prop_update']` is set, the method `bl_instance.on_prop_changed(self.bl_prop.name)` will then be called and start a `FlowKind.DataChanged` event chain.
+		If `self.prop_info['use_prop_update']` is set, the method `bl_instance.on_prop_changed(self.bl_prop.name)` will then be called and start a `FlowEvent.DataChanged` event chain.
 
 		Notes:
 			Run by Python when the attribute described by the descriptor is set.
@@ -273,28 +303,29 @@ class BLField:
 			bl_instance: Instance that is accessing the attribute.
 			owner: The class that owns the instance.
 		"""
-		# Perform Update Chain
-		## -> We still respect 'use_prop_update', since it is user-sourced.
-		if value is Signal.DoUpdate:
-			if self.prop_info['use_prop_update']:
-				bl_instance.on_prop_changed(self.bl_prop.name)
-
 		# Invalidate Cache
 		## -> This empties the non-persistent cache.
 		## -> As a result, the value must be reloaded from the property.
 		## The 'on_prop_changed' method on the bl_instance might also be called.
-		elif value is Signal.InvalidateCache or value is Signal.InvalidateCacheNoUpdate:
+		if value is Signal.InvalidateCache or value is Signal.InvalidateCacheNoUpdate:
 			self.bl_prop.invalidate_nonpersist(bl_instance)
 
-			# Update Suppression
-			if self.suppress_update.get(bl_instance.instance_id):
-				self.suppress_update[bl_instance.instance_id] = False
-
-			# ELSE: Trigger Update Chain
-			elif self.prop_info['use_prop_update'] and value is Signal.InvalidateCache:
+			# Trigger Update Chain
+			## -> User can disable w/'use_prop_update=False'.
+			## -> Use InvalidateCacheNoUpdate to explicitly disable update.
+			## -> If 'suppressed_update' context manager is active, don't update.
+			if (
+				self.prop_info['use_prop_update']
+				and value is Signal.InvalidateCache
+				and not self.suppressed_update.get(bl_instance.instance_id, False)
+			):
 				bl_instance.on_prop_changed(self.bl_prop.name)
 
 		# Reset Enum Items
+		## -> If there is no enum items callback, do nothing.
+		## -> Re-run the enum items callback and set it active.
+		## -> If the old item can be retained, then do so.
+		## -> Otherwise, set the first item.
 		elif value is Signal.ResetEnumItems:
 			if self.bl_prop_enum_items is None:
 				return
@@ -335,8 +366,8 @@ class BLField:
 				# Swap Enum Items
 				## -> This is the hot stuff - the enum elements are overwritten.
 				## -> The safe_enum_cb will pick up on this immediately.
-				self.suppress_next_update(bl_instance)
-				self.bl_prop_enum_items.write(bl_instance, current_items)
+				with self.suppress_update(bl_instance):
+					self.bl_prop_enum_items.write(bl_instance, current_items)
 
 				# Old Item in Current Items
 				## -> It's possible that the old enum key is in the new enum.
@@ -344,9 +375,8 @@ class BLField:
 				## -> Thus, we set it - Blender sees a change, user doesn't.
 				## -> DO NOT trigger on_prop_changed (since "nothing changed").
 				if any(raw_old_item == item[0] for item in current_items):
-					self.suppress_next_update(bl_instance)
-					self.bl_prop.write(bl_instance, old_item)
-					## -> TODO: Don't write if not needed.
+					with self.suppress_update(bl_instance):
+						self.bl_prop.write(bl_instance, old_item)
 
 				# Old Item Not in Current Items
 				## -> In this case, fallback to the first current item.
@@ -355,28 +385,27 @@ class BLField:
 					raw_first_current_item = current_items[0][0]
 					first_current_item = self.bl_prop.decode(raw_first_current_item)
 
-					self.suppress_next_update(bl_instance)
-					self.bl_prop.write(bl_instance, first_current_item)
-
-					if self.prop_info['use_prop_update']:
-						bl_instance.on_prop_changed(self.bl_prop.name)
+					with self.suppress_update(bl_instance):
+						self.bl_prop.write(bl_instance, first_current_item)
 
 		# Reset Str Search
+		## -> If there is no string search method, do nothing.
+		## -> Simply invalidate the non-persistent cache
 		elif value is Signal.ResetStrSearch:
 			if self.bl_prop_str_search is None:
 				return
 
 			self.bl_prop_str_search.invalidate_nonpersist(bl_instance)
 
-		# General __set__
+		# Default __set__
 		else:
-			self.bl_prop.write(bl_instance, value)
+			with self.suppress_update(bl_instance):
+				self.bl_prop.write(bl_instance, value)
 
 			# Update Semantics
-			if self.suppress_update.get(bl_instance.instance_id):
-				self.suppress_update[bl_instance.instance_id] = False
-
-			elif self.prop_info['use_prop_update']:
+			if self.prop_info['use_prop_update'] and not self.suppressed_update.get(
+				bl_instance.instance_id, False
+			):
 				bl_instance.on_prop_changed(self.bl_prop.name)
 
 	####################

@@ -21,6 +21,7 @@ from .info import InfoFlow
 from .lazy_func import FuncFlow
 from .lazy_range import RangeFlow, ScalingMode
 from .params import ParamsFlow
+from .previews import PreviewsFlow
 from .value import ValueFlow
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
 	'ScalingMode',
 	'FuncFlow',
 	'ParamsFlow',
+	'PreviewsFlow',
 	'ValueFlow',
 ]
