@@ -34,6 +34,8 @@ log = logger.get(__name__)
 
 
 class BoxStructureNode(base.MaxwellSimNode):
+	"""A generic, differentiable box structure with configurable size and center."""
+
 	node_type = ct.NodeType.BoxStructure
 	bl_label = 'Box Structure'
 	use_sim_node_name = True

@@ -187,10 +187,11 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			}
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'BC',
+		# Loaded
 		props={'active_socket_set', 'valid_sim_axis'},
 		input_sockets={
 			'Angled Source',
@@ -202,9 +203,11 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			'Sim Domain': True,
 			'Bloch Vector': True,
 		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
 	)
-	def compute_bloch_bound_cond(
-		self, props, input_sockets
+	def compute_value(
+		self, props, input_sockets, output_sockets
 	) -> td.Periodic | td.BlochBoundary:
 		r"""Computes the Bloch boundary condition.
 
@@ -213,34 +216,165 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			The Bloch boundary axis **must** be orthogonal to the source's injection axis.
 		- **Manual**: Set the Bloch vector to the user-specified value.
 		"""
-		log.debug(
-			'%s: Computing Bloch Boundary Condition (Socket Set = %s)',
-			self.sim_node_name,
-			props['active_socket_set'],
-		)
-
-		# Naive
-		if props['active_socket_set'] == 'Naive':
-			return td.Periodic()
-
-		# Source-Derived
-		if props['active_socket_set'] == 'Source-Derived':
-			sim_domain = input_sockets['Sim Domain']
-			valid_sim_axis = props['valid_sim_axis']
-
-			has_sim_domain = not ct.FlowSignal.check(sim_domain)
-
-			if has_sim_domain:
-				return td.BlochBoundary.from_source(
-					source=input_sockets['Angled Source'],
-					domain_size=sim_domain['size'][valid_sim_axis.axis],
-					axis=valid_sim_axis.axis,
-					medium=sim_domain['medium'],
-				)
+		output_params = output_sockets['BC']
+		has_output_params = not ct.FlowSignal.check(output_params)
+		if not has_output_params or (has_output_params and output_params.symbols):
 			return ct.FlowSignal.FlowPending
 
-		# Manual
-		return td.BlochBoundary(bloch_vec=input_sockets['Bloch Vector'])
+		active_socket_set = props['active_socket_set']
+		match active_socket_set:
+			case 'Naive':
+				return td.Periodic()
+
+			case 'Source-Derived':
+				angled_source = input_sockets['Angled Source']
+				sim_domain = input_sockets['Sim Domain']
+
+				has_angled_source = not ct.FlowSignal.check(angled_source)
+				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+
+				if has_angled_source and has_sim_domain:
+					valid_sim_axis = props['valid_sim_axis']
+					return td.BlochBoundary.from_source(
+						source=angled_source,
+						domain_size=sim_domain['size'][valid_sim_axis.axis],
+						axis=valid_sim_axis.axis,
+						medium=sim_domain['medium'],
+					)
+				return ct.FlowSignal.FlowPending
+
+			case 'Manual':
+				bloch_vector = input_sockets['Bloch Vector']
+				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+
+				if has_bloch_vector:
+					return td.BlochBoundary(bloch_vec=bloch_vector)
+				return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Func,
+		# Loaded
+		props={'active_socket_set', 'valid_sim_axis'},
+		input_sockets={
+			'Angled Source',
+			'Sim Domain',
+			'Bloch Vector',
+		},
+		input_socket_kinds={
+			'Angled Source': ct.FlowKind.Func,
+			'Sim Domain': ct.FlowKind.Func,
+			'Bloch Vector': ct.FlowKind.Func,
+		},
+		input_sockets_optional={
+			'Angled Source': True,
+			'Sim Domain': True,
+			'Bloch Vector': True,
+		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
+	)
+	def compute_bc_func(self, props, input_sockets, output_sockets) -> td.Absorber:
+		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
+
+		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
+		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
+		"""
+		output_params = output_sockets['BC']
+		has_output_params = not ct.FlowSignal.check(output_params)
+		if not has_output_params:
+			return ct.FlowSignal.FlowPending
+
+		active_socket_set = props['active_socket_set']
+		match active_socket_set:
+			case 'Naive':
+				return ct.FuncFlow(
+					func=lambda: td.Periodic(),
+					supports_jax=False,
+				)
+
+			case 'Source-Derived':
+				angled_source = input_sockets['Angled Source']
+				sim_domain = input_sockets['Sim Domain']
+
+				has_angled_source = not ct.FlowSignal.check(angled_source)
+				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+
+				if has_angled_source and has_sim_domain:
+					valid_sim_axis = props['valid_sim_axis']
+					return (angled_source | sim_domain).compose_within(
+						enclosing_func=lambda els: td.BlochBoundary.from_source(
+							source=els[0],
+							domain_size=els[1]['size'][valid_sim_axis.axis],
+							axis=valid_sim_axis.axis,
+							medium=els[1]['medium'],
+						),
+						supports_jax=False,
+					)
+				return ct.FlowSignal.FlowPending
+
+			case 'Manual':
+				bloch_vector = input_sockets['Bloch Vector']
+				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+
+				if has_bloch_vector:
+					return bloch_vector.compose_within(
+						enclosing_func=lambda: td.BlochBoundary(bloch_vec=bloch_vector),
+						supports_jax=False,
+					)
+				return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Angled Source',
+			'Sim Domain',
+			'Bloch Vector',
+		},
+		input_socket_kinds={
+			'Angled Source': ct.FlowKind.Params,
+			'Sim Domain': ct.FlowKind.Params,
+			'Bloch Vector': ct.FlowKind.Params,
+		},
+		input_sockets_optional={
+			'Angled Source': True,
+			'Sim Domain': True,
+			'Bloch Vector': True,
+		},
+	)
+	def compute_bc_params(self, props, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		active_socket_set = props['active_socket_set']
+		match active_socket_set:
+			case 'Naive':
+				return ct.ParamsFlow()
+
+			case 'Source-Derived':
+				angled_source = input_sockets['Angled Source']
+				sim_domain = input_sockets['Sim Domain']
+
+				has_angled_source = not ct.FlowSignal.check(angled_source)
+				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+
+				if has_sim_domain and has_angled_source:
+					return angled_source | sim_domain
+				return ct.FlowSignal.FlowPending
+
+			case 'Manual':
+				bloch_vector = input_sockets['Bloch Vector']
+				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+
+				if has_bloch_vector:
+					return bloch_vector
+				return ct.FlowSignal.FlowPending
 
 
 ####################
