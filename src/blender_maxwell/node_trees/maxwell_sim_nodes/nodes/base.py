@@ -453,10 +453,17 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 				created_sockets[socket_name] = socket_def
 
 			# Initialize Just-Created BL Sockets
-			for socket_name, socket_def in created_sockets.items():
-				socket_def.preinit(all_bl_sockets[socket_name])
-				socket_def.init(all_bl_sockets[socket_name])
-				socket_def.postinit(all_bl_sockets[socket_name])
+			for bl_socket_name, socket_def in created_sockets.items():
+				socket_def.preinit(all_bl_sockets[bl_socket_name])
+				socket_def.init(all_bl_sockets[bl_socket_name])
+				socket_def.postinit(all_bl_sockets[bl_socket_name])
+
+				# Invalidate Cached NoFlows
+				self._compute_input.invalidate(
+					input_socket_name=bl_socket_name,
+					kind=...,
+					unit_system=...,
+				)
 
 	def _sync_sockets(self) -> None:
 		"""Synchronize the node's sockets with the active sockets.

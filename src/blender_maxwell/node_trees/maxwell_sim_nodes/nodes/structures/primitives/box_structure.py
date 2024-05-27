@@ -205,8 +205,8 @@ class BoxStructureNode(base.MaxwellSimNode):
 		if has_center and has_size and has_medium:
 			if props['differentiable'] == (
 				center.is_differentiable
-				& size.is_differentiable
-				& medium.is_differentiable
+				and size.is_differentiable
+				and medium.is_differentiable
 			):
 				return center | size | medium
 			return ct.FlowSignal.FlowPending

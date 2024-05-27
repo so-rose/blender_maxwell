@@ -369,15 +369,6 @@ class FuncFlow:
 
 		return data | {info.output: self.realize(params, symbol_values=symbol_values)}
 
-		# return {
-		# dim: (
-		# dim_idx
-		# if info.has_idx_cont(dim) or info.has_idx_labels(dim)
-		# else ??
-		# )
-		# for dim, dim_idx in self.dims
-		# } | {info.output: output_data}
-
 	####################
 	# - Composition Operations
 	####################

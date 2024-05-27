@@ -110,10 +110,11 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 			col.label(text='2ε₀/Δt')
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'BC',
+		# Loaded
 		props={'active_socket_set'},
 		input_sockets={
 			'Layers',
@@ -124,33 +125,154 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 			'σ Order': True,
 			'σ Range': True,
 		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
 	)
-	def compute_adiab_absorber_bound_cond(self, props, input_sockets) -> td.Absorber:
+	def compute_bc_value(self, props, input_sockets, output_sockets) -> td.Absorber:
 		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
 
 		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
 		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
-		log.debug(
-			'%s: Computing "%s" Adiabatic Absorber Boundary Condition (Input Sockets = %s)',
-			self.sim_node_name,
-			props['active_socket_set'],
-			input_sockets,
-		)
+		output_params = output_sockets['BC']
+		layers = input_sockets['Layers']
 
-		# Simple PML
-		if props['active_socket_set'] == 'Simple':
-			return td.Absorber(num_layers=input_sockets['Layers'])
+		has_output_params = not ct.FlowSignal.check(output_params)
+		has_layers = not ct.FlowSignal.check(layers)
 
-		# Full PML
-		return td.Absorber(
-			num_layers=input_sockets['Layers'],
-			parameters=td.AbsorberParams(
-				sigma_order=input_sockets['σ Order'],
-				sigma_min=input_sockets['σ Range'][0],
-				sigma_max=input_sockets['σ Range'][1],
-			),
-		)
+		active_socket_set = props['active_socket_set']
+		if has_layers and has_output_params and not output_params.symbols:
+			# Simple PML
+			if active_socket_set == 'Simple':
+				return td.Absorber(num_layers=layers)
+
+			# Full PML
+			sig_order = input_sockets['σ Order']
+			sig_range = input_sockets['σ Range']
+
+			has_sig_order = not ct.FlowSignal.check(sig_order)
+			has_sig_range = not ct.FlowSignal.check(sig_range)
+
+			if has_sig_order and has_sig_range:
+				return td.Absorber(
+					num_layers=layers,
+					parameters=td.AbsorberParams(
+						sigma_order=sig_order,
+						sigma_min=sig_range[0],
+						sigma_max=sig_range[1],
+					),
+				)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Func,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Layers',
+			'σ Order',
+			'σ Range',
+		},
+		input_socket_kinds={
+			'Layers': ct.FlowKind.Func,
+			'σ Order': ct.FlowKind.Func,
+			'σ Range': ct.FlowKind.Func,
+		},
+		input_sockets_optional={
+			'σ Order': True,
+			'σ Range': True,
+		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
+	)
+	def compute_bc_func(self, props, input_sockets, output_sockets) -> td.Absorber:
+		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
+
+		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
+		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
+		"""
+		layers = input_sockets['Layers']
+
+		has_layers = not ct.FlowSignal.check(layers)
+
+		active_socket_set = props['active_socket_set']
+		if has_layers:
+			# Simple PML
+			if active_socket_set == 'Simple':
+				return layers.compose_within(
+					enclosing_func=lambda _layers: td.Absorber(num_layers=_layers),
+					supports_jax=False,
+				)
+
+			# Full PML
+			sig_order = input_sockets['σ Order']
+			sig_range = input_sockets['σ Range']
+
+			has_sig_order = not ct.FlowSignal.check(sig_order)
+			has_sig_range = not ct.FlowSignal.check(sig_range)
+
+			if has_sig_order and has_sig_range:
+				return (layers | sig_order | sig_range).compose_within(
+					enclosing_func=lambda els: td.Absorber(
+						num_layers=els[0][0],
+						parameters=td.AbsorberParams(
+							sigma_order=els[0][1],
+							sigma_min=els[1][0],
+							sigma_max=els[1][1],
+						),
+					),
+					supports_jax=False,
+				)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Layers',
+			'σ Order',
+			'σ Range',
+		},
+		input_socket_kinds={
+			'Layers': ct.FlowKind.Params,
+			'σ Order': ct.FlowKind.Params,
+			'σ Range': ct.FlowKind.Params,
+		},
+		input_sockets_optional={
+			'σ Order': True,
+			'σ Range': True,
+		},
+	)
+	def compute_params(self, props, input_sockets) -> td.Box:
+		layers = input_sockets['Layers']
+
+		has_layers = not ct.FlowSignal.check(layers)
+
+		active_socket_set = props['active_socket_set']
+		if has_layers:
+			# Simple PML
+			if active_socket_set == 'Simple':
+				return layers
+
+			# Full PML
+			sig_order = input_sockets['σ Order']
+			sig_range = input_sockets['σ Range']
+
+			has_sig_order = not ct.FlowSignal.check(sig_order)
+			has_sig_range = not ct.FlowSignal.check(sig_range)
+
+			if has_sig_order and has_sig_range:
+				return layers | sig_order | sig_range
+		return ct.FlowSignal.FlowPending
 
 
 ####################

@@ -93,10 +93,11 @@ class BoundCondsNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Output Socket Computation
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'BCs',
+		kind=ct.FlowKind.Value,
 		input_sockets={'X', 'Y', 'Z', '+X', '-X', '+Y', '-Y', '+Z', '-Z'},
 		input_sockets_optional={
 			'X': True,

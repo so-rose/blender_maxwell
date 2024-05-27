@@ -251,7 +251,7 @@ class ParamsFlow:
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			symbols=self.symbols | other.symbols,
-			is_differentiable=self.is_differentiable & other.is_differentiable,
+			is_differentiable=self.is_differentiable and other.is_differentiable,
 		)
 
 	def compose_within(
