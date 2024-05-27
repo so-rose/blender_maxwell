@@ -161,20 +161,20 @@ class BoxStructureNode(base.MaxwellSimNode):
 				return (center | size | medium).compose_within(
 					enclosing_func=lambda els: tdadj.JaxStructure(
 						geometry=tdadj.JaxBox(
-							center=tuple(els[0][0].flatten()),
-							size=tuple(els[0][1].flatten()),
+							center=tuple(els[0].flatten()),
+							size=tuple(els[1].flatten()),
 						),
-						medium=els[1],
+						medium=els[2],
 					),
 					supports_jax=True,
 				)
 			return (center | size | medium).compose_within(
 				enclosing_func=lambda els: td.Structure(
 					geometry=td.Box(
-						center=tuple(els[0][0].flatten()),
-						size=tuple(els[0][1].flatten()),
+						center=tuple(els[0].flatten()),
+						size=tuple(els[1].flatten()),
 					),
-					medium=els[1],
+					medium=els[2],
 				),
 				supports_jax=False,
 			)

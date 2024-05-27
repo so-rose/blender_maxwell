@@ -254,6 +254,8 @@ class FuncFlow:
 	)
 	supports_jax: bool = False
 
+	concatenated: bool = False
+
 	####################
 	# - Functions
 	####################
@@ -464,12 +466,19 @@ class FuncFlow:
 		Returns:
 			A lazy function that takes all arguments of both inputs, and returns a 2-tuple containing both output arguments.
 		"""
+
+		def self_func(args, kwargs):
+			ret = self.func(
+				*list(args[: len(self.func_args)]),
+				**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
+			)
+			if not self.concatenated:
+				return (ret,)
+			return ret
+
 		return FuncFlow(
 			func=lambda *args, **kwargs: (
-				self.func(
-					*list(args[: len(self.func_args)]),
-					**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
-				),
+				*self_func(args, kwargs),
 				other.func(
 					*list(args[len(self.func_args) :]),
 					**{k: v for k, v in kwargs.items() if k in other.func_kwargs},
@@ -478,4 +487,5 @@ class FuncFlow:
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			supports_jax=self.supports_jax and other.supports_jax,
+			concatenated=True,
 		)

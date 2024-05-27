@@ -218,11 +218,11 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 			if has_sig_order and has_sig_range:
 				return (layers | sig_order | sig_range).compose_within(
 					enclosing_func=lambda els: td.Absorber(
-						num_layers=els[0][0],
+						num_layers=els[0],
 						parameters=td.AbsorberParams(
-							sigma_order=els[0][1],
-							sigma_min=els[1][0],
-							sigma_max=els[1][1],
+							sigma_order=els[1],
+							sigma_min=els[2][0],
+							sigma_max=els[2][1],
 						),
 					),
 					supports_jax=False,

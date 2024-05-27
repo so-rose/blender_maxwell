@@ -140,10 +140,12 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 				col.label(text='2ε₀/Δt')
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'BC',
+		kind=ct.FlowKind.Value,
+		# Loaded
 		props={'active_socket_set'},
 		input_sockets={
 			'Layers',
@@ -162,39 +164,252 @@ class PMLBoundCondNode(base.MaxwellSimNode):
 			'α Order': True,
 			'α Range': True,
 		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
 	)
-	def compute_pml_boundary_cond(self, props, input_sockets) -> td.PML:
+	def compute_pml_value(self, props, input_sockets, output_sockets) -> td.PML:
 		r"""Computes the PML boundary condition based on the active socket set.
 
 		- **Simple**: Use `tidy3d`'s default parameters for defining the PML conductor (apart from number of layers).
 		- **Full**: Use the user-defined $\sigma$, $\kappa$, and $\alpha$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
-		log.debug(
-			'%s: Computing "%s" PML Boundary Condition (Input Sockets = %s)',
-			self.sim_node_name,
-			props['active_socket_set'],
-			input_sockets,
-		)
+		output_params = output_sockets['BC']
+		layers = input_sockets['Layers']
 
-		# Simple PML
-		if props['active_socket_set'] == 'Simple':
-			return td.PML(num_layers=input_sockets['Layers'])
+		has_layers = not ct.FlowSignal.check(layers)
+		has_output_params = not ct.FlowSignal.check(output_params)
 
-		# Full PML
-		return td.PML(
-			num_layers=input_sockets['Layers'],
-			parameters=td.PMLParams(
-				sigma_order=input_sockets['σ Order'],
-				sigma_min=input_sockets['σ Range'][0],
-				sigma_max=input_sockets['σ Range'][1],
-				kappa_order=input_sockets['κ Order'],
-				kappa_min=input_sockets['κ Range'][0],
-				kappa_max=input_sockets['κ Range'][1],
-				alpha_order=input_sockets['α Order'],
-				alpha_min=input_sockets['α Range'][0],
-				alpha_max=input_sockets['α Range'][1],
-			),
-		)
+		if has_output_params and has_layers and not output_params.symbols:
+			active_socket_set = props['active_socket_set']
+			match active_socket_set:
+				case 'Simple':
+					return td.PML(num_layers=layers)
+
+				case 'Full':
+					sigma_order = input_sockets['σ Order']
+					sigma_range = input_sockets['σ Range']
+					kappa_order = input_sockets['κ Order']
+					kappa_range = input_sockets['κ Range']
+					alpha_order = input_sockets['α Order']
+					alpha_range = input_sockets['α Range']
+
+					has_sigma_order = not ct.FlowSignal.check(sigma_order)
+					has_sigma_range = not ct.FlowSignal.check(sigma_range)
+					has_kappa_order = not ct.FlowSignal.check(kappa_order)
+					has_kappa_range = not ct.FlowSignal.check(kappa_range)
+					has_alpha_order = not ct.FlowSignal.check(alpha_order)
+					has_alpha_range = not ct.FlowSignal.check(alpha_range)
+
+					if (
+						has_sigma_order
+						and has_sigma_range
+						and has_kappa_order
+						and has_kappa_range
+						and has_alpha_order
+						and has_alpha_range
+					):
+						return td.PML(
+							num_layers=layers,
+							parameters=td.PMLParams(
+								sigma_order=sigma_order,
+								sigma_min=sigma_range[0],
+								sigma_max=sigma_range[1],
+								kappa_order=kappa_order,
+								kappa_min=kappa_range[0],
+								kappa_max=kappa_range[1],
+								alpha_order=alpha_order,
+								alpha_min=alpha_range[0],
+								alpha_max=alpha_range[1],
+							),
+						)
+
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Func,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Layers',
+			'σ Order',
+			'σ Range',
+			'κ Order',
+			'κ Range',
+			'α Order',
+			'α Range',
+		},
+		input_socket_kinds={
+			'Layers': ct.FlowKind.Func,
+			'σ Order': ct.FlowKind.Func,
+			'σ Range': ct.FlowKind.Func,
+			'κ Order': ct.FlowKind.Func,
+			'κ Range': ct.FlowKind.Func,
+			'α Order': ct.FlowKind.Func,
+			'α Range': ct.FlowKind.Func,
+		},
+		input_sockets_optional={
+			'σ Order': True,
+			'σ Range': True,
+			'κ Order': True,
+			'κ Range': True,
+			'α Order': True,
+			'α Range': True,
+		},
+		output_sockets={'BC'},
+		output_socket_kinds={'BC': ct.FlowKind.Params},
+	)
+	def compute_pml_func(self, props, input_sockets, output_sockets) -> td.PML:
+		output_params = output_sockets['BC']
+		layers = input_sockets['Layers']
+
+		has_output_params = not ct.FlowSignal.check(output_params)
+		has_layers = not ct.FlowSignal.check(layers)
+
+		if has_output_params and has_layers:
+			active_socket_set = props['active_socket_set']
+			match active_socket_set:
+				case 'Simple':
+					return layers.compose_within(
+						enclosing_func=lambda layers: td.PML(num_layers=layers),
+						supports_jax=False,
+					)
+
+				case 'Full':
+					sigma_order = input_sockets['σ Order']
+					sigma_range = input_sockets['σ Range']
+					kappa_order = input_sockets['κ Order']
+					kappa_range = input_sockets['κ Range']
+					alpha_order = input_sockets['α Order']
+					alpha_range = input_sockets['α Range']
+
+					has_sigma_order = not ct.FlowSignal.check(sigma_order)
+					has_sigma_range = not ct.FlowSignal.check(sigma_range)
+					has_kappa_order = not ct.FlowSignal.check(kappa_order)
+					has_kappa_range = not ct.FlowSignal.check(kappa_range)
+					has_alpha_order = not ct.FlowSignal.check(alpha_order)
+					has_alpha_range = not ct.FlowSignal.check(alpha_range)
+
+					if (
+						has_sigma_order
+						and has_sigma_range
+						and has_kappa_order
+						and has_kappa_range
+						and has_alpha_order
+						and has_alpha_range
+					):
+						return (
+							sigma_order
+							| sigma_range
+							| kappa_order
+							| kappa_range
+							| alpha_order
+							| alpha_range
+						).compose_within(
+							enclosing_func=lambda els: td.PML(
+								num_layers=layers,
+								parameters=td.PMLParams(
+									sigma_order=els[0],
+									sigma_min=els[1][0],
+									sigma_max=els[1][1],
+									kappa_order=els[2],
+									kappa_min=els[3][0],
+									kappa_max=els[3][1],
+									alpha_order=els[4][1],
+									alpha_min=els[5][0],
+									alpha_max=els[5][1],
+								),
+							)
+						)
+
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'BC',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Layers',
+			'σ Order',
+			'σ Range',
+			'κ Order',
+			'κ Range',
+			'α Order',
+			'α Range',
+		},
+		input_socket_kinds={
+			'Layers': ct.FlowKind.Params,
+			'σ Order': ct.FlowKind.Params,
+			'σ Range': ct.FlowKind.Params,
+			'κ Order': ct.FlowKind.Params,
+			'κ Range': ct.FlowKind.Params,
+			'α Order': ct.FlowKind.Params,
+			'α Range': ct.FlowKind.Params,
+		},
+		input_sockets_optional={
+			'σ Order': True,
+			'σ Range': True,
+			'κ Order': True,
+			'κ Range': True,
+			'α Order': True,
+			'α Range': True,
+		},
+	)
+	def compute_pml_params(self, props, input_sockets) -> td.PML:
+		r"""Computes the PML boundary condition based on the active socket set.
+
+		- **Simple**: Use `tidy3d`'s default parameters for defining the PML conductor (apart from number of layers).
+		- **Full**: Use the user-defined $\sigma$, $\kappa$, and $\alpha$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
+		"""
+		layers = input_sockets['Layers']
+		has_layers = not ct.FlowSignal.check(layers)
+
+		if has_layers:
+			active_socket_set = props['active_socket_set']
+			match active_socket_set:
+				case 'Simple':
+					return layers
+
+				case 'Full':
+					sigma_order = input_sockets['σ Order']
+					sigma_range = input_sockets['σ Range']
+					kappa_order = input_sockets['σ Order']
+					kappa_range = input_sockets['σ Range']
+					alpha_order = input_sockets['σ Order']
+					alpha_range = input_sockets['σ Range']
+
+					has_sigma_order = not ct.FlowSignal.check(sigma_order)
+					has_sigma_range = not ct.FlowSignal.check(sigma_range)
+					has_kappa_order = not ct.FlowSignal.check(kappa_order)
+					has_kappa_range = not ct.FlowSignal.check(kappa_range)
+					has_alpha_order = not ct.FlowSignal.check(alpha_order)
+					has_alpha_range = not ct.FlowSignal.check(alpha_range)
+
+					if (
+						has_sigma_order
+						and has_sigma_range
+						and has_kappa_order
+						and has_kappa_range
+						and has_alpha_order
+						and has_alpha_range
+					):
+						return (
+							sigma_order
+							| sigma_range
+							| kappa_order
+							| kappa_range
+							| alpha_order
+							| alpha_range
+						)
+
+		return ct.FlowSignal.FlowPending
 
 
 ####################
