@@ -58,7 +58,7 @@ class CylinderStructureNode(base.MaxwellSimNode):
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Structure': sockets.MaxwellStructureSocketDef(),
+		'Structure': sockets.MaxwellStructureSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -170,9 +170,16 @@ class CylinderStructureNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Previews,
 		# Loaded
 		props={'sim_node_name'},
+		output_sockets={'Structure'},
+		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def compute_previews(self, props):
-		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+	def compute_previews(self, props, output_sockets):
+		output_params = output_sockets['Structure']
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_output_params and not output_params.symbols:
+			return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+		return ct.PreviewsFlow()
 
 	@events.on_value_changed(
 		# Trigger
@@ -181,33 +188,40 @@ class CylinderStructureNode(base.MaxwellSimNode):
 		# Loaded
 		input_sockets={'Center', 'Radius', 'Medium', 'Height'},
 		managed_objs={'modifier'},
-		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
-		scale_input_sockets={
-			'Center': 'BlenderUnits',
-		},
+		output_sockets={'Structure'},
+		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def on_inputs_changed(
-		self,
-		managed_objs,
-		input_sockets,
-		unit_systems,
-	):
-		modifier = managed_objs['modifier']
-		unit_system = unit_systems['BlenderUnits']
+	def on_previewable_changed(self, managed_objs, input_sockets, output_sockets):
+		center = input_sockets['Center']
+		radius = input_sockets['Radius']
+		height = input_sockets['Height']
+		output_params = output_sockets['Structure']
 
-		# Push Loose Input Values to GeoNodes Modifier
-		modifier.bl_modifier(
-			'NODES',
-			{
-				'node_group': import_geonodes(GeoNodes.StructurePrimitiveCylinder),
-				'inputs': {
-					'Radius': input_sockets['Radius'],
-					'Height': input_sockets['Height'],
+		has_center = not ct.FlowSignal.check(center)
+		has_radius = not ct.FlowSignal.check(radius)
+		has_height = not ct.FlowSignal.check(height)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if (
+			has_center
+			and has_radius
+			and has_height
+			and has_output_params
+			and not output_params.symbols
+		):
+			# Push Loose Input Values to GeoNodes Modifier
+			managed_objs['modifier'].bl_modifier(
+				'NODES',
+				{
+					'node_group': import_geonodes(GeoNodes.StructurePrimitiveCylinder),
+					'inputs': {
+						'Radius': radius,
+						'Height': height,
+					},
+					'unit_system': ct.UNITS_BLENDER,
 				},
-				'unit_system': unit_system,
-			},
-			location=input_sockets['Center'],
-		)
+				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
+			)
 
 
 ####################

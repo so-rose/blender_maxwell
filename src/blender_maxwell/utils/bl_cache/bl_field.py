@@ -65,7 +65,6 @@ class BLField:
 		default_value: typ.Any = None,
 		use_prop_update: bool = True,
 		## Static
-		prop_ui: bool = False,  ## TODO: Remove
 		abs_min: int | float | None = None,
 		abs_max: int | float | None = None,
 		soft_min: int | float | None = None,

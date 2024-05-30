@@ -46,14 +46,14 @@ class MaxwellBoundCondsBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	show_definition: bool = bl_cache.BLField(False, prop_ui=True)
+	show_definition: bool = bl_cache.BLField(False)
 
-	x_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
-	x_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
-	y_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
-	y_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
-	z_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
-	z_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	x_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
+	x_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
+	y_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
+	y_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
+	z_pos: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
+	z_neg: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
 
 	####################
 	# - UI

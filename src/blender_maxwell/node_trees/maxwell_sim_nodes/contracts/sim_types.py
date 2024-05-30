@@ -213,6 +213,10 @@ class SimFieldPols(enum.StrEnum):
 			SFP.Hz: 'Hz',
 		}[v]
 
+	@property
+	def name(self) -> str:
+		return SimFieldPols.to_name(self)
+
 	@staticmethod
 	def to_icon(_: typ.Self) -> str:
 		"""Convert the enum value to a Blender icon.

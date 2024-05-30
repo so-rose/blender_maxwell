@@ -163,10 +163,19 @@ class CombineNode(base.MaxwellSimNode):
 					if not ct.FlowSignal.check(inp)
 				]
 				if func_flows:
-					return functools.reduce(
-						lambda a, b: a | b,
-						func_flows,
+					return func_flows
+				return ct.FlowSignal.FlowPending
+
+			case (ct.FlowKind.Func, ct.FlowKind.Params):
+				params_flows = [
+					params_flow
+					for inp_sckname in self.inputs.keys()  # noqa: SIM118
+					if not ct.FlowSignal.check(
+						params_flow := self._compute_input(inp_sckname, kind='params')
 					)
+				]
+				if params_flows:
+					return params_flows
 				return ct.FlowSignal.FlowPending
 
 		return ct.FlowSignal.FlowPending
@@ -200,6 +209,18 @@ class CombineNode(base.MaxwellSimNode):
 			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
 		)
 
+	@events.computes_output_socket(
+		'Sources',
+		kind=ct.FlowKind.Params,
+		all_loose_input_sockets=True,
+		props={'value_or_func'},
+	)
+	def compute_sources_params(self, props, loose_input_sockets) -> list[typ.Any]:
+		"""Compute (lazy) sources."""
+		return self.compute_combined(
+			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
+		)
+
 	####################
 	# - Output: Structures
 	####################
@@ -227,6 +248,18 @@ class CombineNode(base.MaxwellSimNode):
 			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
 		)
 
+	@events.computes_output_socket(
+		'Structures',
+		kind=ct.FlowKind.Params,
+		all_loose_input_sockets=True,
+		props={'value_or_func'},
+	)
+	def compute_structures_params(self, props, loose_input_sockets) -> list[typ.Any]:
+		"""Compute (lazy) structures."""
+		return self.compute_combined(
+			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
+		)
+
 	####################
 	# - Output: Monitors
 	####################
@@ -252,6 +285,18 @@ class CombineNode(base.MaxwellSimNode):
 		"""Compute (lazy) monitors."""
 		return self.compute_combined(
 			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
+		)
+
+	@events.computes_output_socket(
+		'Monitors',
+		kind=ct.FlowKind.Params,
+		all_loose_input_sockets=True,
+		props={'value_or_func'},
+	)
+	def compute_monitors_params(self, props, loose_input_sockets) -> list[typ.Any]:
+		"""Compute (lazy) structures."""
+		return self.compute_combined(
+			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
 		)
 
 

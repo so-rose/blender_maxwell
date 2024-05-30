@@ -98,11 +98,9 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	injection_axis: ct.SimSpaceAxis = bl_cache.BLField(ct.SimSpaceAxis.X, prop_ui=True)
-	injection_direction: ct.SimAxisDir = bl_cache.BLField(
-		ct.SimAxisDir.Plus, prop_ui=True
-	)
-	num_freqs: int = bl_cache.BLField(1, abs_min=1, soft_max=20, prop_ui=True)
+	injection_axis: ct.SimSpaceAxis = bl_cache.BLField(ct.SimSpaceAxis.X)
+	injection_direction: ct.SimAxisDir = bl_cache.BLField(ct.SimAxisDir.Plus)
+	num_freqs: int = bl_cache.BLField(1, abs_min=1, soft_max=20)
 
 	####################
 	# - UI

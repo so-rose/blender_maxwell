@@ -58,7 +58,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Structure': sockets.MaxwellStructureSocketDef(),
+		'Structure': sockets.MaxwellStructureSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -228,8 +228,6 @@ class BoxStructureNode(base.MaxwellSimNode):
 		has_output_params = not ct.FlowSignal.check(output_params)
 
 		if has_center and has_size and has_output_params and not output_params.symbols:
-			## TODO: There are strategies for handling examples of symbol values.
-
 			# Push Loose Input Values to GeoNodes Modifier
 			managed_objs['modifier'].bl_modifier(
 				'NODES',

@@ -39,7 +39,7 @@ class MaxwellBoundCondBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Properties
 	####################
-	default: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml, prop_ui=True)
+	default: ct.BoundCondType = bl_cache.BLField(ct.BoundCondType.Pml)
 
 	# Capabilities
 	## Allow a boundary condition compatible with any of the following axes.
