@@ -65,12 +65,12 @@ class FilterOperation(enum.StrEnum):
 		FO = FilterOperation
 		return {
 			# Slice
-			FO.Slice: '=a[i:j]',
-			FO.SliceIdx: '≈a[v₁:v₂]',
+			FO.Slice: '≈a[v₁:v₂]',
+			FO.SliceIdx: '=a[i:j]',
 			# Pin
-			FO.PinLen1: 'pinₐ',
-			FO.Pin: 'pinₐ ≈v',
-			FO.PinIdx: 'pinₐ =i',
+			FO.PinLen1: 'a[0] → a',
+			FO.Pin: 'a[v] ⇝ a',
+			FO.PinIdx: 'a[i] → a',
 			# Reinterpret
 			FO.Swap: 'a₁ ↔ a₂',
 		}[value]
@@ -517,6 +517,7 @@ class FilterMathNode(base.MaxwellSimNode):
 			return lazy_func.compose_within(
 				operation.jax_func(axis_0, axis_1, slice_tuple=slice_tuple),
 				enclosing_func_args=operation.func_args,
+				enclosing_func_output=info.output,
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending

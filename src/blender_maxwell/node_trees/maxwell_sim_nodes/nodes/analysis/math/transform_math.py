@@ -606,27 +606,32 @@ class TransformMathNode(base.MaxwellSimNode):
 		input_socket_kinds={
 			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info},
 		},
+		output_sockets={'Expr'},
+		output_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_func(self, props, input_sockets) -> ct.FuncFlow | ct.FlowSignal:
+	def compute_func(
+		self, props, input_sockets, output_sockets
+	) -> ct.FuncFlow | ct.FlowSignal:
 		"""Transform the input `InfoFlow` depending on the transform operation."""
 		TO = TransformOperation
-		operation = props['operation']
+
 		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
+		output_info = output_sockets['Expr']
 
 		has_info = not ct.FlowSignal.check(info)
 		has_lazy_func = not ct.FlowSignal.check(lazy_func)
+		has_output_info = not ct.FlowSignal.check(output_info)
 
-		if operation is not None and has_lazy_func and has_info:
-			# Retrieve Properties
+		operation = props['operation']
+		if operation is not None and has_lazy_func and has_info and has_output_info:
 			dim = props['dim']
-
-			# Match Pattern by Operation
 			match operation:
 				case TO.FreqToVacWL | TO.VacWLToFreq | TO.FT1D | TO.InvFT1D:
 					if dim is not None and info.has_idx_discrete(dim):
 						return lazy_func.compose_within(
 							operation.jax_func(axis=info.dim_axis(dim)),
+							enclosing_func_output=output_info.output,
 							supports_jax=True,
 						)
 					return ct.FlowSignal.FlowPending
@@ -634,6 +639,7 @@ class TransformMathNode(base.MaxwellSimNode):
 				case _:
 					return lazy_func.compose_within(
 						operation.jax_func(),
+						enclosing_func_output=output_info.output,
 						supports_jax=True,
 					)
 

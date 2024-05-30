@@ -73,7 +73,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	def value(self, eps_rel: tuple[float, float]) -> None:
 		self.eps_rel = eps_rel
 
-	@bl_cache.cached_bl_property(depends_on={'value', 'differentiable'})
+	@bl_cache.cached_bl_property(depends_on={'value'})
 	def lazy_func(self) -> ct.FuncFlow:
 		return ct.FuncFlow(
 			func=lambda: self.value,
@@ -82,7 +82,7 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 
 	@bl_cache.cached_bl_property(depends_on={'differentiable'})
 	def params(self) -> ct.FuncFlow:
-		return ct.ParamsFlow(is_differentiable=self.differentiable)
+		return ct.ParamsFlow()
 
 	####################
 	# - UI

@@ -29,11 +29,11 @@ class MaxwellStructureBLSocket(base.MaxwellSimSocket):
 class MaxwellStructureSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellStructure
 
-	is_list: bool = False
-
 	def init(self, bl_socket: MaxwellStructureBLSocket) -> None:
-		if self.is_list:
-			bl_socket.active_kind = ct.FlowKind.Array
+		pass
+
+	def local_compare(self, _: MaxwellStructureBLSocket) -> None:
+		return True
 
 
 ####################

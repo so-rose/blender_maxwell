@@ -86,24 +86,47 @@ class ViewerNode(base.MaxwellSimNode):
 	# - Properties: Computed FlowKinds
 	####################
 	@events.on_value_changed(
-		socket_name='Any',
+		# Trigger
+		prop_name='console_print_kind',
+		# Loaded
+		props={'auto_expr', 'console_print_kind'},
 	)
-	def on_input_changed(self) -> None:
+	def on_print_kind_changed(self, props) -> None:
+		self.inputs['Any'].active_kind = props['console_print_kind']
+
+		if props['auto_expr']:
+			setattr(
+				self,
+				'input_' + props['console_print_kind'].property_name,
+				bl_cache.Signal.InvalidateCache,
+			)
+
+	@events.on_value_changed(
+		# Trugger
+		socket_name='Any',
+		# Loaded
+		props={'auto_expr', 'console_print_kind'},
+	)
+	def on_input_changed(self, props) -> None:
 		"""Lightweight invalidator, which invalidates the more specific `cached_bl_property` used to determine when something ex. plot-related has changed.
 
 		Calls `get_flow`, which will be called again when regenerating the `cached_bl_property`s.
 		This **does not** call the flow twice, as `self._compute_input()` will be cached the first time.
 		"""
-		for flow_kind in list(ct.FlowKind):
-			flow = self.get_flow(
-				flow_kind, always_load=flow_kind is ct.FlowKind.Previews
+		# Invalidate PreviewsFlow
+		setattr(
+			self,
+			'input_' + ct.FlowKind.Previews.property_name,
+			bl_cache.Signal.InvalidateCache,
+		)
+
+		# Invalidate PreviewsFlow
+		if props['auto_expr']:
+			setattr(
+				self,
+				'input_' + props['console_print_kind'].property_name,
+				bl_cache.Signal.InvalidateCache,
 			)
-			if flow is not None:
-				setattr(
-					self,
-					'input_' + flow_kind.property_name,
-					bl_cache.Signal.InvalidateCache,
-				)
 
 	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
 	def input_capabilities(self) -> ct.CapabilitiesFlow | None:

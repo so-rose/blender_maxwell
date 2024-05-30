@@ -17,6 +17,7 @@
 """Useful image processing operations for use in the addon."""
 
 import enum
+import functools
 import typing as typ
 
 import jax
@@ -26,7 +27,6 @@ import matplotlib
 import matplotlib.axis as mpl_ax
 import matplotlib.backends.backend_agg
 import matplotlib.figure
-import numpy as np
 import seaborn as sns
 
 from blender_maxwell import contracts as ct
@@ -138,7 +138,7 @@ def rgba_image_from_2d_map(
 ####################
 # - MPL Helpers
 ####################
-# @functools.lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=4)
 def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 	fig = matplotlib.figure.Figure(
 		figsize=[width_inches, height_inches], dpi=dpi, layout='tight'

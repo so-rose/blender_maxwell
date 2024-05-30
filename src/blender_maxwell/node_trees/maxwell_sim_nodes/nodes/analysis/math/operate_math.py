@@ -146,7 +146,6 @@ class BinaryOperation(enum.StrEnum):
 		outl = info_l.output
 		outr = info_r.output
 		match (outl.shape_len, outr.shape_len):
-			# match (ol.shape_len, info_r.output.shape_len):
 			# Number | *
 			## Number | Number
 			case (0, 0):
@@ -154,15 +153,25 @@ class BinaryOperation(enum.StrEnum):
 					BO.Add,
 					BO.Sub,
 					BO.Mul,
-					BO.Div,
-					BO.Pow,
 				]
+
+				# Check Non-Zero Right Hand Side
+				## -> Obviously, we can't ever divide by zero.
+				## -> Sympy's assumptions system must always guarantee rhs != 0.
+				## -> If it can't, then we simply don't expose division.
+				## -> The is_zero assumption must be provided elsewhere.
+				## -> NOTE: This may prevent some valid uses of division.
+				## -> Watch out for "division is missing" bugs.
+				if info_r.output.is_nonzero:
+					ops.append(BO.Div)
+
 				if (
 					info_l.output.physical_type == spux.PhysicalType.Length
 					and info_l.output.unit == info_r.output.unit
 				):
 					ops += [BO.Atan2]
-				return ops
+
+				return [*ops, BO.Pow]
 
 			## Number | Vector
 			case (0, 1):
@@ -336,7 +345,13 @@ class BinaryOperation(enum.StrEnum):
 	# - InfoFlow Transform
 	####################
 	def transform_infos(self, info_l: ct.InfoFlow, info_r: ct.InfoFlow):
-		"""Deduce the output information by using `self.sp_func` to operate on the two output `SimSymbol`s, then capturing the information associated with the resulting expression."""
+		"""Deduce the output information by using `self.sp_func` to operate on the two output `SimSymbol`s, then capturing the information associated with the resulting expression.
+
+		Warnings:
+			`self` MUST be an element of `BinaryOperation.by_infos(info_l, info_r).
+
+			If not, bad things will happen.
+		"""
 		return info_l.operate_output(
 			info_r,
 			lambda a, b: self.sp_func([a, b]),
@@ -479,29 +494,35 @@ class OperateMathNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Func,
+		# Loaded
 		props={'operation'},
 		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
 			'Expr L': ct.FlowKind.Func,
 			'Expr R': ct.FlowKind.Func,
 		},
+		output_sockets={'Expr'},
+		output_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compose_func(self, props: dict, input_sockets: dict):
+	def compute_func(self, props, input_sockets, output_sockets):
 		operation = props['operation']
 		if operation is None:
 			return ct.FlowSignal.FlowPending
 
 		expr_l = input_sockets['Expr L']
 		expr_r = input_sockets['Expr R']
+		output_info = output_sockets['Expr']
 
 		has_expr_l = not ct.FlowSignal.check(expr_l)
 		has_expr_r = not ct.FlowSignal.check(expr_r)
+		has_output_info = not ct.FlowSignal.check(output_info)
 
 		# Compute Jax Function
 		## -> The operation enum directly provides the appropriate function.
-		if has_expr_l and has_expr_r:
+		if has_expr_l and has_expr_r and has_output_info:
 			return (expr_l | expr_r).compose_within(
-				enclosing_func=operation.jax_func,
+				operation.jax_func,
+				enclosing_func_output=output_info.output,
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending
@@ -520,6 +541,8 @@ class OperateMathNode(base.MaxwellSimNode):
 		},
 	)
 	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
+		BO = BinaryOperation
+
 		operation = props['operation']
 		info_l = input_sockets['Expr L']
 		info_r = input_sockets['Expr R']
@@ -533,7 +556,7 @@ class OperateMathNode(base.MaxwellSimNode):
 			has_info_l
 			and has_info_r
 			and operation is not None
-			and operation in BinaryOperation.by_infos(info_l, info_r)
+			and operation in BO.by_infos(info_l, info_r)
 		):
 			return operation.transform_infos(info_l, info_r)
 

@@ -207,12 +207,12 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		stop_propagation=True,
 	)
 	def _on_sim_node_name_changed(self, props):
-		log.debug(
-			'Changed Sim Node Name of a "%s" to "%s" (self=%s)',
-			self.bl_idname,
-			props['sim_node_name'],
-			str(self),
-		)
+		# log.debug(
+		# 'Changed Sim Node Name of a "%s" to "%s" (self=%s)',
+		# self.bl_idname,
+		# props['sim_node_name'],
+		# str(self),
+		# )
 
 		# (Re)Construct Managed Objects
 		## -> Due to 'prev_name', the new MObjs will be renamed on construction
@@ -360,27 +360,48 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 	####################
 	# - Socket Management
 	####################
-	## TODO: Check for namespace collisions in sockets to prevent silent errors
 	def _prune_inactive_sockets(self):
-		"""Remove all "inactive" sockets from the node.
+		"""Remove all inactive sockets from the node, while only updating sockets that can be non-destructively updated.
 
-		A socket is considered "inactive" when it shouldn't be defined (per `self.active_socket_defs), but is present nonetheless.
+		The first step is easy: We determine, by-name, which sockets should no longer be defined, then remove them correctly.
+
+		The second step is harder: When new sockets have overlapping names, should they be removed, or should they merely have some properties updated?
+		Removing and re-adding the same socket is an accurate, generally robust approach, but it comes with a big caveat: **Existing node links will be cut**, even when it might semantically make sense to simply alter the socket's properties, keeping the links.
+
+		Different `bl_socket.socket_type`s can never be updated - they must be removed.
+		Otherwise, `SocketDef.compare(bl_socket)` allows us to granularly determine whether a particular `bl_socket` has changed with respect to the desired specification.
+		When the comparison is `False`, we can carefully utilize `SocketDef.init()` to re-initialize the socket, guaranteeing that the altered socket is up to the new specification.
 		"""
 		node_tree = self.id_data
 		for direc in ['input', 'output']:
-			all_bl_sockets = self._bl_sockets(direc)
-			active_bl_socket_defs = self.active_socket_defs(direc)
+			bl_sockets = self._bl_sockets(direc)
+			active_socket_defs = self.active_socket_defs(direc)
 
 			# Determine Sockets to Remove
+			## -> Name: If the existing socket name isn't "active".
+			## -> Type: If the existing socket_type != "active" SocketDef.
 			bl_sockets_to_remove = [
 				bl_socket
-				for socket_name, bl_socket in all_bl_sockets.items()
-				if socket_name not in active_bl_socket_defs
-				or socket_name
-				in (
-					self.loose_input_sockets
-					if direc == 'input'
-					else self.loose_output_sockets
+				for socket_name, bl_socket in bl_sockets.items()
+				if (
+					socket_name not in active_socket_defs
+					or bl_socket.socket_type
+					is not active_socket_defs[socket_name].socket_type
+				)
+			]
+
+			# Determine Sockets to Update
+			## -> Name: If the existing socket name is "active".
+			## -> Type: If the existing socket_type == "active" SocketDef.
+			## -> Compare: If the existing socket differs from the SocketDef.
+			bl_sockets_to_update = [
+				bl_socket
+				for socket_name, bl_socket in bl_sockets.items()
+				if (
+					socket_name in active_socket_defs
+					and bl_socket.socket_type
+					is active_socket_defs[socket_name].socket_type
+					and not active_socket_defs[socket_name].compare(bl_socket)
 				)
 			]
 
@@ -392,24 +413,25 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 				## -> The NodeLinkCache needs to be adjusted manually.
 				node_tree.on_node_socket_removed(bl_socket)
 
-				# 2. Invalidate the input socket cache across all kinds.
+				# 2. Perform the removal using Blender's API.
+				## -> Actually removes the socket.
+				bl_sockets.remove(bl_socket)
+
+				# 3. Invalidate the input socket cache across all kinds.
 				## -> Prevents phantom values from remaining available.
+				## -> Done after socket removal to protect from race condition.
 				self._compute_input.invalidate(
 					input_socket_name=bl_socket_name,
 					kind=...,
 					unit_system=...,
 				)
 
-				# 3. Perform the removal using Blender's API.
-				## -> Actually removes the socket.
-				all_bl_sockets.remove(bl_socket)
-
 				if direc == 'input':
 					# 4. Run all trigger-only `on_value_changed` callbacks.
 					## -> Runs any event methods that relied on the socket.
 					## -> Only methods that don't **require** the socket.
-					## Trigger-Only: If method loads no socket data, it runs.
-					## `optional`: If method optional-loads socket, it runs.
+					## Only Trigger: If method loads no socket data, it runs.
+					## Optional: If method optional-loads socket, it runs.
 					triggered_event_methods = [
 						event_method
 						for event_method in self.filtered_event_methods_by_event(
@@ -419,12 +441,33 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 						not in event_method.callback_info.must_load_sockets
 					]
 					for event_method in triggered_event_methods:
-						log.critical(
-							'%s: Running %s',
-							self.sim_node_name,
-							str(event_method),
-						)
 						event_method(self)
+
+			# Update Sockets
+			for bl_socket in bl_sockets_to_update:
+				bl_socket_name = bl_socket.name
+				socket_def = active_socket_defs[bl_socket_name]
+
+				# 1. Pretend to Initialize for the First Time
+				## -> NOTE: The socket's caches will be completely regenerated.
+				## -> NOTE: A full FlowKind update will occur, but only one.
+				bl_socket.is_initializing = True
+				socket_def.preinit(bl_socket)
+				socket_def.init(bl_socket)
+				socket_def.postinit(bl_socket)
+
+				# 2. Re-Test Socket Capabilities
+				## -> Factors influencing CapabilitiesFlow may have changed.
+				## -> Therefore, we must re-test all link capabilities.
+				bl_socket.remove_invalidated_links()
+
+				# 3. Invalidate the input socket cache across all kinds.
+				## -> Prevents phantom values from remaining available.
+				self._compute_input.invalidate(
+					input_socket_name=bl_socket_name,
+					kind=...,
+					unit_system=...,
+				)
 
 	def _add_new_active_sockets(self):
 		"""Add and initialize all "active" sockets that aren't on the node.
@@ -432,19 +475,18 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		Existing sockets within the given direction are not re-created.
 		"""
 		for direc in ['input', 'output']:
-			all_bl_sockets = self._bl_sockets(direc)
-			active_bl_socket_defs = self.active_socket_defs(direc)
+			bl_sockets = self._bl_sockets(direc)
+			active_socket_defs = self.active_socket_defs(direc)
 
 			# Define BL Sockets
 			created_sockets = {}
-			for socket_name, socket_def in active_bl_socket_defs.items():
+			for socket_name, socket_def in active_socket_defs.items():
 				# Skip Existing Sockets
-				if socket_name in all_bl_sockets:
+				if socket_name in bl_sockets:
 					continue
 
 				# Create BL Socket from Socket
-				## Set 'display_shape' from 'socket_shape'
-				all_bl_sockets.new(
+				bl_sockets.new(
 					str(socket_def.socket_type.value),
 					socket_name,
 				)
@@ -454,9 +496,9 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 
 			# Initialize Just-Created BL Sockets
 			for bl_socket_name, socket_def in created_sockets.items():
-				socket_def.preinit(all_bl_sockets[bl_socket_name])
-				socket_def.init(all_bl_sockets[bl_socket_name])
-				socket_def.postinit(all_bl_sockets[bl_socket_name])
+				socket_def.preinit(bl_sockets[bl_socket_name])
+				socket_def.init(bl_sockets[bl_socket_name])
+				socket_def.postinit(bl_sockets[bl_socket_name])
 
 				# Invalidate Cached NoFlows
 				self._compute_input.invalidate(
@@ -637,9 +679,10 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 				lambda a, b: a | b,
 				[
 					self._compute_input(
-						socket, kind=ct.FlowKind.Previews, unit_system=None
+						socket_name,
+						kind=ct.FlowKind.Previews,
 					)
-					for socket in [bl_socket.name for bl_socket in self.inputs]
+					for socket_name in [bl_socket.name for bl_socket in self.inputs]
 				],
 				ct.PreviewsFlow(),
 			)
@@ -897,8 +940,18 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 							)
 							altered_socket_kinds[dep_out_sckname].add(dep_out_kind)
 
+			# Clear Output Socket Cache(s)
+			## -> We aggregate it manually, so it needs a special invl.
+			## -> See self.compute_output()
+			if socket_kinds is not None and ct.FlowKind.Previews in socket_kinds:
+				for out_sckname in self.outputs.keys():  # noqa: SIM118
+					self.compute_output.invalidate(
+						output_socket_name=out_sckname,
+						kind=ct.FlowKind.Previews,
+					)
+					altered_socket_kinds[out_sckname].add(ct.FlowKind.Previews)
+
 		# Run Triggered Event Methods
-		## -> A triggered event method may request to stop propagation.
 		## -> A triggered event method may request to stop propagation.
 		stop_propagation = False
 		triggered_event_methods = self.filtered_event_methods_by_event(

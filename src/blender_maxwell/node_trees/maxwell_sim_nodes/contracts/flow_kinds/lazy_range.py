@@ -14,17 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import dataclasses
 import enum
 import functools
 import typing as typ
-from fractions import Fraction
 from types import MappingProxyType
 
 import jax.numpy as jnp
 import jaxtyping as jtyp
+import pydantic as pyd
 import sympy as sp
-import sympy.physics.units as spu
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
@@ -61,8 +59,7 @@ class ScalingMode(enum.StrEnum):
 		return ''
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class RangeFlow:
+class RangeFlow(pyd.BaseModel):
 	r"""Represents a finite spaced array using symbolic boundary expressions.
 
 	Whenever an array can be represented like this, the advantages over an `ArrayFlow` are numerous.
@@ -92,8 +89,10 @@ class RangeFlow:
 		symbols: Set of variables from which `start` and/or `stop` are determined.
 	"""
 
-	start: spux.ScalarUnitlessComplexExpr
-	stop: spux.ScalarUnitlessComplexExpr
+	model_config = pyd.ConfigDict(frozen=True)
+
+	start: spux.ScalarUnitlessRealExpr
+	stop: spux.ScalarUnitlessRealExpr
 	steps: int = 0
 	scaling: ScalingMode = ScalingMode.Lin
 
@@ -102,7 +101,7 @@ class RangeFlow:
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
 
 	# Helper Attributes
-	pre_fourier_ideal_midpoint: spux.ScalarUnitlessComplexExpr | None = None
+	pre_fourier_ideal_midpoint: spux.ScalarUnitlessRealExpr | None = None
 
 	####################
 	# - SimSymbol Interop
@@ -218,13 +217,25 @@ class RangeFlow:
 		)
 		return combined_mathtype
 
-	@property
+	@functools.cached_property
 	def ideal_midpoint(self) -> spux.SympyExpr:
 		return (self.stop + self.start) / 2
 
-	@property
+	@functools.cached_property
 	def ideal_range(self) -> spux.SympyExpr:
 		return self.stop - self.start
+
+	@functools.cached_property
+	def ideal_step_size(self) -> spux.SympyExpr:
+		return self.ideal_range / (self.steps - 1)
+
+	@functools.cached_property
+	def is_always_nonzero(self) -> spux.SympyExpr:
+		if self.start > 0 or self.stop < 0:
+			return True
+
+		is_zero = (self.start % self.ideal_step_size).is_zero
+		return is_zero if is_zero is not None else False
 
 	####################
 	# - Methods
@@ -452,7 +463,7 @@ class RangeFlow:
 		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
 			{}
 		),
-	) -> dict[sp.Symbol, spux.ScalarUnitlessComplexExpr]:
+	) -> dict[sp.Symbol, spux.ScalarUnitlessRealExpr]:
 		"""Realize **all** input symbols to the `RangeFlow`.
 
 		Parameters:
@@ -480,7 +491,7 @@ class RangeFlow:
 					raise NotImplementedError(msg)
 
 				realized_syms |= {sym: v}
-
+			return realized_syms
 		msg = f'RangeFlow: Not all symbols were given a value during realization (symbols={self.symbols}, symbol_values={symbol_values})'
 		raise ValueError(msg)
 

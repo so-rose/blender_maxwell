@@ -14,13 +14,217 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import dataclasses
+r"""Implements the core of the math system via `FuncFlow`, which allows high-performance, fully-expressive workflows with data that can be "very large", and/or whose input parameters are not yet fully known.
+
+# Introduction
+When using nodes to do math, it becomes immediately obvious to express **flows of data as composed function chains**.
+Doing so has several advantages:
+
+- **Interactive**: Since no large-array math is being done, the UI can be designed to feel fast and snappy, greatly boosting the will to experiment and ultimate productivity.
+- **Symbolic**: Since no numerical math is being done yet, we can inject symbolic variables at-will, enabling effortless ex. parameter sweeping, band-structure generation, differentiable can choose to keep our input parameters as symbolic variables with no performance impact.
+- **Performant**: Since the data pipeline is built as a single function w/o side effects, that function can be often be JIT-optimized for highly-optimized execution on the instruction sets used by modern massively-parallel devices, like modern CPUs (SSE/AVX), GPUs (ex. PTX), and HPC clusters (network-sharding to ARM/x86).
+
+The result is a math system optimized for the analysis typically needed in electrodynamic contexts, prioritizing clarity and flexibility at soft-real-time, even with gigabytes of data on relatively weak hardware.
+
+## Strongly Related FlowKinds
+For doing math, `Func` relies on two other `FlowKind`s, which must run in parallel:
+
+- `FlowKind.Info`: Tracks the name, `spux.MathType`, unit (if any), length, and index coordinates for the raw data object produced by `Func`.
+- `FlowKind.Params`: Tracks the particular values of input parameters to the lazy function, each of which can also be symbolic.
+
+For more, please see the documentation for each.
+
+## Non-Mathematical Use
+Of course, there are many interesting uses of incremental function composition that aren't mathematical.
+
+For such cases, the usage is identical, but the complexity is lessened; for example, `Info` no longer effectively needs to flow in parallel.
+
+
+
+# Lazy Math: Theoretical Foundation
+This `FlowKind` is the critical component of a functional-inspired system for lazy multilinear math.
+Thus, it makes sense to describe the math system here.
+
+## `depth=0`: Root Function
+To start a composition chain, a function with no inputs must be defined as the "root", or "bottom".
+
+$$
+	f_0:\ \ \ \ \biggl(
+		\underbrace{a_1, a_2, ..., a_p}_{\texttt{args}},\ 
+		\underbrace{
+			\begin{bmatrix} k_1 \\ v_1\end{bmatrix},
+			\begin{bmatrix} k_2 \\ v_2\end{bmatrix},
+			...,
+			\begin{bmatrix} k_q \\ v_q\end{bmatrix}
+		}_{\texttt{kwargs}}
+	\biggr) \to \text{output}_0
+$$
+
+In Python, such a construction would look like this:
+
+```python
+# Presume 'A0', 'KV0' contain only the args/kwargs for f_0
+## 'A0', 'KV0' are of length 'p' and 'q'
+def f_0(*args, **kwargs): ...
+
+lazy_func_0 = FuncFlow(
+	func=f_0,
+	func_args=[(a_i, type(a_i)) for a_i in A0],
+	func_kwargs={k: v for k,v in KV0},
+)
+output_0 = lazy_func.func(*A0_computed, **KV0_computed)
+```
+
+## `depth>0`: Composition Chaining
+So far, so easy.
+Now, let's add a function that uses the result of $f_0$, without yet computing it.
+
+$$
+	f_1:\ \ \ \ \biggl(
+		f_0(...),\ \ 
+		\underbrace{\{a_i\}_p^{p+r}}_{\texttt{args[p:]}},\ 
+		\underbrace{\biggl\{
+			\begin{bmatrix} k_i \\ v_i\end{bmatrix}
+		\biggr\}_q^{q+s}}_{\texttt{kwargs[p:]}}
+	\biggr) \to \text{output}_1
+$$
+
+Note:
+- $f_1$ must take the arguments of both $f_0$ and $f_1$.
+- The complexity is getting notationally complex; we already have to use `...` to represent "the last function's arguments".
+
+In other words, **there's suddenly a lot to manage**.
+Even worse, the bigger the $n$, the more complexity we must real with.
+
+This is where the Python version starts to show its purpose:
+
+```python
+# Presume 'A1', 'K1' contain only the args/kwarg names for f_1
+## 'A1', 'KV1' are therefore of length 'r' and 's'
+def f_1(output_0, *args, **kwargs): ...
+
+lazy_func_1 = lazy_func_0.compose_within(
+	enclosing_func=f_1,
+	enclosing_func_args=[(a_i, type(a_i)) for a_i in A1],
+	enclosing_func_kwargs={k: type(v) for k,v in K1},
+)
+
+A_computed = A0_computed + A1_computed
+KW_computed = KV0_computed + KV1_computed
+output_1 = lazy_func_1.func(*A_computed, **KW_computed)
+```
+
+By using `Func`, we've guaranteed that even hugely deep $n$s won't ever look more complicated than this.
+
+## `max depth`: "Realization"
+So, we've composed a bunch of functions of functions of ...
+We've also tracked their arguments, either manually (as above), or with the help of a handy `ParamsFlow` object.
+
+But it'd be pointless to just compose away forever.
+We do actually need the data that they claim to compute now:
+
+```python
+# A_all and KW_all must be tracked on the side.
+output_n = lazy_func_n.func(*A_all, **KW_all)
+```
+
+Of course, this comes with enormous overhead.
+Aside from the function calls themselves (which can be non-trivial), we must also contend with the enormous inefficiency of performing array operations sequentially.
+
+That brings us to the killer feature of `FuncFlow`, and the motivating reason for doing any of this at all:
+
+```python
+output_n = lazy_func_n.func_jax(*A_all, **KW_all)
+```
+
+What happened was, **the entire pipeline** was compiled, optimized, and computed with bare-metal performance on either a CPU, GPU, or TPU.
+With the help of the `jax` library (and its underlying OpenXLA bytecode), all of that inefficiency has been optimized based on _what we're trying to do_, not _exactly how we're doing it_, in order to maximize the use of modern massively-parallel devices.
+
+See the documentation of `Func.func_jax()` for more information on this process.
+
+
+
+# Lazy Math: Practical Considerations
+By using nodes to express a lazily-composed chain of mathematical operations on tensor-like data, we strike a difficult balance between UX, flexibility, and performance.
+
+## UX
+UX is often more a matter of art/taste than science, so don't trust these philosophies too much - a lot of the analysis is entirely personal and subjective.
+
+The goal for our UX is to minimize the "frictions" that cause cascading, small-scale _user anxiety_.
+
+Especially of concern in a visual math system on large data volumes is **UX latency** - also known as **lag**.
+In particular, the most important facet to minimize is _emotional burden_ rather than quantitative milliseconds.
+Any repeated moment-to-moment friction can be very damaging to a user's ability to be productive in a piece of software.
+
+Unfortunately, in a node-based architecture, data must generally be computed one step at a time, whenever any part of it is needed, and it must do so before any feedback can be provided.
+In a math system like this, that data is presumed "big", and as such we're left with the unfortunate experience of even the most well-cached, high-performance operations causing _just about anything_ to **feel** like a highly unpleasant slog as soon as the data gets big enough.
+**This discomfort scales with the size of data**, by the way, which might just cause users to never even attempt working with the data volume that they actually need.
+
+For electrodynamic field analysis, it's not uncommon for toy examples to expend hundreds of megabytes of memory, all of which needs all manner of interesting things done to it.
+It can therefore be very easy to stumble across that feeling of "slogging through" any program that does real-world EM field analysis.
+This has consequences: The user tries fewer ideas, becomes more easily frustrated, and might ultimately accomplish less.
+
+Lazy evaluation allows _delaying_ a computation to a point in time where the user both expects and understands the time that the computation takes.
+For example, the user experience of pressing a button clearly marked with terminology like "load", "save", "compute", "run", seems to be paired to a greatly increased emotional tolerance towards the latency introduced by pressing that button (so long as it is only clickable when it works).
+To a lesser degree, attaching a node link also seems to have this property, though that tolerance seems to fall as proficiency with the node-based tool rises.
+As a more nuanced example, when lag occurs due to the computing an image-based plot based on live-computed math, then the visual feedback of _the plot actually changing_ seems to have a similar effect, not least because it's emotionally well-understood that detaching the `Viewer` node would also remove the lag.
+
+In short: Even if lazy evaluation didn't make any math faster, it will still _feel_ faster (to a point - raw performance obviously still matters).
+Without `FuncFlow`, the point of evaluation cannot be chosen at all, which is a huge issue for all the named reasons.
+With `FuncFlow`, better-chosen evaluation points can be chosen to cause the _user experience_ of high performance, simply because we were able to shift the exact same computation to a point in time where the user either understands or tolerates the delay better.
+
+## Flexibility
+Large-scale math is done on tensors, whether one knows (or likes!) it or not.
+To this end, the indexed arrays produced by `FuncFlow.func_jax` aren't quite sufficient for most operations we want to do:
+
+- **Naming**: What _is_ each axis?
+	Unnamed index axes are sometimes easy to decode, but in general, names have an unexpectedly critical function when operating on arrays.
+	Lack of names is a huge part of why perfectly elegant array math in ex. `MATLAB` or `numpy` can so easily feel so incredibly convoluted.
+	_Sometimes arrays with named axes are called "structured arrays".
+
+- **Coordinates**: What do the indices of each axis really _mean_?
+	For example, an array of $500$ by-wavelength observations of power (watts) can't be limited to between $200nm$ to $700nm$.
+	But they can be limited to between index `23` to `298`.
+	I'm **just supposed to know** that `23` means $200nm$, and that `298` indicates the observation just after $700nm$, and _hope_ that this is exact enough.
+
+Not only do we endeavor to track these, but we also introduce unit-awareness to the coordinates, and design the entire math system to visually communicate the state of arrays before/after every single computation, as well as only expose operations that this tracked data indicates possible.
+
+In practice, this happens in `FlowKind.Info`, which due to having its own `FlowKind` "lane" can be adjusted without triggering changes to (and therefore recompilation of) the `FlowKind.Func` chain.
+**Please consult the `InfoFlow` documentation for more**.
+
+## Performance
+All values introduced while processing are kept in a seperate `FlowKind` lane, with its own incremental caching: `FlowKind.Params`.
+
+It's a simple mechanism, but for the cost of introducing an extra `FlowKind` "lane", all of the values used to process data can be live-adjusted without the overhead of recompiling the entire `Func` every time anything changes.
+Moreover, values used to process data don't even have to be numbers yet: They can be expressions of symbolic variables, complete with units, which are only realized at the very end of the chain, by the node that absolutely cannot function without the actual numerical data.
+
+See the `ParamFlow` documentation for more information.
+
+
+
+# Conclusion
+There is, of course, a lot more to say about the math system in general.
+A few teasers of what nodes can do with this system:
+
+**Auto-Differentiation**: `jax.jit` isn't even really the killer feature of `jax`.
+	`jax` can automatically differentiate `FuncFlow.func_jax` with respect to any input parameter, including for fwd/bck jacobians/hessians, with robust numerical stability.
+	When used in 
+**Symbolic Interop**: Any `sympy` expression containing symbolic variables can be compiled, by `sympy`, into a `jax`-compatible function which takes 
+	We make use of this in the `Expr` socket, enabling true symbolic math to be used in high-performance lazy `jax` computations.
+**Tidy3D Interop**: For some parameters of some simulation objects, `tidy3d` actually supports adjoint-driven differentiation _through the cloud simulation_.
+	This enables our humble interface to implement fully functional **inverse design** of parameterized structures, using only nodes.
+
+But above all, we hope that this math system is fun, practical, and maybe even interesting.
+"""
+
 import functools
 import typing as typ
 from types import MappingProxyType
 
 import jax
 import jaxtyping as jtyp
+import pydantic as pyd
+import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
@@ -35,209 +239,11 @@ log = logger.get(__name__)
 LazyFunction: typ.TypeAlias = typ.Callable[[typ.Any, ...], typ.Any]
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class FuncFlow:
+class FuncFlow(pyd.BaseModel):
 	r"""Defines a flow of data as incremental function composition.
 
+	For theoretical information, please see the documentation of this module.
 	For specific math system usage instructions, please consult the documentation of relevant nodes.
-
-	# Introduction
-	When using nodes to do math, it becomes immediately obvious to express **flows of data as composed function chains**.
-	Doing so has several advantages:
-
-	- **Interactive**: Since no large-array math is being done, the UI can be designed to feel fast and snappy.
-	- **Symbolic**: Since no numerical math is being done yet, we can choose to keep our input parameters as symbolic variables with no performance impact.
-	- **Performant**: Since no operations are happening, the UI feels fast and snappy.
-
-	## Strongly Related FlowKinds
-	For doing math, `Func` relies on two other `FlowKind`s, which must run in parallel:
-
-	- `FlowKind.Info`: Tracks the name, `spux.MathType`, unit (if any), length, and index coordinates for the raw data object produced by `Func`.
-	- `FlowKind.Params`: Tracks the particular values of input parameters to the lazy function, each of which can also be symbolic.
-
-	For more, please see the documentation for each.
-
-	## Non-Mathematical Use
-	Of course, there are many interesting uses of incremental function composition that aren't mathematical.
-
-	For such cases, the usage is identical, but the complexity is lessened; for example, `Info` no longer effectively needs to flow in parallel.
-
-
-
-	# Lazy Math: Theoretical Foundation
-	This `FlowKind` is the critical component of a functional-inspired system for lazy multilinear math.
-	Thus, it makes sense to describe the math system here.
-
-	## `depth=0`: Root Function
-	To start a composition chain, a function with no inputs must be defined as the "root", or "bottom".
-
-	$$
-		f_0:\ \ \ \ \biggl(
-			\underbrace{a_1, a_2, ..., a_p}_{\texttt{args}},\ 
-			\underbrace{
-				\begin{bmatrix} k_1 \\ v_1\end{bmatrix},
-				\begin{bmatrix} k_2 \\ v_2\end{bmatrix},
-				...,
-				\begin{bmatrix} k_q \\ v_q\end{bmatrix}
-			}_{\texttt{kwargs}}
-		\biggr) \to \text{output}_0
-	$$
-
-	In Python, such a construction would look like this:
-
-	```python
-	# Presume 'A0', 'KV0' contain only the args/kwargs for f_0
-	## 'A0', 'KV0' are of length 'p' and 'q'
-	def f_0(*args, **kwargs): ...
-
-	lazy_func_0 = FuncFlow(
-		func=f_0,
-		func_args=[(a_i, type(a_i)) for a_i in A0],
-		func_kwargs={k: v for k,v in KV0},
-	)
-	output_0 = lazy_func.func(*A0_computed, **KV0_computed)
-	```
-
-	## `depth>0`: Composition Chaining
-	So far, so easy.
-	Now, let's add a function that uses the result of $f_0$, without yet computing it.
-
-	$$
-		f_1:\ \ \ \ \biggl(
-			f_0(...),\ \ 
-			\underbrace{\{a_i\}_p^{p+r}}_{\texttt{args[p:]}},\ 
-			\underbrace{\biggl\{
-				\begin{bmatrix} k_i \\ v_i\end{bmatrix}
-			\biggr\}_q^{q+s}}_{\texttt{kwargs[p:]}}
-		\biggr) \to \text{output}_1
-	$$
-
-	Note:
-	- $f_1$ must take the arguments of both $f_0$ and $f_1$.
-	- The complexity is getting notationally complex; we already have to use `...` to represent "the last function's arguments".
-
-	In other words, **there's suddenly a lot to manage**.
-	Even worse, the bigger the $n$, the more complexity we must real with.
-
-	This is where the Python version starts to show its purpose:
-
-	```python
-	# Presume 'A1', 'K1' contain only the args/kwarg names for f_1
-	## 'A1', 'KV1' are therefore of length 'r' and 's'
-	def f_1(output_0, *args, **kwargs): ...
-
-	lazy_func_1 = lazy_func_0.compose_within(
-		enclosing_func=f_1,
-		enclosing_func_args=[(a_i, type(a_i)) for a_i in A1],
-		enclosing_func_kwargs={k: type(v) for k,v in K1},
-	)
-
-	A_computed = A0_computed + A1_computed
-	KW_computed = KV0_computed + KV1_computed
-	output_1 = lazy_func_1.func(*A_computed, **KW_computed)
-	```
-
-	By using `Func`, we've guaranteed that even hugely deep $n$s won't ever look more complicated than this.
-
-	## `max depth`: "Realization"
-	So, we've composed a bunch of functions of functions of ...
-	We've also tracked their arguments, either manually (as above), or with the help of a handy `ParamsFlow` object.
-
-	But it'd be pointless to just compose away forever.
-	We do actually need the data that they claim to compute now:
-
-	```python
-	# A_all and KW_all must be tracked on the side.
-	output_n = lazy_func_n.func(*A_all, **KW_all)
-	```
-
-	Of course, this comes with enormous overhead.
-	Aside from the function calls themselves (which can be non-trivial), we must also contend with the enormous inefficiency of performing array operations sequentially.
-
-	That brings us to the killer feature of `FuncFlow`, and the motivating reason for doing any of this at all:
-	
-	```python
-	output_n = lazy_func_n.func_jax(*A_all, **KW_all)
-	```
-
-	What happened was, **the entire pipeline** was compiled, optimized, and computed with bare-metal performance on either a CPU, GPU, or TPU.
-	With the help of the `jax` library (and its underlying OpenXLA bytecode), all of that inefficiency has been optimized based on _what we're trying to do_, not _exactly how we're doing it_, in order to maximize the use of modern massively-parallel devices.
-
-	See the documentation of `Func.func_jax()` for more information on this process.
-	
-
-
-	# Lazy Math: Practical Considerations
-	By using nodes to express a lazily-composed chain of mathematical operations on tensor-like data, we strike a difficult balance between UX, flexibility, and performance.
-
-	## UX
-	UX is often more a matter of art/taste than science, so don't trust these philosophies too much - a lot of the analysis is entirely personal and subjective.
-
-	The goal for our UX is to minimize the "frictions" that cause cascading, small-scale _user anxiety_.
-
-	Especially of concern in a visual math system on large data volumes is **UX latency** - also known as **lag**.
-	In particular, the most important facet to minimize is _emotional burden_ rather than quantitative milliseconds.
-	Any repeated moment-to-moment friction can be very damaging to a user's ability to be productive in a piece of software.
-
-	Unfortunately, in a node-based architecture, data must generally be computed one step at a time, whenever any part of it is needed, and it must do so before any feedback can be provided.
-	In a math system like this, that data is presumed "big", and as such we're left with the unfortunate experience of even the most well-cached, high-performance operations causing _just about anything_ to **feel** like a highly unpleasant slog as soon as the data gets big enough.
-	**This discomfort scales with the size of data**, by the way, which might just cause users to never even attempt working with the data volume that they actually need.
-
-	For electrodynamic field analysis, it's not uncommon for toy examples to expend hundreds of megabytes of memory, all of which needs all manner of interesting things done to it.
-	It can therefore be very easy to stumble across that feeling of "slogging through" any program that does real-world EM field analysis.
-	This has consequences: The user tries fewer ideas, becomes more easily frustrated, and might ultimately accomplish less.
-
-	Lazy evaluation allows _delaying_ a computation to a point in time where the user both expects and understands the time that the computation takes.
-	For example, the user experience of pressing a button clearly marked with terminology like "load", "save", "compute", "run", seems to be paired to a greatly increased emotional tolerance towards the latency introduced by pressing that button (so long as it is only clickable when it works).
-	To a lesser degree, attaching a node link also seems to have this property, though that tolerance seems to fall as proficiency with the node-based tool rises.
-	As a more nuanced example, when lag occurs due to the computing an image-based plot based on live-computed math, then the visual feedback of _the plot actually changing_ seems to have a similar effect, not least because it's emotionally well-understood that detaching the `Viewer` node would also remove the lag.
-
-	In short: Even if lazy evaluation didn't make any math faster, it will still _feel_ faster (to a point - raw performance obviously still matters).
-	Without `FuncFlow`, the point of evaluation cannot be chosen at all, which is a huge issue for all the named reasons.
-	With `FuncFlow`, better-chosen evaluation points can be chosen to cause the _user experience_ of high performance, simply because we were able to shift the exact same computation to a point in time where the user either understands or tolerates the delay better.
-
-	## Flexibility
-	Large-scale math is done on tensors, whether one knows (or likes!) it or not.
-	To this end, the indexed arrays produced by `FuncFlow.func_jax` aren't quite sufficient for most operations we want to do:
-
-	- **Naming**: What _is_ each axis?
-		Unnamed index axes are sometimes easy to decode, but in general, names have an unexpectedly critical function when operating on arrays.
-		Lack of names is a huge part of why perfectly elegant array math in ex. `MATLAB` or `numpy` can so easily feel so incredibly convoluted.
-		_Sometimes arrays with named axes are called "structured arrays".
-
-	- **Coordinates**: What do the indices of each axis really _mean_?
-		For example, an array of $500$ by-wavelength observations of power (watts) can't be limited to between $200nm$ to $700nm$.
-		But they can be limited to between index `23` to `298`.
-		I'm **just supposed to know** that `23` means $200nm$, and that `298` indicates the observation just after $700nm$, and _hope_ that this is exact enough.
-
-	Not only do we endeavor to track these, but we also introduce unit-awareness to the coordinates, and design the entire math system to visually communicate the state of arrays before/after every single computation, as well as only expose operations that this tracked data indicates possible.
-
-	In practice, this happens in `FlowKind.Info`, which due to having its own `FlowKind` "lane" can be adjusted without triggering changes to (and therefore recompilation of) the `FlowKind.Func` chain.
-	**Please consult the `InfoFlow` documentation for more**.
-
-	## Performance
-	All values introduced while processing are kept in a seperate `FlowKind` lane, with its own incremental caching: `FlowKind.Params`.
-
-	It's a simple mechanism, but for the cost of introducing an extra `FlowKind` "lane", all of the values used to process data can be live-adjusted without the overhead of recompiling the entire `Func` every time anything changes.
-	Moreover, values used to process data don't even have to be numbers yet: They can be expressions of symbolic variables, complete with units, which are only realized at the very end of the chain, by the node that absolutely cannot function without the actual numerical data.
-
-	See the `ParamFlow` documentation for more information.
-
-
-
-	# Conclusion
-	There is, of course, a lot more to say about the math system in general.
-	A few teasers of what nodes can do with this system:
-
-	**Auto-Differentiation**: `jax.jit` isn't even really the killer feature of `jax`.
-		`jax` can automatically differentiate `FuncFlow.func_jax` with respect to any input parameter, including for fwd/bck jacobians/hessians, with robust numerical stability.
-		When used in 
-	**Symbolic Interop**: Any `sympy` expression containing symbolic variables can be compiled, by `sympy`, into a `jax`-compatible function which takes 
-		We make use of this in the `Expr` socket, enabling true symbolic math to be used in high-performance lazy `jax` computations.
-	**Tidy3D Interop**: For some parameters of some simulation objects, `tidy3d` actually supports adjoint-driven differentiation _through the cloud simulation_.
-		This enables our humble interface to implement fully functional **inverse design** of parameterized structures, using only nodes.
-
-	But above all, we hope that this math system is fun, practical, and maybe even interesting.
 
 	Attributes:
 		func: The function that generates the represented value.
@@ -247,14 +253,16 @@ class FuncFlow:
 			See the documentation of `self.func_jax()`.
 	"""
 
+	model_config = pyd.ConfigDict(frozen=True)
+
 	func: LazyFunction
-	func_args: list[sim_symbols.SimSymbol] = dataclasses.field(default_factory=list)
-	func_kwargs: dict[str, sim_symbols.SimSymbol] = dataclasses.field(
-		default_factory=dict
-	)
+	func_args: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
+	func_kwargs: dict[str, sim_symbols.SimSymbol] = pyd.Field(default_factory=dict)
+	func_output: sim_symbols.SimSymbol | None = None
+
 	supports_jax: bool = False
 
-	concatenated: bool = False
+	is_concatenated: bool = False
 
 	####################
 	# - Functions
@@ -318,6 +326,7 @@ class FuncFlow:
 			{}
 		),
 	) -> typ.Self:
+		"""Run the represented function with the best optimization available, given particular choices for all function arguments and for all unrealized symbols."""
 		if self.supports_jax:
 			return self.func_jax(
 				*params.scaled_func_args(symbol_values),
@@ -371,14 +380,55 @@ class FuncFlow:
 
 		return data | {info.output: self.realize(params, symbol_values=symbol_values)}
 
+	def realize_partial(
+		self, params: ParamsFlow
+	) -> typ.Callable[
+		[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
+		jtyp.Inexact[jtyp.Array, '...'],
+	]:
+		"""Create a purely-numerical function, which takes only numerical.
+
+		The units/types/shape/etc. of the returned numerical type conforms to the `SimSymbol` specification of relevant `self.func_args` entries and `self.func_output`.
+
+		This function should be used whenever the unrealized result of a `FuncFlow` needs to be used as the argument to another `FuncFlow`.
+		By using `realize_partial()`, two things are ensured:
+
+		- Since the function defined in `.compose_within()` must be purely numerical, the usual `.realize()` mechanism can't be used to sweep away the pre-realized symbol values.
+		- Since this `FuncFlow` is completely consumed, with no symbols / arguments / etc. explicitly surviving, its impact on the data flow can be considered to have been effectively terminated after using this function.
+
+		Notes:
+			Be **very careful about units**.
+			Ideally, the bottom function should use `.scale_to_unit()` before invoking `.compose_within()` with the output of this function.
+		"""
+		pre_realized_syms = list(
+			params.realize_symbols(params.realized_symbols, allow_partial=True).values()
+		)
+
+		def realizer(
+			*sym_args: int | float | complex | jtyp.Inexact[jtyp.Array, '...'],
+		) -> jtyp.Inexact[jtyp.Array, '...']:
+			return self.func(
+				*[
+					func_arg_n(*sym_args, *pre_realized_syms)
+					for func_arg_n in params.func_args_n
+				],
+				**{
+					func_arg_name: func_kwarg_n(*sym_args, *pre_realized_syms)
+					for func_arg_name, func_kwarg_n in params.func_kwargs_n.items()
+				},
+			)
+
+		return realizer
+
 	####################
-	# - Composition Operations
+	# - Operations
 	####################
 	def compose_within(
 		self,
 		enclosing_func: LazyFunction,
-		enclosing_func_args: list[type] = (),
-		enclosing_func_kwargs: dict[str, type] = MappingProxyType({}),
+		enclosing_func_args: list[sim_symbols.SimSymbol] = (),
+		enclosing_func_kwargs: dict[str, sim_symbols.SimSymbol] = MappingProxyType({}),
+		enclosing_func_output: sim_symbols.SimSymbol | None = None,
 		supports_jax: bool = False,
 	) -> typ.Self:
 		"""Compose `self.func` within the given enclosing function, which itself takes arguments, and create a new `FuncFlow` to contain it.
@@ -415,6 +465,10 @@ class FuncFlow:
 		Returns:
 			A lazy function that takes both the enclosed and enclosing arguments, and returns the value of the enclosing function (whose first argument is the output value of the enclosed function).
 		"""
+		## TODO: Support unit system conversion at the point of composition.
+		## -- This may require us to track the units of the function output.
+		## TODO: Support JAX-evaluation when jax support changes from True to False.
+		## -- This would allow big data flows to compose performantly as arguments into non-JAX functions.
 		return FuncFlow(
 			func=lambda *args, **kwargs: enclosing_func(
 				self.func(
@@ -426,6 +480,7 @@ class FuncFlow:
 			),
 			func_args=self.func_args + list(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
+			func_output=enclosing_func_output,
 			supports_jax=self.supports_jax and supports_jax,
 		)
 
@@ -472,7 +527,7 @@ class FuncFlow:
 				*list(args[: len(self.func_args)]),
 				**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
 			)
-			if not self.concatenated:
+			if not self.is_concatenated:
 				return (ret,)
 			return ret
 
@@ -487,5 +542,83 @@ class FuncFlow:
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			supports_jax=self.supports_jax and other.supports_jax,
-			concatenated=True,
+			is_concatenated=True,
 		)
+
+	def scale_to_unit(self, unit: spux.Unit | None = None) -> typ.Self:
+		"""Encloses this function in a unit-converting function, whose output is a converted, unitless scalar.
+
+		`unit` must be manually guaranteed to be compatible with `self.unit`.
+		"""
+		if self.func_output is not None:
+			# Retrieve Output Unit
+			output_unit = self.func_output.unit
+
+			# Compile Efficient Unit-Conversion Function
+			a = self.func_output.mathtype.sp_symbol_a
+			unit_convert_expr = (
+				spux.scale_to_unit(a * output_unit, unit)
+				if self.func_output.unit is not None
+				else a
+			)
+			unit_convert_func = sp.lambdify(a, unit_convert_expr.n(), 'jax')
+
+			# Compose Unit-Converted FuncFlow
+			return self.compose_within(
+				enclosing_func=unit_convert_func,
+				supports_jax=True,
+				enclosing_func_output=self.func_output.update(unit=unit),
+			)
+
+		msg = f'Tried to scale a FuncFlow to a unit system, but it has no tracked output SimSymbol. ({self})'
+		raise ValueError(msg)
+
+	def scale_to_unit_system(
+		self, unit_system: spux.UnitSystem | None = None
+	) -> typ.Self:
+		"""Encloses this function in a unit-converting function, whose output is a converted, unitless scalar.
+
+		Using `self.output_symbol`, which tracks the units of the output, we can determine a scaling factor to multiply the (numerical) function output by in order to conform it to the given unit system.
+
+		In general, **don't use this**.
+		Any superfluous numerical operations in a data pipeline can enhance instabilities and interfere with JIT-optimization (floating-point arithmetic isn't commutative, for example).
+		However, occasionally, we need to "intercept" a lazy data flow, for example when realizing a `FlowKind.Value` that doesn't understand symbols or units - but which only accepts a float/complex scalar/array with pre-determined unit convention.
+
+		For this purpose alone, this method is provided to pre-scale a `FuncFlow`, just before using `realize()` / `__or__` and then `realize()`.
+		**To encourage proper usage** (and ease implementation), the output unit in `self.func_output` of the output will be reset to `None` - indicating that the output can only be handled as a unitless scalar w/semantic meaning tracked elsewhere.
+
+		Notes:
+			**ONLY** use with output types that support meaningful arbitrary multiplication.
+
+			A scale-only sympy expression will be used to produce an optimized JAX function of a single variable, which will then be composed onto the existing `FuncFlow`.
+
+		Parameters:
+			unit_system: The unit system to conform the function output to.
+
+		Returns:
+			A new `FuncFlow` that conforms to the new unit, but is itself now considered unitless.
+		"""
+		if self.func_output is not None:
+			# Retrieve Output Unit
+			output_unit = self.func_output.unit
+
+			# Compile Efficient Unit-Conversion Function
+			a = self.func_output.mathtype.sp_symbol_a
+			unit_convert_expr = (
+				spux.strip_unit_system(
+					spux.convert_to_unit_system(a * output_unit, unit_system)
+				)
+				if self.func_output.unit is not None
+				else a
+			)
+			unit_convert_func = sp.lambdify(a, unit_convert_expr.n(), 'jax')
+
+			# Compose Unit-Converted FuncFlow
+			return self.compose_within(
+				enclosing_func=unit_convert_func,
+				supports_jax=True,
+				enclosing_func_output=self.func_output.update(unit=None),
+			)
+
+		msg = f'Tried to scale a FuncFlow to a unit system, but it has no tracked output SimSymbol. ({self})'
+		raise ValueError(msg)

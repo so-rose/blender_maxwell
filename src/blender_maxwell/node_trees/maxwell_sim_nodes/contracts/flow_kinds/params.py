@@ -14,13 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import dataclasses
 import functools
 import typing as typ
 from fractions import Fraction
 from types import MappingProxyType
 
 import jaxtyping as jtyp
+import pydantic as pyd
 import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -28,31 +28,35 @@ from blender_maxwell.utils import logger, sim_symbols
 
 from .array import ArrayFlow
 from .expr_info import ExprInfo
-from .flow_kinds import FlowKind
 from .lazy_range import RangeFlow
 
 log = logger.get(__name__)
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class ParamsFlow:
+class ParamsFlow(pyd.BaseModel):
 	"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
 
 	Returns:
 		All symbols valid for use in the expression.
 	"""
 
-	arg_targets: list[sim_symbols.SimSymbol] = dataclasses.field(default_factory=list)
-	kwarg_targets: list[str, sim_symbols.SimSymbol] = dataclasses.field(
-		default_factory=dict
-	)
+	model_config = pyd.ConfigDict(frozen=True)
 
-	func_args: list[spux.SympyExpr] = dataclasses.field(default_factory=list)
-	func_kwargs: dict[str, spux.SympyExpr] = dataclasses.field(default_factory=dict)
+	arg_targets: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
+	kwarg_targets: dict[str, sim_symbols.SimSymbol] = pyd.Field(default_factory=dict)
+
+	func_args: list[spux.SympyExpr] = pyd.Field(default_factory=list)
+	func_kwargs: dict[str, spux.SympyExpr] = pyd.Field(default_factory=dict)
 
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
+	realized_symbols: dict[
+		sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
+	] = pyd.Field(default_factory=dict)
 
-	is_differentiable: bool = False
+	@functools.cached_property
+	def diff_symbols(self) -> set[sim_symbols.SimSymbol]:
+		"""Set of all unrealized `SimSymbol`s that can act as inputs when differentiating the function for which this `ParamsFlow` tracks arguments."""
+		return {sym for sym in self.symbols if sym.can_diff}
 
 	####################
 	# - Symbols
@@ -78,6 +82,27 @@ class ParamsFlow:
 		"""
 		return [sym.sp_symbol_matsym for sym in self.sorted_symbols]
 
+	@functools.cached_property
+	def all_sorted_symbols(self) -> list[sim_symbols.SimSymbol]:
+		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
+		key_func = lambda sym: sym.name  # noqa: E731
+		return sorted(self.symbols, key=key_func) + sorted(
+			self.realized_symbols.keys(), key=key_func
+		)
+
+	@functools.cached_property
+	def all_sorted_sp_symbols(self) -> list[sim_symbols.SimSymbol]:
+		"""Retrieves all symbols by concatenating int, real, and complex symbols, and sorting them by name.
+
+		Returns:
+			All symbols valid for use in the expression.
+		"""
+		return [sym.sp_symbol_matsym for sym in self.all_sorted_symbols]
+
 	####################
 	# - JIT'ed Callables for Numerical Function Arguments
 	####################
@@ -101,7 +126,7 @@ class ParamsFlow:
 		"""
 		return [
 			sp.lambdify(
-				self.sorted_sp_symbols,
+				self.all_sorted_sp_symbols,
 				target_sym.conform(func_arg, strip_unit=True),
 				'jax',
 			)
@@ -127,7 +152,7 @@ class ParamsFlow:
 		"""
 		return {
 			key: sp.lambdify(
-				self.sorted_sp_symbols,
+				self.all_sorted_sp_symbols,
 				self.kwarg_targets[key].conform(func_arg, strip_unit=True),
 				'jax',
 			)
@@ -142,8 +167,9 @@ class ParamsFlow:
 		symbol_values: dict[
 			sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
 		] = MappingProxyType({}),
+		allow_partial: bool = False,
 	) -> dict[
-		sp.Symbol,
+		sim_symbols.SimSymbol,
 		int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...'] :,
 	]:
 		"""Fully realize all symbols by assigning them a value.
@@ -160,10 +186,12 @@ class ParamsFlow:
 		Returns:
 			A dictionary almost with `.subs()`, other than `jax` arrays.
 		"""
-		if set(self.symbols) == set(symbol_values.keys()):
+		if allow_partial or set(self.all_sorted_symbols) == set(symbol_values.keys()):
 			realized_syms = {}
-			for sym in self.sorted_symbols:
-				sym_value = symbol_values[sym]
+			for sym in self.all_sorted_symbols:
+				sym_value = symbol_values.get(sym)
+				if sym_value is None and allow_partial:
+					continue
 
 				if isinstance(sym_value, spux.SympyType):
 					v = sym.scale(sym_value)
@@ -214,7 +242,9 @@ class ParamsFlow:
 		Parameters:
 			symbol_values: Particular values for all symbols in `self.symbols`, which will be conformed and used to compute the function arguments (before they are conformed to `self.target_syms`).
 		"""
-		realized_symbols = list(self.realize_symbols(symbol_values).values())
+		realized_symbols = list(
+			self.realize_symbols(symbol_values | self.realized_symbols).values()
+		)
 		return [func_arg_n(*realized_symbols) for func_arg_n in self.func_args_n]
 
 	def scaled_func_kwargs(
@@ -227,10 +257,11 @@ class ParamsFlow:
 
 		Other than the `dict[str, ...]` key, the semantics are identical to `self.scaled_func_args()`.
 		"""
-		realized_symbols = self.realize_symbols(symbol_values)
+		realized_symbols = self.realize_symbols(symbol_values | self.realized_symbols)
+
 		return {
-			func_arg_name: func_arg_n(**realized_symbols)
-			for func_arg_name, func_arg_n in self.func_kwargs_n.items()
+			func_arg_name: func_kwarg_n(**realized_symbols)
+			for func_arg_name, func_kwarg_n in self.func_kwargs_n.items()
 		}
 
 	####################
@@ -251,7 +282,7 @@ class ParamsFlow:
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			symbols=self.symbols | other.symbols,
-			is_differentiable=self.is_differentiable and other.is_differentiable,
+			realized_symbols=self.realized_symbols | other.realized_symbols,
 		)
 
 	def compose_within(
@@ -261,7 +292,6 @@ class ParamsFlow:
 		enclosing_func_args: list[spux.SympyExpr] = (),
 		enclosing_func_kwargs: dict[str, spux.SympyExpr] = MappingProxyType({}),
 		enclosing_symbols: frozenset[sim_symbols.SimSymbol] = frozenset(),
-		enclosing_is_differentiable: bool = False,
 	) -> typ.Self:
 		return ParamsFlow(
 			arg_targets=self.arg_targets + list(enclosing_arg_targets),
@@ -269,12 +299,40 @@ class ParamsFlow:
 			func_args=self.func_args + list(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			symbols=self.symbols | enclosing_symbols,
-			is_differentiable=(
-				self.is_differentiable
-				if not enclosing_symbols
-				else (self.is_differentiable & enclosing_is_differentiable)
-			),
+			realized_symbols=self.realized_symbols,
 		)
+
+	def realize_partial(
+		self,
+		symbol_values: dict[
+			sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
+		],
+	) -> typ.Self:
+		"""Provide a particular expression/range/array to realize some symbols.
+
+		Essentially removes symbols from `self.symbols`, and adds the symbol w/value to `self.realized_symbols`.
+		As a result, only the still-unrealized symbols need to be passed at the time of realization (using ex. `self.scaled_func_args()`).
+
+		Parameters:
+			symbol_values: The value to realize for each `SimSymbol`.
+				**All keys** must be identically matched to a single element of `self.symbol`.
+				Can be empty, in which case an identical new `ParamsFlow` will be returned.
+
+		Raises:
+			ValueError: If any symbol in `symbol_values`
+		"""
+		syms = set(symbol_values.keys())
+		if syms.issubset(self.symbols) or not syms:
+			return ParamsFlow(
+				arg_targets=self.arg_targets,
+				kwarg_targets=self.kwarg_targets,
+				func_args=self.func_args,
+				func_kwargs=self.func_kwargs,
+				symbols=self.symbols - syms,
+				realized_symbols=self.realized_symbols | symbol_values,
+			)
+		msg = f'ParamsFlow: Not all partially realized symbols are defined on the ParamsFlow (symbols={self.symbols}, symbol_values={symbol_values})'
+		raise ValueError(msg)
 
 	####################
 	# - Generate ExprSocketDef

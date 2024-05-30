@@ -130,6 +130,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			'physical_type',
 			'unit',
 			'size',
+			'value',
 		}
 	)
 	def output_sym(self) -> sim_symbols.SimSymbol | None:
@@ -140,13 +141,29 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Raises:
 			NotImplementedError: When `active_kind` is neither `Value`, `Func`, or `Range`.
 		"""
-		if self.symbols:
-			if self.active_kind in [ct.FlowKind.Value, ct.FlowKind.Func]:
+		match self.active_kind:
+			case ct.FlowKind.Value | ct.FlowKind.Func if self.symbols:
 				return self._parse_expr_symbol(
 					self._parse_expr_str(self.raw_value_spstr)
 				)
 
-			if self.active_kind is ct.FlowKind.Range:
+			case ct.FlowKind.Value | ct.FlowKind.Func if not self.symbols:
+				return sim_symbols.SimSymbol(
+					sym_name=self.output_name,
+					mathtype=self.mathtype,
+					physical_type=self.physical_type,
+					unit=self.unit,
+					rows=self.size.rows,
+					cols=self.size.cols,
+					exclude_zero=(
+						not self.value.is_zero
+						if self.value.is_zero is not None
+						else False
+					),
+					## TODO: Does this work for matrix elements?
+				)
+
+			case ct.FlowKind.Range if self.symbols:
 				## TODO: Support RangeFlow
 				## -- It's hard; we need a min-span set over bound domains.
 				## -- We... Don't use this anywhere. Yet?
@@ -159,20 +176,37 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				msg = 'RangeFlow support not yet implemented for when self.symbols is not empty'
 				raise NotImplementedError(msg)
 
-			raise NotImplementedError
+			case ct.FlowKind.Range if not self.symbols:
+				return sim_symbols.SimSymbol(
+					sym_name=self.output_name,
+					mathtype=self.mathtype,
+					physical_type=self.physical_type,
+					unit=self.unit,
+					rows=self.lazy_range.steps,
+					cols=1,
+					exclude_zero=not self.lazy_range.is_always_nonzero,
+				)
 
-		return sim_symbols.SimSymbol(
-			sym_name=self.output_name,
-			mathtype=self.mathtype,
-			physical_type=self.physical_type,
-			unit=self.unit,
-			rows=self.size.rows,
-			cols=self.size.cols,
-		)
+	####################
+	# - Value|Range Swapper
+	####################
+	use_value_range_swapper: bool = bl_cache.BLField(False)
+	selected_value_range: ct.FlowKind = bl_cache.BLField(
+		enum_cb=lambda self, _: self._value_or_range(),
+	)
+
+	def _value_or_range(self):
+		return [
+			flow_kind.bl_enum_element(i)
+			for i, flow_kind in enumerate([ct.FlowKind.Value, ct.FlowKind.Range])
+		]
 
 	####################
 	# - Symbols
 	####################
+	lazy_range_name: sim_symbols.SimSymbolName = bl_cache.BLField(
+		sim_symbols.SimSymbolName.Expr
+	)
 	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.Expr
 	)
@@ -343,7 +377,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 			See `MaxwellSimTree` for more detail on the link callbacks.
 		"""
-		## NODE: Depends on suppressed on_prop_changed
+		## NOTE: Depends on suppressed on_prop_changed
 
 		if ct.FlowKind.Info in socket_kinds:
 			info = self.compute_data(kind=ct.FlowKind.Info)
@@ -371,7 +405,10 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 			See `MaxwellSimTree` for more detail on the link callbacks.
 		"""
-		## NODE: Depends on suppressed on_prop_changed
+		## NOTE: Depends on suppressed on_prop_changed
+		if ('selected_value_range', 'invalidate') in cleared_blfields:
+			self.active_kind = self.selected_value_range
+			self.on_active_kind_changed()
 
 		# Conditional Unit-Conversion
 		## -> This is niche functionality, but the only way to convert units.
@@ -757,7 +794,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	@bl_cache.cached_bl_property(
 		depends_on={
 			'value',
-			'symbols',
 			'sorted_sp_symbols',
 			'sorted_symbols',
 			'output_sym',
@@ -769,82 +805,87 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be the arguments of the `FuncFlow`.
 		Otherwise, the returned lazy value function will be a simple excuse for `self.params` to pass the verbatim `self.value`.
 		"""
-		# Symbolic
-		## -> `self.value` is guaranteed to be an expression with unknowns.
-		## -> The function computes `self.value` with unknowns as arguments.
-		if self.symbols:
-			value = self.value
-			has_value = not ct.FlowSignal.check(value)
+		if self.output_sym is not None:
+			match self.active_kind:
+				case ct.FlowKind.Value | ct.FlowKind.Func if (
+					self.sorted_symbols and not ct.FlowSignal.check(self.value)
+				):
+					return ct.FuncFlow(
+						func=sp.lambdify(
+							self.sorted_sp_symbols,
+							self.output_sym.conform(self.value, strip_unit=True),
+							'jax',
+						),
+						func_args=list(self.sorted_symbols),
+						func_output=self.output_sym,
+						supports_jax=True,
+					)
 
-			output_sym = self.output_sym
-			if output_sym is not None and has_value:
-				return ct.FuncFlow(
-					func=sp.lambdify(
-						self.sorted_sp_symbols,
-						output_sym.conform(value, strip_unit=True),
-						'jax',
-					),
-					func_args=list(self.sorted_symbols),
-					supports_jax=True,
-				)
-			return ct.FlowSignal.FlowPending
+				case ct.FlowKind.Value | ct.FlowKind.Func if not self.sorted_symbols:
+					return ct.FuncFlow(
+						func=lambda v: v,
+						func_args=[self.output_sym],
+						func_output=self.output_sym,
+						supports_jax=True,
+					)
 
-		# Constant
-		## -> When a `self.value` has no unknowns, use a dummy function.
-		## -> ("Dummy" as in returns the same argument that it takes).
-		## -> This is an excuse to let `ParamsFlow` pass `self.value` verbatim.
-		## -> Generally only useful for operations with other expressions.
-		return ct.FuncFlow(
-			func=lambda v: v,
-			func_args=[self.output_sym],
-			supports_jax=True,
-		)
+				case ct.FlowKind.Range if self.sorted_symbols:
+					msg = 'RangeFlow support not yet implemented for when self.sorted_symbols is not empty'
+					raise NotImplementedError(msg)
 
-	@bl_cache.cached_bl_property(depends_on={'sorted_symbols'})
-	def is_differentiable(self) -> bool:
-		"""Whether all symbols are differentiable.
+				case ct.FlowKind.Range if (
+					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
+				):
+					return ct.FuncFlow(
+						func=lambda v: v,
+						func_args=[self.output_sym],
+						func_output=self.output_sym,
+						supports_jax=True,
+					)
 
-		If there are no symbols, then there is nothing to differentiate, and thus the expression is differentiable.
-		"""
-		if not self.sorted_symbols:
-			return True
+		return ct.FlowSignal.FlowPending
 
-		return all(
-			sym.mathtype in [spux.MathType.Real, spux.MathType.Complex]
-			for sym in self.sorted_symbols
-		)
-
-	@bl_cache.cached_bl_property(depends_on={'sorted_symbols', 'output_sym', 'value'})
+	@bl_cache.cached_bl_property(
+		depends_on={'sorted_symbols', 'output_sym', 'value', 'lazy_range'}
+	)
 	def params(self) -> ct.ParamsFlow:
 		"""Returns parameter symbols/values to accompany `self.lazy_func`.
 
 		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be passed into `ParamsFlow`, which will thus be parameterized (and require realization before use).
 		Otherwise, `self.value` is passed verbatim as the only `ParamsFlow.func_arg`.
 		"""
-		# Symbolic
-		## -> The Expr socket does not declare actual values for the symbols.
-		## -> They should be realized later, ex. in a Viz node.
-		## -> Therefore, we just dump the symbols. Easy!
-		## -> NOTE: func_args must have the same symbol order as was lambdified.
-		if self.sorted_symbols:
-			output_sym = self.output_sym
-			if output_sym is not None:
-				return ct.ParamsFlow(
-					arg_targets=list(self.sorted_symbols),
-					func_args=[sym.sp_symbol for sym in self.sorted_symbols],
-					symbols=self.sorted_symbols,
-					is_differentiable=self.is_differentiable,
-				)
-			return ct.FlowSignal.FlowPending
+		output_sym = self.output_sym
+		if output_sym is not None:
+			match self.active_kind:
+				case ct.FlowKind.Value | ct.FlowKind.Func if self.sorted_symbols:
+					return ct.ParamsFlow(
+						arg_targets=list(self.sorted_symbols),
+						func_args=[sym.sp_symbol for sym in self.sorted_symbols],
+						symbols=set(self.sorted_symbols),
+					)
 
-		# Constant
-		## -> Simply pass self.value verbatim as a function argument.
-		## -> Easy dice, easy life!
-		return ct.ParamsFlow(
-			arg_targets=[self.output_sym],
-			func_args=[self.value],
-			is_differentiable=self.is_differentiable,
-		)
+				case ct.FlowKind.Value | ct.FlowKind.Func if (
+					not self.sorted_symbols and not ct.FlowSignal.check(self.value)
+				):
+					return ct.ParamsFlow(
+						arg_targets=[self.output_sym],
+						func_args=[self.value],
+					)
+
+				case ct.FlowKind.Range if self.sorted_symbols:
+					msg = 'RangeFlow support not yet implemented for when self.sorted_symbols is not empty'
+					raise NotImplementedError(msg)
+
+				case ct.FlowKind.Range if (
+					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
+				):
+					return ct.ParamsFlow(
+						arg_targets=[self.output_sym],
+						func_args=[self.output_sym.sp_symbol_matsym],
+						symbols={self.output_sym},
+					).realize_partial({self.output_sym: self.lazy_range})
+
+		return ct.FlowSignal.FlowPending
 
 	@bl_cache.cached_bl_property(depends_on={'sorted_symbols', 'output_sym'})
 	def info(self) -> ct.InfoFlow:
@@ -858,21 +899,33 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		Otherwise, only the output name/size/mathtype/unit corresponding to the socket is passed along.
 		"""
-		# Constant
-		## -> The input SimSymbols become continuous dimensional indices.
-		## -> All domain validity information is defined on the SimSymbol keys.
-		if self.sorted_symbols:
-			output_sym = self.output_sym
-			if output_sym is not None:
-				return ct.InfoFlow(
-					dims={sym: None for sym in self.sorted_symbols},
-					output=self.output_sym,
-				)
-			return ct.FlowSignal.FlowPending
+		output_sym = self.output_sym
+		if output_sym is not None:
+			match self.active_kind:
+				case ct.FlowKind.Value | ct.FlowKind.Func if self.sorted_symbols:
+					return ct.InfoFlow(
+						dims={sym: None for sym in self.sorted_symbols},
+						output=self.output_sym,
+					)
 
-		# Constant
-		## -> We only need the output symbol to describe the raw data.
-		return ct.InfoFlow(output=self.output_sym)
+				case ct.FlowKind.Value | ct.FlowKind.Func if (
+					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
+				):
+					return ct.InfoFlow(output=self.output_sym)
+
+				case ct.FlowKind.Range if self.sorted_symbols:
+					msg = 'InfoFlow support not yet implemented for when self.sorted_symbols is not empty'
+					raise NotImplementedError(msg)
+
+				case ct.FlowKind.Range if (
+					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
+				):
+					return ct.InfoFlow(
+						dims={self.output_sym: self.lazy_range},
+						output=self.output_sym.update(rows=1),
+					)
+
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - FlowKind: Capabilities
@@ -1039,6 +1092,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 			However, `draw_value` may also be called by the `draw_*` methods of other `FlowKinds`, who may choose to layer more flexibility around this base UI.
 		"""
+		if self.use_value_range_swapper:
+			col.prop(self, self.blfields['selected_value_range'], text='')
+
 		if self.symbols:
 			col.prop(self, self.blfields['raw_value_spstr'], text='')
 
@@ -1097,6 +1153,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			If `self.steps == 0`, then the `Range` is considered to have a to-be-determined number of steps.
 			As such, `self.steps` won't be exposed in the UI.
 		"""
+		if self.use_value_range_swapper:
+			col.prop(self, self.blfields['selected_value_range'], text='')
+
 		if self.symbols:
 			col.prop(self, self.blfields['raw_min_spstr'], text='')
 			col.prop(self, self.blfields['raw_max_spstr'], text='')
@@ -1198,13 +1257,11 @@ class ExprBLSocket(base.MaxwellSimSocket):
 # - Socket Configuration
 ####################
 class ExprSocketDef(base.SocketDef):
+	"""Interface for defining an `ExprSocket`."""
+
 	socket_type: ct.SocketType = ct.SocketType.Expr
-	active_kind: typ.Literal[
-		ct.FlowKind.Value,
-		ct.FlowKind.Range,
-		ct.FlowKind.Func,
-	] = ct.FlowKind.Value
 	output_name: sim_symbols.SimSymbolName = sim_symbols.SimSymbolName.Expr
+	use_value_range_swapper: bool = False
 
 	# Socket Interface
 	size: spux.NumberSize1D = spux.NumberSize1D.Scalar
@@ -1458,7 +1515,7 @@ class ExprSocketDef(base.SocketDef):
 		# Check ActiveKind and Size
 		## -> NOTE: This doesn't protect against dynamic changes to either.
 		if (
-			self.active_kind == ct.FlowKind.Range
+			self.active_kind is ct.FlowKind.Range
 			and self.size is not spux.NumberSize1D.Scalar
 		):
 			msg = "Can't have a non-Scalar size when Range is set as the active kind."
@@ -1504,9 +1561,9 @@ class ExprSocketDef(base.SocketDef):
 	# - Initialization
 	####################
 	def init(self, bl_socket: ExprBLSocket) -> None:
-		bl_socket.active_kind = self.active_kind
 		bl_socket.output_name = self.output_name
 		bl_socket.use_linked_capabilities = True
+		bl_socket.use_value_range_swapper = self.use_value_range_swapper
 
 		# Socket Interface
 		## -> Recall that auto-updates are turned off during init()
@@ -1542,6 +1599,25 @@ class ExprSocketDef(base.SocketDef):
 
 		# Info Draw
 		bl_socket.use_info_draw = True
+
+	def local_compare(self, bl_socket: ExprBLSocket) -> None:
+		"""Determine whether an updateable socket should be re-initialized from this `SocketDef`."""
+
+		def cmp(attr: str):
+			return getattr(bl_socket, attr) == getattr(self, attr)
+
+		return (
+			bl_socket.use_linked_capabilities
+			and cmp('output_name')
+			and cmp('use_value_range_swapper')
+			and cmp('size')
+			and cmp('mathtype')
+			and cmp('physical_type')
+			and cmp('show_func_ui')
+			and cmp('show_info_columns')
+			and cmp('show_name_selector')
+			and bl_socket.use_info_draw
+		)
 
 
 ####################

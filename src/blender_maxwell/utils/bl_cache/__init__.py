@@ -16,10 +16,10 @@
 
 """Package providing various tools to handle cached data on Blender objects, especially nodes and node socket classes."""
 
+from ..keyed_cache import KeyedCache, keyed_cache
 from .bl_field import BLField
 from .bl_prop import BLProp, BLPropType
 from .cached_bl_property import CachedBLProperty, cached_bl_property
-from .keyed_cache import KeyedCache, keyed_cache
 from .managed_cache import invalidate_nonpersist_instance_id
 from .signal import Signal
 

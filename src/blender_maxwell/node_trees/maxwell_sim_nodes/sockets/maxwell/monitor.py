@@ -29,11 +29,11 @@ class MaxwellMonitorBLSocket(base.MaxwellSimSocket):
 class MaxwellMonitorSocketDef(base.SocketDef):
 	socket_type: ct.SocketType = ct.SocketType.MaxwellMonitor
 
-	is_list: bool = False
-
 	def init(self, bl_socket: MaxwellMonitorBLSocket) -> None:
-		if self.is_list:
-			bl_socket.active_kind = ct.FlowKind.Array
+		pass
+
+	def local_compare(self, _: MaxwellMonitorBLSocket) -> None:
+		return True
 
 
 ####################

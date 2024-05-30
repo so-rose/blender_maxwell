@@ -29,6 +29,8 @@ from ... import base, events
 
 
 class ScientificConstantNode(base.MaxwellSimNode):
+	"""A well-known constant usable as itself, or as a symbol."""
+
 	node_type = ct.NodeType.ScientificConstant
 	bl_label = 'Scientific Constant'
 
@@ -88,6 +90,11 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	####################
 	# - UI
 	####################
+	def draw_label(self):
+		if self.sci_constant_str:
+			return f'Const: {self.sci_constant_str}'
+		return self.bl_label
+
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
 		col.prop(self, self.blfields['sci_constant_str'], text='')
 
@@ -156,6 +163,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		props={'sci_constant', 'sci_constant_sym'},
 	)
 	def compute_lazy_func(self, props) -> typ.Any:
+		"""Simple `FuncFlow` that computes the symbol value, with output units tracked correctly."""
 		sci_constant = props['sci_constant']
 		sci_constant_sym = props['sci_constant_sym']
 
@@ -165,6 +173,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 					[sci_constant_sym.sp_symbol], sci_constant_sym.sp_symbol, 'jax'
 				),
 				func_args=[sci_constant_sym],
+				func_output=sci_constant_sym,
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending
@@ -175,6 +184,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		props={'sci_constant_sym'},
 	)
 	def compute_info(self, props: dict) -> typ.Any:
+		"""Simple `FuncFlow` that computes the symbol value, with output units tracked correctly."""
 		sci_constant_sym = props['sci_constant_sym']
 
 		if sci_constant_sym is not None:
@@ -193,8 +203,12 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		if sci_constant is not None and sci_constant_sym is not None:
 			return ct.ParamsFlow(
 				arg_targets=[sci_constant_sym],
-				func_args=[sci_constant],
-				is_differentiable=True,
+				func_args=[sci_constant_sym.sp_symbol],
+				symbols={sci_constant_sym},
+			).realize_partial(
+				{
+					sci_constant_sym: sci_constant,
+				}
 			)
 		return ct.FlowSignal.FlowPending
 

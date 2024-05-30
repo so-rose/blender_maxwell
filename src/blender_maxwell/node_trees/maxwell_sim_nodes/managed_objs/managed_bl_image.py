@@ -16,7 +16,7 @@
 
 """Declares `ManagedBLImage`."""
 
-# import time
+import time
 import typing as typ
 
 import bpy
@@ -261,7 +261,7 @@ class ManagedBLImage(base.ManagedObj):
 		dpi: int | None = None,
 		bl_select: bool = False,
 	):
-		# times = [time.perf_counter()]
+		times = ['START', time.perf_counter()]
 
 		# Compute Plot Dimensions
 		# aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (
@@ -277,22 +277,22 @@ class ManagedBLImage(base.ManagedObj):
 		# _width_inches, _height_inches, _dpi
 		# )
 		fig, canvas, ax = image_ops.mpl_fig_canvas_ax(width_inches, height_inches, dpi)
-		# times.append(['MPL Fig Canvas Axis', time.perf_counter() - times[0]])
+		times.append(['MPL Fig Canvas Axis', time.perf_counter() - times[0]])
 
 		# fig.clear()
 		ax.clear()
-		# times.append(['Clear Axis', time.perf_counter() - times[0]])
+		times.append(['Clear Axis', time.perf_counter() - times[0]])
 
 		# Plot w/User Parameter
 		func_plotter(ax)
-		# times.append(['Plot!', time.perf_counter() - times[0]])
+		times.append(['Plot!', time.perf_counter() - times[0]])
 
 		# Save Figure to BytesIO
 		canvas.draw()
-		# times.append(['Draw Pixels', time.perf_counter() - times[0]])
+		times.append(['Draw Pixels', time.perf_counter() - times[0]])
 
 		canvas_width_px, canvas_height_px = fig.canvas.get_width_height()
-		# times.append(['Get Canvas Dims', time.perf_counter() - times[0]])
+		times.append(['Get Canvas Dims', time.perf_counter() - times[0]])
 		image_data = (
 			np.float32(
 				np.flipud(
@@ -303,7 +303,7 @@ class ManagedBLImage(base.ManagedObj):
 			)
 			/ 255
 		)
-		# times.append(['Load Data from Canvas', time.perf_counter() - times[0]])
+		times.append(['Load Data from Canvas', time.perf_counter() - times[0]])
 
 		# Optimized Write to Blender Image
 		bl_image = self.bl_image(canvas_width_px, canvas_height_px, 'RGBA', 'uint8')

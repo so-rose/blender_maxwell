@@ -43,17 +43,28 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 	"""
 
 	socket_type: ct.SocketType
+	active_kind: typ.Literal[
+		ct.FlowKind.Value,
+		ct.FlowKind.Array,
+		ct.FlowKind.Range,
+		ct.FlowKind.Func,
+	] = ct.FlowKind.Value
 
+	####################
+	# - Socket Interaction
+	####################
 	def preinit(self, bl_socket: bpy.types.NodeSocket) -> None:
 		"""Pre-initialize a real Blender node socket from this socket definition.
 
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
-		log.debug('%s: Start Socket Preinit', bl_socket.bl_label)
+		# log.debug('%s: Start Socket Preinit', bl_socket.bl_label)
 		bl_socket.reset_instance_id()
 		bl_socket.regenerate_dynamic_field_persistance()
-		log.debug('%s: End Socket Preinit', bl_socket.bl_label)
+
+		bl_socket.active_kind = self.active_kind
+		# log.debug('%s: End Socket Preinit', bl_socket.bl_label)
 
 	def postinit(self, bl_socket: bpy.types.NodeSocket) -> None:
 		"""Pre-initialize a real Blender node socket from this socket definition.
@@ -61,12 +72,12 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
-		log.debug('%s: Start Socket Postinit', bl_socket.bl_label)
+		# log.debug('%s: Start Socket Postinit', bl_socket.bl_label)
 		bl_socket.is_initializing = False
 		bl_socket.on_active_kind_changed()
 		bl_socket.on_socket_props_changed(set(bl_socket.blfields))
 		bl_socket.on_data_changed(set(ct.FlowKind))
-		log.debug('%s: End Socket Postinit', bl_socket.bl_label)
+		# log.debug('%s: End Socket Postinit', bl_socket.bl_label)
 
 	@abc.abstractmethod
 	def init(self, bl_socket: bpy.types.NodeSocket) -> None:
@@ -75,6 +86,43 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 		Parameters:
 			bl_socket: The Blender node socket to alter using data from this SocketDef.
 		"""
+
+	####################
+	# - Comparison
+	####################
+	def compare(self, bl_socket: bpy.types.NodeSocket) -> bool:
+		"""Whether this `SocketDef` can be considered to uniquely define the given `bl_socket`.
+
+		The general criteria for "uniquely defines" is whether **the same `bl_socket`** could be created using this `SocketDef`.
+		The extent to which user-altered properties are considered in this regard is a matter of taste, encapsulated entirely within `self.local_compare()`.
+
+		Notes:
+			Used when determining whether to replace sockets with newer variants when synchronizing changes.
+
+			**NOTE**: Removing/replacing loose input sockets
+
+		Parameters:
+			bl_socket: The Blender node socket to alter using data from this SocketDef.
+		"""
+		return (
+			bl_socket.socket_type is self.socket_type
+			and bl_socket.active_kind is self.active_kind
+			and self.local_compare(bl_socket)
+		)
+
+	def local_compare(self, bl_socket: bpy.types.NodeSocket) -> None:
+		"""Compare this `SocketDef` to an established `bl_socket` in a manner specific to the node.
+
+		Notes:
+			Run by `self.compare()`.
+			Optionally overriden by individual sockets.
+
+			When not overridden, it will always return `False`, indicating that the socket is _never_ uniquely defined by this `SocketDef`.
+
+		Parameters:
+			bl_socket: The Blender node socket to alter using data from this SocketDef.
+		"""
+		return False
 
 	####################
 	# - Serialization
@@ -426,7 +474,33 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Parameters:
 			socket_kinds: The altered `ct.FlowKind`s flowing through.
 		"""
+		# Run Socket Callbacks
 		self.on_socket_data_changed(socket_kinds)
+
+		# Mark Active FlowKind Links as Invalid
+		## -> Mark link as invalid (very red) if a FlowSignal is traveling.
+		## -> This helps explain why whatever isn't working isn't working.
+		## -> TODO: We need a different approach.
+		# log.debug(
+		# '[%s] Checking FlowKind Validity (socket_kinds=%s)',
+		# self.name,
+		# str(socket_kinds),
+		# )
+		# if self.is_linked and not self.is_output:
+		# link = self.links[0]
+		# linked_flow = self.compute_data(kind=self.active_kind)
+
+		# if (
+		# link.is_valid
+		# and self.active_kind in socket_kinds
+		# and ct.FlowSignal.check_single(linked_flow, ct.FlowSignal.FlowPending)
+		# ):
+		# node_tree = self.id_data
+		# node_tree.report_link_validity(link, False)
+
+		# elif not link.is_valid:
+		# node_tree = self.id_data
+		# node_tree.report_link_validity(link, True)
 
 	def on_socket_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
 		"""Called when `ct.FlowEvent.DataChanged` flows through this socket.
@@ -479,7 +553,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 				The value of `ct.FlowEvent.flow_direction[event]` (`input` or `output`) determines the direction that an event flows.
 		"""
 		# log.debug(
-		# '[%s] [%s] Triggered (socket_kinds=%s)',
+		# '[%s] [%s] Socket Triggered (socket_kinds=%s)',
 		# self.name,
 		# event,
 		# str(socket_kinds),
@@ -757,7 +831,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
 		# Return Single Value / List of Values
-		## -> Multi-input sockets are not yet supported.
+		## -> Multi-input sockets are not (yet) supported.
 		if linked_values:
 			return linked_values[0]
 
@@ -891,10 +965,14 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 			# FlowKind Draw Row
 			col = row.column(align=True)
 			{
+				ct.FlowKind.Capabilities: lambda *_: None,
+				ct.FlowKind.Previews: lambda *_: None,
 				ct.FlowKind.Value: self.draw_value,
 				ct.FlowKind.Array: self.draw_array,
 				ct.FlowKind.Range: self.draw_lazy_range,
 				ct.FlowKind.Func: self.draw_lazy_func,
+				ct.FlowKind.Params: lambda *_: None,
+				ct.FlowKind.Info: lambda *_: None,
 			}[self.active_kind](col)
 
 		# Info Drawing

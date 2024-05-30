@@ -216,10 +216,11 @@ class SymbolConstantNode(base.MaxwellSimNode):
 		props={'symbol'},
 	)
 	def compute_lazy_func(self, props) -> typ.Any:
-		sp_sym = props['symbol'].sp_symbol
+		sym = props['symbol']
 		return ct.FuncFlow(
-			func=sp.lambdify(sp_sym, sp_sym, 'jax'),
-			func_args=[sp_sym],
+			func=sp.lambdify(sym.sp_symbol_matsym, sym.sp_symbol_matsym, 'jax'),
+			func_args=[sym],
+			func_output=sym,
 			supports_jax=True,
 		)
 
@@ -235,6 +236,7 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	)
 	def compute_info(self, props) -> typ.Any:
 		return ct.InfoFlow(
+			dims={props['symbol']: None},
 			output=props['symbol'],
 		)
 
@@ -251,9 +253,6 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			arg_targets=[sym],
 			func_args=[sym.sp_symbol],
 			symbols={sym},
-			is_differentiable=(
-				sym.mathtype in [spux.MathType.Real, spux.MathType.Complex]
-			),
 		)
 
 

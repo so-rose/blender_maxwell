@@ -18,6 +18,7 @@ import enum
 import functools
 import typing as typ
 
+from blender_maxwell.contracts import BLEnumElement
 from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger
 from blender_maxwell.utils.staticproperty import staticproperty
@@ -99,6 +100,17 @@ class FlowKind(enum.StrEnum):
 	def to_icon(_: typ.Self) -> str:
 		return ''
 
+	@property
+	def name(self) -> str:
+		return FlowKind.to_name(self)
+
+	@property
+	def icon(self) -> str:
+		return FlowKind.to_icon(self)
+
+	def bl_enum_element(self, i) -> BLEnumElement:
+		return (str(self), self.name, self.name, self.icon, i)
+
 	####################
 	# - Static Properties
 	####################
@@ -162,7 +174,7 @@ class FlowKind(enum.StrEnum):
 	def socket_shape(self) -> str:
 		"""Return the socket shape associated with this `FlowKind`.
 
-		**ONLY** valid for `FlowKind`s that can be considered "active".
+		Should generally only be used with `active_kinds`.
 
 		Raises:
 			ValueError: If this `FlowKind` cannot ever be considered "active".
@@ -172,7 +184,7 @@ class FlowKind(enum.StrEnum):
 			FlowKind.Array: 'SQUARE',
 			FlowKind.Range: 'SQUARE',
 			FlowKind.Func: 'DIAMOND',
-		}[self]
+		}.get(self, 'CIRCLE')
 
 	####################
 	# - Class Methods

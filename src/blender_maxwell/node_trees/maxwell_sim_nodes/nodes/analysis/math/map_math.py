@@ -547,22 +547,30 @@ class MapMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
+		# Loaded
 		kind=ct.FlowKind.Func,
 		props={'operation'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
 			'Expr': ct.FlowKind.Func,
 		},
+		output_sockets={'Expr'},
+		output_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_func(self, props, input_sockets) -> ct.FuncFlow | ct.FlowSignal:
-		operation = props['operation']
+	def compute_func(
+		self, props, input_sockets, output_sockets
+	) -> ct.FuncFlow | ct.FlowSignal:
 		expr = input_sockets['Expr']
+		output_info = output_sockets['Expr']
 
 		has_expr = not ct.FlowSignal.check(expr)
+		has_output_info = not ct.FlowSignal.check(output_info)
 
+		operation = props['operation']
 		if has_expr and operation is not None:
 			return expr.compose_within(
 				operation.jax_func,
+				enclosing_func_output=output_info.output,
 				supports_jax=True,
 			)
 		return ct.FlowSignal.FlowPending

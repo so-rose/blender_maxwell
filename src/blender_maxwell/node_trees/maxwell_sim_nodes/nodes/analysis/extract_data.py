@@ -358,6 +358,11 @@ class ExtractDataNode(base.MaxwellSimNode):
 				## -> Those string labels explain the integer as ex. Ex, Ey, Hy.
 				idx_labels = valid_monitor_attrs(sim_data, monitor_name)
 
+				# Extract Info
+				## -> We only need the output symbol.
+				## -> All labelled outputs have the same output SimSymbol.
+				info = extract_info(monitor_data, idx_labels[0])
+
 				# Generate FuncFlow Per Index Label
 				## -> We extract each XArray as an attribute of monitor_data.
 				## -> We then bind its values into a unique func_flow.
@@ -377,7 +382,8 @@ class ExtractDataNode(base.MaxwellSimNode):
 				## -> Then, 'compose_within' lets us stack them along axis=0.
 				## -> The "new" axis=0 is int-indexed axis w/idx_labels labels!
 				return functools.reduce(lambda a, b: a | b, func_flows).compose_within(
-					enclosing_func=lambda data: jnp.stack(data, axis=0)
+					lambda data: jnp.stack(data, axis=0),
+					func_output=info.output,
 				)
 			return ct.FlowSignal.FlowPending
 		return ct.FlowSignal.FlowPending

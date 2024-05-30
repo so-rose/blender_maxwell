@@ -198,9 +198,10 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		'Expr',
 		kind=ct.FlowKind.Func,
 		# Loaded
+		props={'output_name', 'output_mathtype', 'output_physical_type', 'output_unit'},
 		input_sockets={'File Path'},
 	)
-	def compute_func(self, input_sockets) -> td.Simulation:
+	def compute_func(self, props, input_sockets) -> td.Simulation:
 		"""Declare a lazy, composable function that returns the loaded data.
 
 		Returns:
@@ -209,6 +210,12 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		file_path = input_sockets['File Path']
 		has_file_path = not ct.FlowSignal.check(file_path)
 
+		func_output = sim_symbols.SimSymbol(
+			sym_name=props['output_name'],
+			mathtype=props['output_mathtype'],
+			physical_type=props['output_physical_type'],
+			unit=props['output_unit'],
+		)
 		if has_file_path and file_path is not None:
 			data_file_format = ct.DataFileFormat.from_path(file_path)
 			if data_file_format is not None:
@@ -217,13 +224,18 @@ class DataFileImporterNode(base.MaxwellSimNode):
 				if data_file_format.loader_is_jax_compatible:
 					return ct.FuncFlow(
 						func=lambda: data_file_format.loader(file_path),
+						func_output=func_output,
 						supports_jax=True,
 					)
 
 				# No Jax Compatibility: Eager Data Loading
 				## -> Load the data now and bind it.
 				data = data_file_format.loader(file_path)
-				return ct.FuncFlow(func=lambda: data, supports_jax=True)
+				return ct.FuncFlow(
+					func=lambda: data,
+					func_output=func_output,
+					supports_jax=True,
+				)
 			return ct.FlowSignal.FlowPending
 		return ct.FlowSignal.FlowPending
 

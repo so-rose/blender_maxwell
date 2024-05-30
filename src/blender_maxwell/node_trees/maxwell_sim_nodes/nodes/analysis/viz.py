@@ -406,7 +406,7 @@ class VizNode(base.MaxwellSimNode):
 		},
 		all_loose_input_sockets=True,
 	)
-	def compute_dummy_value(self, props, input_sockets, loose_input_sockets):
+	def compute_previews(self, props, input_sockets, loose_input_sockets):
 		"""Needed for the plot to regenerate in the viewer."""
 		return ct.PreviewsFlow(bl_image_name=props['sim_node_name'])
 
@@ -433,7 +433,7 @@ class VizNode(base.MaxwellSimNode):
 	def on_show_plot(
 		self, managed_objs, props, input_sockets, loose_input_sockets
 	) -> None:
-		log.critical('Show Plot (too many times)')
+		log.debug('Show Plot')
 		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
 		info = input_sockets['Expr'][ct.FlowKind.Info]
 		params = input_sockets['Expr'][ct.FlowKind.Params]
@@ -456,6 +456,7 @@ class VizNode(base.MaxwellSimNode):
 					sym: loose_input_sockets[sym.name] for sym in params.sorted_symbols
 				},
 			)
+			## TODO: CACHE entries that don't change, PLEASEEE
 
 			# Match Viz Type & Perform Visualization
 			## -> Viz Target determines how to plot.

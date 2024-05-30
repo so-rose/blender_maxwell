@@ -18,9 +18,13 @@ import functools
 import inspect
 import typing as typ
 
-from blender_maxwell.utils import bl_instance, logger, serialize
+from blender_maxwell.utils import logger, serialize
 
 log = logger.get(__name__)
+
+
+class BLInstance(typ.Protocol):
+	instance_id: str
 
 
 class KeyedCache:
@@ -75,8 +79,8 @@ class KeyedCache:
 
 	def __get__(
 		self,
-		bl_instance: bl_instance.BLInstance | None,
-		owner: type[bl_instance.BLInstance],
+		bl_instance: BLInstance | None,
+		owner: type[BLInstance],
 	) -> typ.Callable:
 		_func = functools.partial(self, bl_instance)
 		_func.invalidate = functools.partial(
@@ -110,7 +114,7 @@ class KeyedCache:
 
 	def invalidate(
 		self,
-		bl_instance: bl_instance.BLInstance | None,
+		bl_instance: BLInstance | None,
 		**arguments: dict[str, typ.Any],
 	) -> dict[str, typ.Any]:
 		# Determine Wildcard Arguments

@@ -88,28 +88,27 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Structure',
 		kind=ct.FlowKind.Value,
 		# Loaded
-		props={'differentiable'},
 		input_sockets={'Medium', 'Center', 'Size'},
 		output_sockets={'Structure'},
 		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def compute_value(self, props, input_sockets, output_sockets) -> td.Box:
-		output_params = output_sockets['Structure']
+	def compute_value(self, input_sockets, output_sockets) -> td.Box:
+		"""Compute a single box structure object, given that all inputs are non-symbolic."""
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		medium = input_sockets['Medium']
+		output_params = output_sockets['Structure']
 
-		has_output_params = not ct.FlowSignal.check(output_params)
 		has_center = not ct.FlowSignal.check(center)
 		has_size = not ct.FlowSignal.check(size)
 		has_medium = not ct.FlowSignal.check(medium)
+		has_output_params = not ct.FlowSignal.check(output_params)
 
 		if (
 			has_center
 			and has_size
 			and has_medium
 			and has_output_params
-			and not props['differentiable']
 			and not output_params.symbols
 		):
 			return td.Structure(
@@ -138,7 +137,8 @@ class BoxStructureNode(base.MaxwellSimNode):
 		output_sockets={'Structure'},
 		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def compute_lazy_structure(self, props, input_sockets, output_sockets) -> td.Box:
+	def compute_structure_func(self, props, input_sockets, output_sockets) -> td.Box:
+		"""Compute a possibly-differentiable function, producing a box structure from the input parameters."""
 		output_params = output_sockets['Structure']
 		center = input_sockets['Center']
 		size = input_sockets['Size']
@@ -149,14 +149,8 @@ class BoxStructureNode(base.MaxwellSimNode):
 		has_size = not ct.FlowSignal.check(size)
 		has_medium = not ct.FlowSignal.check(medium)
 
-		differentiable = props['differentiable']
-		if (
-			has_output_params
-			and has_center
-			and has_size
-			and has_medium
-			and differentiable == output_params.is_differentiable
-		):
+		if has_output_params and has_center and has_size and has_medium:
+			differentiable = props['differentiable']
 			if differentiable:
 				return (center | size | medium).compose_within(
 					enclosing_func=lambda els: tdadj.JaxStructure(
@@ -169,6 +163,12 @@ class BoxStructureNode(base.MaxwellSimNode):
 					supports_jax=True,
 				)
 			return (center | size | medium).compose_within(
+				## TODO: Unit conversion within the composed function??
+				## -- We do need Tidy3D to be given ex. micrometers in particular.
+				## -- But the previous numerical output might not be micrometers.
+				## -- There must be a way to add a conversion in, without strangeness.
+				## -- Ex. can compose_within() take a unit system?
+				## -- This would require
 				enclosing_func=lambda els: td.Structure(
 					geometry=td.Box(
 						center=tuple(els[0].flatten()),
@@ -205,13 +205,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 		has_medium = not ct.FlowSignal.check(medium)
 
 		if has_center and has_size and has_medium:
-			if props['differentiable'] == (
-				center.is_differentiable
-				and size.is_differentiable
-				and medium.is_differentiable
-			):
-				return center | size | medium
-			return ct.FlowSignal.FlowPending
+			return center | size | medium
 		return ct.FlowSignal.FlowPending
 
 	####################
@@ -226,6 +220,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
 	def compute_previews(self, props, output_sockets):
+		"""Mark the managed preview object when recursively linked to a viewer."""
 		output_params = output_sockets['Structure']
 		has_output_params = not ct.FlowSignal.check(output_params)
 
@@ -245,10 +240,14 @@ class BoxStructureNode(base.MaxwellSimNode):
 	)
 	def on_inputs_changed(self, managed_objs, input_sockets, output_sockets):
 		output_params = output_sockets['Structure']
+		center = input_sockets['Center']
+
 		has_output_params = not ct.FlowSignal.check(output_params)
-		if has_output_params and not output_params.symbols:
+		has_center = not ct.FlowSignal.check(center)
+		if has_center and has_output_params and not output_params.symbols:
+			## TODO: There are strategies for handling examples of symbol values.
+
 			# Push Loose Input Values to GeoNodes Modifier
-			center = input_sockets['Center']
 			managed_objs['modifier'].bl_modifier(
 				'NODES',
 				{

@@ -264,13 +264,16 @@ class SimSymbol(pyd.BaseModel):
 	interval_closed_im: tuple[bool, bool] = (False, False)
 
 	####################
-	# - Labels
+	# - Core
 	####################
 	@functools.cached_property
 	def name(self) -> str:
 		"""Usable name for the symbol."""
 		return self.sym_name.name
 
+	####################
+	# - Labels
+	####################
 	@functools.cached_property
 	def name_pretty(self) -> str:
 		"""Pretty (possibly unicode) name for the thing."""
@@ -307,6 +310,8 @@ class SimSymbol(pyd.BaseModel):
 	@functools.cached_property
 	def plot_label(self) -> str:
 		"""Pretty plot-oriented label."""
+		if self.unit is None:
+			return self.name_pretty
 		return f'{self.name_pretty} ({self.unit_label})'
 
 	####################
@@ -420,6 +425,11 @@ class SimSymbol(pyd.BaseModel):
 
 	@functools.cached_property
 	def is_nonzero(self) -> bool:
+		"""Whether or not the value of this symbol can ever be $0$.
+
+		Notes:
+			Most notably, this symbol cannot be used as the right hand side of a division operation when this property is `False`.
+		"""
 		if self.exclude_zero:
 			return True
 
@@ -440,6 +450,18 @@ class SimSymbol(pyd.BaseModel):
 				self.domain[1]
 			)
 		return check_real_domain(self.domain)
+
+	@functools.cached_property
+	def can_diff(self) -> bool:
+		"""Whether this symbol can be used as the input / output variable when differentiating."""
+		# Check Constants
+		## -> Constants (w/pinned values) are never differentiable.
+		if self.is_constant:
+			return False
+
+		# TODO: Discontinuities (especially across 0)?
+
+		return self.mathtype in [spux.MathType.Real, spux.MathType.Complex]
 
 	####################
 	# - Properties
@@ -664,8 +686,10 @@ class SimSymbol(pyd.BaseModel):
 			res = spux.strip_unit_system(sp_obj)
 
 		# Broadcast Expansion
-		if self.rows > 1 or self.cols > 1 and not isinstance(res, spux.MatrixBase):
-			res = sp_obj * sp.ImmutableMatrix.ones(self.rows, self.cols)
+		if (self.rows > 1 or self.cols > 1) and not isinstance(
+			res, sp.MatrixBase | sp.MatrixSymbol
+		):
+			res = res * sp.ImmutableMatrix.ones(self.rows, self.cols)
 
 		return res
 
@@ -753,7 +777,9 @@ class SimSymbol(pyd.BaseModel):
 			unit = None
 
 		# Rows/Cols from Expr (if Matrix)
-		rows, cols = expr.shape if isinstance(expr, sp.MatrixBase) else (1, 1)
+		rows, cols = (
+			expr.shape if isinstance(expr, sp.MatrixBase | sp.MatrixSymbol) else (1, 1)
+		)
 
 		return SimSymbol(
 			sym_name=sym_name,

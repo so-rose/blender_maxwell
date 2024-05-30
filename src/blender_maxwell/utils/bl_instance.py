@@ -21,6 +21,7 @@ from types import MappingProxyType
 import bpy
 
 from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils.keyed_cache import keyed_cache
 
 InstanceID: typ.TypeAlias = str  ## Stringified UUID4
 
@@ -220,11 +221,14 @@ class BLInstance:
 		for str_search_prop_name in self.blfields_str_search:
 			setattr(self, str_search_prop_name, bl_cache.Signal.ResetStrSearch)
 
+	@keyed_cache(
+		exclude={'self'},  ## No dynamic elements of 'self' can be used.
+	)
 	def trace_blfields_to_clear(
 		self,
 		prop_name: str,
-		prev_blfields_to_clear: list[
-			tuple[str, typ.Literal['invalidate', 'reset_enum', 'reset_strsearch']]
+		prev_blfields_to_clear: tuple[
+			tuple[str, typ.Literal['invalidate', 'reset_enum', 'reset_strsearch']], ...
 		] = (),
 	) -> list[str]:
 		"""Invalidates all properties that depend on `prop_name`.
@@ -239,7 +243,7 @@ class BLInstance:
 			All of these are filled when creating the `BLInstance` subclass, using `self.declare_blfield_dep()`, generally via the `BLField` descriptor (which internally uses `BLProp`).
 		"""
 		if prev_blfields_to_clear:
-			blfields_to_clear = prev_blfields_to_clear.copy()
+			blfields_to_clear = list(prev_blfields_to_clear)
 		else:
 			blfields_to_clear = []
 
@@ -268,7 +272,7 @@ class BLInstance:
 					if dst_prop_name in self.blfields:
 						blfields_to_clear += self.trace_blfields_to_clear(
 							dst_prop_name,
-							prev_blfields_to_clear=blfields_to_clear,
+							prev_blfields_to_clear=tuple(blfields_to_clear),
 						)
 
 		match (bool(prev_blfields_to_clear), bool(blfields_to_clear)):
@@ -297,7 +301,7 @@ class BLInstance:
 			## -> As such, deduplication would not be wrong, just extraneous.
 			## -> Since invalidation is in a hot-loop, don't do such things.
 			case (True, True):
-				return blfields_to_clear
+				return list(reversed(dict.fromkeys(reversed(blfields_to_clear))))
 
 	def clear_blfields_after(self, prop_name: str) -> list[str]:
 		"""Clear (invalidate) all `BLField`s that have become invalid as a result of a change to `prop_name`.

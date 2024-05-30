@@ -71,35 +71,129 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['pol_axis'], expand=True)
 
 	####################
-	# - Outputs
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Source',
-		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
+		# Loaded
 		props={'pol_axis'},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
+		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
+		output_sockets={'Source'},
+		output_socket_kinds={'Source': ct.FlowKind.Params},
+	)
+	def compute_source_value(
+		self, input_sockets, props, output_sockets
+	) -> td.PointDipole | ct.FlowSignal:
+		"""Compute the point dipole source, given that all inputs are non-symbolic."""
+		temporal_shape = input_sockets['Temporal Shape']
+		center = input_sockets['Center']
+		interpolate = input_sockets['Interpolate']
+		output_params = output_sockets['Source']
+
+		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
+		has_center = not ct.FlowSignal.check(center)
+		has_interpolate = not ct.FlowSignal.check(interpolate)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if (
+			has_temporal_shape
+			and has_center
+			and has_interpolate
+			and has_output_params
+			and not output_params.symbols
+		):
+			pol_axis = {
+				ct.SimSpaceAxis.X: 'Ex',
+				ct.SimSpaceAxis.Y: 'Ey',
+				ct.SimSpaceAxis.Z: 'Ez',
+			}[props['pol_axis']]
+			## TODO: Need Hx, Hy, Hz too?
+
+			return td.PointDipole(
+				center=spux.convert_to_unit_system(center, ct.UNITS_TIDY3D),
+				source_time=temporal_shape,
+				interpolate=interpolate,
+				polarization=pol_axis,
+			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'Source',
+		kind=ct.FlowKind.Func,
+		# Loaded
+		props={'pol_axis'},
+		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
+		input_socket_kinds={
+			'Temporal Shape': ct.FlowKind.Func,
+			'Center': ct.FlowKind.Func,
+			'Interpolate': ct.FlowKind.Func,
+		},
+		output_sockets={'Source'},
+		output_socket_kinds={'Source': ct.FlowKind.Params},
+	)
+	def compute_source_func(self, props, input_sockets, output_sockets) -> td.Box:
+		"""Compute a lazy function for the point dipole source."""
+		center = input_sockets['Center']
+		temporal_shape = input_sockets['Temporal Shape']
+		interpolate = input_sockets['Interpolate']
+		output_params = output_sockets['Source']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
+		has_interpolate = not ct.FlowSignal.check(interpolate)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_temporal_shape and has_center and has_interpolate and has_output_params:
+			pol_axis = {
+				ct.SimSpaceAxis.X: 'Ex',
+				ct.SimSpaceAxis.Y: 'Ey',
+				ct.SimSpaceAxis.Z: 'Ez',
+			}[props['pol_axis']]
+			## TODO: Need Hx, Hy, Hz too?
+
+			return (center | temporal_shape | interpolate).compose_within(
+				enclosing_func=lambda els: td.PointDipole(
+					center=els[0],
+					source_time=els[1],
+					interpolate=els[2],
+					polarization=pol_axis,
+				)
+			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Source',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		input_sockets={'Temporal Shape', 'Center', 'Interpolate'},
+		input_socket_kinds={
+			'Temporal Shape': ct.FlowKind.Params,
+			'Center': ct.FlowKind.Params,
+			'Interpolate': ct.FlowKind.Params,
 		},
 	)
-	def compute_source(
+	def compute_params(
 		self,
-		input_sockets: dict[str, typ.Any],
-		props: dict[str, typ.Any],
-		unit_systems: dict,
-	) -> td.PointDipole:
-		pol_axis = {
-			ct.SimSpaceAxis.X: 'Ex',
-			ct.SimSpaceAxis.Y: 'Ey',
-			ct.SimSpaceAxis.Z: 'Ez',
-		}[props['pol_axis']]
+		input_sockets,
+	) -> td.PointDipole | ct.FlowSignal:
+		"""Compute the point dipole source, given that all inputs are non-symbolic."""
+		temporal_shape = input_sockets['Temporal Shape']
+		center = input_sockets['Center']
+		interpolate = input_sockets['Interpolate']
 
-		return td.PointDipole(
-			center=input_sockets['Center'],
-			source_time=input_sockets['Temporal Shape'],
-			interpolate=input_sockets['Interpolate'],
-			polarization=pol_axis,
-		)
+		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
+		has_center = not ct.FlowSignal.check(center)
+		has_interpolate = not ct.FlowSignal.check(interpolate)
+
+		if has_temporal_shape and has_center and has_interpolate:
+			return temporal_shape | center | interpolate
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - Preview

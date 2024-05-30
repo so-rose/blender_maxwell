@@ -15,6 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import contextlib
+import functools
+import queue
 import typing as typ
 
 import bpy
@@ -25,6 +27,14 @@ from . import contracts as ct
 from .managed_objs.managed_bl_image import ManagedBLImage
 
 log = logger.get(__name__)
+
+link_action_queue = queue.Queue()
+
+
+def set_link_validity(link: bpy.types.NodeLink, validity: bool) -> None:
+	log.critical('Set %s validity to %s', str(link), str(validity))
+	link.is_valid = validity
+
 
 ####################
 # - Cache Management
@@ -45,58 +55,93 @@ class DeltaNodeLinkCache(typ.TypedDict):
 
 
 class NodeLinkCache:
-	"""A pointer-based cache of node links in a node tree.
+	"""A volatile pointer-based cache of node links in a node tree.
+
+	Warnings:
+		Everything here is **extremely** unsafe.
+		Even a single mistake **will** cause a use-after-free crash of Blender.
+
+		Used perfectly, it allows for powerful features; anything less, and it's an epic liability.
 
 	Attributes:
-		_node_tree: Reference to the owning node tree.
-		link_ptrs_as_links:
-		link_ptrs: Pointers (as in integer memory adresses) to `NodeLink`s.
-		link_ptrs_as_links: Map from pointers to actual `NodeLink`s.
-		link_ptrs_from_sockets: Map from pointers to `NodeSocket`s, representing the source of each `NodeLink`.
-		link_ptrs_from_sockets: Map from pointers to `NodeSocket`s, representing the destination of each `NodeLink`.
+		_node_tree: Reference to the node tree for which this cache is valid.
+		link_ptrs: Memory-address identifiers for all node links that currently exist in `_node_tree`.
+		link_ptrs_as_links: Mapping from pointers (integers) to actual `NodeLink` objects.
+			**WARNING**: If the pointer-referenced object no longer exists, then Blender **will crash immediately** upon attempting to use it. There is no way to mitigate this.
+		socket_ptrs: Memory-address identifiers for all sockets that currently exist in `_node_tree`.
+		socket_ptrs_as_sockets: Mapping from pointers (integers) to actual `NodeSocket` objects.
+			**WARNING**: If the pointer-referenced object no longer exists, then Blender **will crash immediately** upon attempting to use it. There is no way to mitigate this.
+		socket_ptr_refcount: The amount of links currently connected to a given socket pointer.
+			Used to drive the deletion of socket pointers using only knowledge about `link_ptr` removal.
+		link_ptrs_as_from_socket_ptrs: The pointer of the source socket, defined for every node link pointer.
+		link_ptrs_as_to_socket_ptrs: The pointer of the destination socket, defined for every node link pointer.
 	"""
 
 	def __init__(self, node_tree: bpy.types.NodeTree):
-		"""Initialize the cache from a node tree.
-
-		Parameters:
-			node_tree: The Blender node tree whose `NodeLink`s will be cached.
-		"""
+		"""Defines and fills the cache from a live node tree."""
 		self._node_tree = node_tree
 
-		# Link PTR and PTR->REF
 		self.link_ptrs: set[MemAddr] = set()
 		self.link_ptrs_as_links: dict[MemAddr, bpy.types.NodeLink] = {}
 
-		# Socket PTR and PTR->REF
 		self.socket_ptrs: set[MemAddr] = set()
 		self.socket_ptrs_as_sockets: dict[MemAddr, bpy.types.NodeSocket] = {}
 		self.socket_ptr_refcount: dict[MemAddr, int] = {}
 
-		# Link PTR -> Socket PTR
 		self.link_ptrs_as_from_socket_ptrs: dict[MemAddr, MemAddr] = {}
 		self.link_ptrs_as_to_socket_ptrs: dict[MemAddr, MemAddr] = {}
+
+		self.link_ptrs_invalid: set[MemAddr] = set()
 
 		# Fill Cache
 		self.regenerate()
 
 	def remove_link(self, link_ptr: MemAddr) -> None:
-		"""Removes a link pointer from the cache, indicating that the link doesn't exist anymore.
+		"""Reports a link as removed, causing it to be removed from the cache.
+
+		This **must** be run whenever a node link is deleted.
+		**Failure to to so WILL result in segmentation fault** at an unknown future time.
+
+		In particular, the following actions are taken:
+		- The entry in `self.link_ptrs_as_links` is deleted.
+		- Any entry in `self.link_ptrs_invalid` is deleted (if exists).
 
 		Notes:
-			- **DOES NOT** remove PTR->REF dictionary entries
-			- Invoking this method directly causes the removed node links to not be reported as "removed" by `NodeLinkCache.regenerate()`.
-			- This **must** be done whenever a node link is deleted.
-			- Failure to do so may result in a segmentation fault at arbitrary future time.
+			Invoking this method directly causes the removed node links to not be reported as "removed" by `NodeLinkCache.regenerate()`.
+			In some cases, this may be desirable, ex. for internal methods that shouldn't trip a `DataChanged` flow event.
 
 		Parameters:
-			link_ptr: Pointer to remove from the cache.
+			link_ptr: The pointer (integer) to remove from the cache.
+
+		Raises:
+			KeyError: If `link_ptr` is not a member of either `self.link_ptrs`, or of `self.link_ptrs_as_links`.
 		"""
 		self.link_ptrs.remove(link_ptr)
 		self.link_ptrs_as_links.pop(link_ptr)
 
+		if link_ptr in self.link_ptrs_invalid:
+			self.link_ptrs_invalid.remove(link_ptr)
+
 	def remove_sockets_by_link_ptr(self, link_ptr: MemAddr) -> None:
-		"""Removes a single pointer's reference to its from/to sockets."""
+		"""Deassociate from all sockets referenced by a link, respecting the socket pointer reference-count.
+
+		The `NodeLinkCache` stores references to all socket pointers referenced by any link.
+		Since several links can be associated with each socket, we must keep a "reference count" per-socket.
+		When the "reference count" drops to zero, then there are no longer any `NodeLink`s that refer to it, and therefore it should be removed from the `NodeLinkCache`.
+
+		This method facilitates that process by:
+		- Extracting (with removal) the from / to socket pointers associated with `link_ptr`.
+		- If the socket pointer has a reference count of `1`, then it is **completely removed**.
+		- If the socket pointer has a reference count of `>1`, then the reference count is decremented by `1`.
+
+		Notes:
+			In general, this should be called together with `remove_link`.
+			However, in certain cases, this process also needs to happen by itself.
+
+		Parameters:
+			link_ptr: The pointer (integer) to remove from the cache.
+		"""
+		# Remove Socket Pointers
 		from_socket_ptr = self.link_ptrs_as_from_socket_ptrs.pop(link_ptr, None)
 		to_socket_ptr = self.link_ptrs_as_to_socket_ptrs.pop(link_ptr, None)
 
@@ -113,31 +158,40 @@ class NodeLinkCache:
 				self.socket_ptr_refcount[socket_ptr] -= 1
 
 	def regenerate(self) -> DeltaNodeLinkCache:
-		"""Regenerates the cache from the internally-linked node tree.
+		"""Efficiently scans the internally referenced node tree to thoroughly update all attributes of this `NodeLinkCache`.
 
 		Notes:
-			- This is designed to run within the `update()` invocation of the node tree.
-			- This should be a very fast function, since it is called so much.
+			This runs in a **very** hot loop, within the `update()` function of the node tree.
+			Anytime anything happens in the node tree, `update()` (and therefore this method) is called.
+
+			Thus, performance is of the utmost importance.
+			Just a few microseconds too much may be amplified dozens of times over in practice, causing big stutters.
 		"""
 		# Compute All NodeLink Pointers
+		## -> It can be very inefficient to do any full-scan of the node tree.
+		## -> However, simply extracting the pointer: link ends up being fast.
+		## -> This pattern seems to be the best we can do, efficiency-wise.
 		all_link_ptrs_as_links = {
 			link.as_pointer(): link for link in self._node_tree.links
 		}
 		all_link_ptrs = set(all_link_ptrs_as_links.keys())
 
 		# Compute Added/Removed Links
+		## -> In essence, we've created a 'diff' here.
+		## -> Set operations are fast, and expressive!
 		added_link_ptrs = all_link_ptrs - self.link_ptrs
 		removed_link_ptrs = self.link_ptrs - all_link_ptrs
 
 		# Edge Case: 'from_socket' Reassignment
-		## (Reverse engineered) When all:
-		##     - Created a new link between the same two nodes.
-		##     - Matching 'to_socket'.
-		##     - Non-matching 'from_socket' on the same node.
-		## -> THEN the link_ptr will not change, but the from_socket ptr should.
-		if len(added_link_ptrs) == 0 and len(removed_link_ptrs) == 0:
+		## (Reverse Engineered) When all are true:
+		##     - Created a new link between the same nodes as previous link.
+		##     - Matching 'to_socket' as the previous link.
+		##     - Non-matching 'from_socket', but on the same node.
+		## -> THEN the link_ptr will not change, but the from_socket ptr does.
+		if not added_link_ptrs and not removed_link_ptrs:
 			# Find the Link w/Reassigned 'from_socket' PTR
-			## A bit of a performance hit from the search, but it's an edge case.
+			## -> This isn't very fast, but the edge case isn't so common.
+			## -> Comprehensions are still quite optimized.
 			_link_ptr_as_from_socket_ptrs = {
 				link_ptr: (
 					from_socket_ptr,
@@ -149,9 +203,9 @@ class NodeLinkCache:
 			}
 
 			# Completely Remove the Old Link (w/Reassigned 'from_socket')
-			## This effectively reclassifies the edge case as a normal 're-add'.
+			## -> Casts the edge case to look like a typical 're-add'.
 			for link_ptr in _link_ptr_as_from_socket_ptrs:
-				log.info(
+				log.debug(
 					'Edge-Case - "from_socket" Reassigned in NodeLink w/o New NodeLink Pointer: %s',
 					link_ptr,
 				)
@@ -159,21 +213,25 @@ class NodeLinkCache:
 				self.remove_sockets_by_link_ptr(link_ptr)
 
 			# Recompute Added/Removed Links
-			## The algorithm will now detect an "added link".
+			## -> Guide the usual algorithm to detect an "added link".
 			added_link_ptrs = all_link_ptrs - self.link_ptrs
 			removed_link_ptrs = self.link_ptrs - all_link_ptrs
 
-		# Shuffle Cache based on Change in Links
-		## Remove Entries for Removed Pointers
+		# Delete Removed Links
+		## -> NOTE: We leave dangling socket information on purpose.
+		## -> This information will be used to ask for 'removal consent'.
+		## -> To truly remove, must call 'remove_socket_by_link_ptr' later.
 		for removed_link_ptr in removed_link_ptrs:
 			self.remove_link(removed_link_ptr)
-			## User must manually call 'remove_socket_by_link_ptr' later.
-			## For now, leave dangling socket information by-link.
 
-		# Add New Link Pointers
+		# Create Added Links
+		## -> First, simply concatenate the added link pointers.
 		self.link_ptrs |= added_link_ptrs
 		for link_ptr in added_link_ptrs:
-			# Add Link PTR->REF
+			# Create Pointer -> Reference Entry
+			## -> This allows us to efficiently access the link by-pointer.
+			## -> Doing so otherwise requires a full search.
+			## -> **If link is deleted w/o report, access will cause crash**.
 			new_link = all_link_ptrs_as_links[link_ptr]
 			self.link_ptrs_as_links[link_ptr] = new_link
 
@@ -183,34 +241,69 @@ class NodeLinkCache:
 			to_socket = new_link.to_socket
 			to_socket_ptr = to_socket.as_pointer()
 
-			# Add Socket PTR, PTR -> REF
+			# Add Socket Information
 			for socket_ptr, bl_socket in zip(  # noqa: B905
 				[from_socket_ptr, to_socket_ptr],
 				[from_socket, to_socket],
 			):
-				# Increment RefCount of Socket PTR
+				# RefCount > 0: Increment RefCount of Socket PTR
 				## This happens if another link also uses the same socket.
 				## 1. An output socket links to several inputs.
 				## 2. A multi-input socket links from several inputs.
 				if socket_ptr in self.socket_ptr_refcount:
 					self.socket_ptr_refcount[socket_ptr] += 1
+
+				# RefCount == 0: Create Socket Pointer w/Reference
+				## -> Also initialize the refcount for the socket pointer.
 				else:
-					## RefCount == 0: Add PTR, PTR -> REF
 					self.socket_ptrs.add(socket_ptr)
 					self.socket_ptrs_as_sockets[socket_ptr] = bl_socket
 					self.socket_ptr_refcount[socket_ptr] = 1
 
-			# Add Link PTR -> Socket PTR
+			# Add Entry from Link Pointer -> Socket Pointer
 			self.link_ptrs_as_from_socket_ptrs[link_ptr] = from_socket_ptr
 			self.link_ptrs_as_to_socket_ptrs[link_ptr] = to_socket_ptr
 
 		return {'added': added_link_ptrs, 'removed': removed_link_ptrs}
+
+	def update_validity(self) -> DeltaNodeLinkCache:
+		"""Query all cached links to determine whether they are valid."""
+		self.link_ptrs_invalid = {
+			link_ptr for link_ptr, link in self.link_ptrs_as_links if not link.is_valid
+		}
+
+	def report_validity(self, link_ptr: MemAddr, validity: bool) -> None:
+		"""Report a link as invalid."""
+		if validity and link_ptr in self.link_ptrs_invalid:
+			self.link_ptrs_invalid.remove(link_ptr)
+		elif not validity and link_ptr not in self.link_ptrs_invalid:
+			self.link_ptrs_invalid.add(link_ptr)
+
+	def set_validities(self) -> None:
+		"""Set the validity of links in the node tree according to the internal cache.
+
+		Validity doesn't need to be removed, as update() automatically cleans up by default.
+		"""
+		for link in [
+			link
+			for link_ptr, link in self.link_ptrs_as_links.items()
+			if link_ptr in self.link_ptrs_invalid
+		]:
+			if link.is_valid:
+				link.is_valid = False
 
 
 ####################
 # - Node Tree Definition
 ####################
 class MaxwellSimTree(bpy.types.NodeTree):
+	"""Node tree containing a node-based program for design and analysis of Maxwell PDE simulations.
+
+	Attributes:
+		is_active: Whether the node tree should be considered to be in a usable state, capable of updating Blender data.
+			In general, only one `MaxwellSimTree` should be active at a time.
+	"""
+
 	bl_idname = ct.TreeType.MaxwellSim.value
 	bl_label = 'Maxwell Sim Editor'
 	bl_icon = ct.Icon.SimNodeEditor
@@ -218,63 +311,6 @@ class MaxwellSimTree(bpy.types.NodeTree):
 	is_active: bpy.props.BoolProperty(
 		default=True,
 	)
-
-	####################
-	# - Lock Methods
-	####################
-	def unlock_all(self) -> None:
-		"""Unlock all nodes in the node tree, making them editable."""
-		log.info('Unlocking All Nodes in NodeTree "%s"', self.bl_label)
-		for node in self.nodes:
-			if node.type in ['REROUTE', 'FRAME']:
-				continue
-			node.locked = False
-			for bl_socket in [*node.inputs, *node.outputs]:
-				bl_socket.locked = False
-
-	@contextlib.contextmanager
-	def replot(self) -> None:
-		self.is_currently_replotting = True
-		self.something_plotted = False
-
-		try:
-			yield
-		finally:
-			self.is_currently_replotting = False
-			if not self.something_plotted:
-				ManagedBLImage.hide_preview()
-
-	def report_show_plot(self, node: bpy.types.Node) -> None:
-		if hasattr(self, 'is_currently_replotting') and self.is_currently_replotting:
-			self.something_plotted = True
-
-	@contextlib.contextmanager
-	def repreview_all(self) -> None:
-		all_nodes_with_preview_active = {
-			node.instance_id: node
-			for node in self.nodes
-			if node.type not in ['REROUTE', 'FRAME'] and node.preview_active
-		}
-		self.is_currently_repreviewing = True
-		self.newly_previewed_nodes = {}
-
-		try:
-			yield
-		finally:
-			self.is_currently_repreviewing = False
-			for dangling_previewed_node in [
-				node
-				for node_instance_id, node in all_nodes_with_preview_active.items()
-				if node_instance_id not in self.newly_previewed_nodes
-			]:
-				dangling_previewed_node.preview_active = False
-
-	def report_show_preview(self, node: bpy.types.Node) -> None:
-		if (
-			hasattr(self, 'is_currently_repreviewing')
-			and self.is_currently_repreviewing
-		):
-			self.newly_previewed_nodes[node.instance_id] = node
 
 	####################
 	# - Init Methods
@@ -290,7 +326,54 @@ class MaxwellSimTree(bpy.types.NodeTree):
 			self.node_link_cache = NodeLinkCache(self)
 
 	####################
-	# - Update Methods
+	# - Lock Methods
+	####################
+	def unlock_all(self) -> None:
+		"""Unlock all nodes in the node tree, making them editable.
+
+		Notes:
+			All `MaxwellSimNode`s have a `.locked` attribute, which prevents the entire UI from being modified.
+
+			This method simply sets the `locked` attribute to `False` on all nodes.
+		"""
+		log.info('Unlocking All Nodes in NodeTree "%s"', self.bl_label)
+		for node in self.nodes:
+			if node.type in ['REROUTE', 'FRAME']:
+				continue
+
+			# Unlock Node
+			if node.locked:
+				node.locked = False
+
+			# Unlock Node Sockets
+			for bl_socket in [*node.inputs, *node.outputs]:
+				if bl_socket.locked:
+					bl_socket.locked = False
+
+	####################
+	# - Link Update Methods
+	####################
+	def report_link_validity(self, link: bpy.types.NodeLink, validity: bool) -> None:
+		"""Report that a particular `NodeLink` should be considered to be either valid or invalid.
+
+		The `NodeLink.is_valid` attribute is generally (and automatically) used to indicate the detection of cycles in the node tree.
+		However, visually, it causes a very clear "error red" highlight to appear on the node link, which can extremely useful when determining the reasons behind unexpected outout.
+
+		Notes:
+			Run by `MaxwellSimSocket` when a link should be shown to be "invalid".
+		"""
+		## TODO: Doesn't quite work.
+		# log.debug(
+		# 'Reported Link Validity %s (is_valid=%s, from_socket=%s, to_socket=%s)',
+		# validity,
+		# link.is_valid,
+		# link.from_socket,
+		# link.to_socket,
+		# )
+		# self.node_link_cache.report_validity(link.as_pointer(), validity)
+
+	####################
+	# - Node Update Methods
 	####################
 	def on_node_removed(self, node: bpy.types.Node):
 		"""Run by `MaxwellSimNode.free()` when a node is being removed.
@@ -327,32 +410,36 @@ class MaxwellSimTree(bpy.types.NodeTree):
 				self.node_link_cache.remove_link(link_ptr)
 				self.node_link_cache.remove_sockets_by_link_ptr(link_ptr)
 
-	def update(self) -> None:
+	def update(self) -> None:  # noqa: PLR0912, C901
 		"""Monitors all changes to the node tree, potentially responding with appropriate callbacks.
 
 		Notes:
 			- Run by Blender when "anything" changes in the node tree.
 			- Responds to node link changes with callbacks, with the help of a performant node link cache.
 		"""
+		# Perform Initial Load
+		## -> Presume update() is run before the first link is altered.
+		## -> Else, the first link of the session will not update caches.
+		## -> We still remain slightly unsure of the exact semantics.
+		## -> Therefore, self.on_load() is also called as a load_post handler.
+		if not hasattr(self, 'node_link_cache'):
+			self.on_load()
+			return
+
+		# Register Validity Updater
+		## -> They will be run after the update() method.
+		## -> Between update() and set_validities, all is_valid=True are cleared.
+		## -> Therefore, 'set_validities' only needs to set all is_valid=False.
+		bpy.app.timers.register(self.node_link_cache.set_validities)
+
+		# Ignore Updates
+		## -> Certain corrective processes require suppressing the next update.
+		## -> Otherwise, link corrections may trigger some nasty recursions.
 		if not hasattr(self, 'ignore_update'):
 			self.ignore_update = False
 
-		if not hasattr(self, 'node_link_cache'):
-			self.on_load()
-			## We presume update() is run before the first link is altered.
-			## - Else, the first link of the session will not update caches.
-			## - We remain slightly unsure of the semantics.
-			## - Therefore, self.on_load() is also called as a load_post handler.
-			return
-
-		# Ignore Update
-		## Manually set to implement link corrections w/o recursion.
-		if self.ignore_update:
-			return
-
-		# Compute Changes to Node Links
+		# Regenerate NodeLinkCache
 		delta_links = self.node_link_cache.regenerate()
-
 		link_corrections = {
 			'to_remove': [],
 			'to_add': [],

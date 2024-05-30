@@ -266,7 +266,7 @@ def event_decorator(  # noqa: PLR0913
 			)
 
 			# Loose Sockets
-			## Compute All Loose Input Sockets
+			## -> Determined by the active_kind of each loose input socket.
 			method_kw_args |= (
 				{
 					'loose_input_sockets': {

@@ -14,12 +14,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import dataclasses
 import functools
 import typing as typ
 
 import jaxtyping as jtyp
 import numpy as np
+import pydantic as pyd
 import sympy as sp
 
 from blender_maxwell.utils import extra_sympy_units as spux
@@ -29,8 +29,7 @@ log = logger.get(__name__)
 
 
 # TODO: Our handling of 'is_sorted' is sloppy and probably wrong.
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class ArrayFlow:
+class ArrayFlow(pyd.BaseModel):
 	"""A homogeneous, realized array of numerical values with an optionally-attached unit and sort-tracking.
 
 	While the principle is simple, arrays-with-units ends up being a powerful basis for derived and computed features/methods/processing.
@@ -41,7 +40,9 @@ class ArrayFlow:
 			None if unitless.
 	"""
 
-	values: jtyp.Shaped[jtyp.Array, '...']
+	model_config = pyd.ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+	values: jtyp.Inexact[jtyp.Array, '...']  ## TODO: Custom field type
 	unit: spux.Unit | None = None
 
 	is_sorted: bool = False

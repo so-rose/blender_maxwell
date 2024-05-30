@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import typing as typ
+
 from ... import contracts as ct
 from .. import base
 
@@ -31,6 +33,9 @@ class MaxwellFDTDSimSocketDef(base.SocketDef):
 
 	def init(self, bl_socket: MaxwellFDTDSimBLSocket) -> None:
 		pass
+
+	def local_compare(self, _: MaxwellFDTDSimBLSocket) -> None:
+		return True
 
 
 ####################
