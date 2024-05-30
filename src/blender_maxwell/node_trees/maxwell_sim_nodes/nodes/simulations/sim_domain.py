@@ -132,7 +132,7 @@ class SimDomainNode(base.MaxwellSimNode):
 				| grid
 				| medium
 			).compose_within(
-				enclosing_func=lambda els: {
+				lambda els: {
 					'run_time': els[0],
 					'center': tuple(els[1].flatten()),
 					'size': tuple(els[2].flatten()),

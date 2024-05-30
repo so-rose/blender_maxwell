@@ -374,19 +374,22 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 		"""
 		node_tree = self.id_data
 		for direc in ['input', 'output']:
-			bl_sockets = self._bl_sockets(direc)
+			active_socket_nametype = {
+				bl_socket.name: bl_socket.socket_type
+				for bl_socket in self._bl_sockets(direc)
+			}
 			active_socket_defs = self.active_socket_defs(direc)
 
 			# Determine Sockets to Remove
 			## -> Name: If the existing socket name isn't "active".
 			## -> Type: If the existing socket_type != "active" SocketDef.
 			bl_sockets_to_remove = [
-				bl_socket
-				for socket_name, bl_socket in bl_sockets.items()
+				active_sckname
+				for active_sckname, active_scktype in active_socket_nametype.items()
 				if (
-					socket_name not in active_socket_defs
-					or bl_socket.socket_type
-					is not active_socket_defs[socket_name].socket_type
+					active_sckname not in active_socket_defs
+					or active_scktype
+					is not active_socket_defs[active_sckname].socket_type
 				)
 			]
 
@@ -394,39 +397,50 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 			## -> Name: If the existing socket name is "active".
 			## -> Type: If the existing socket_type == "active" SocketDef.
 			## -> Compare: If the existing socket differs from the SocketDef.
+			## -> NOTE: Reload bl_sockets in case to-update scks were removed.
 			bl_sockets_to_update = [
-				bl_socket
-				for socket_name, bl_socket in bl_sockets.items()
+				active_sckname
+				for active_sckname, active_scktype in active_socket_nametype.items()
 				if (
-					socket_name in active_socket_defs
-					and bl_socket.socket_type
-					is active_socket_defs[socket_name].socket_type
-					and not active_socket_defs[socket_name].compare(bl_socket)
+					active_sckname in active_socket_defs
+					and active_scktype is active_socket_defs[active_sckname].socket_type
+					and not active_socket_defs[active_sckname].compare(
+						self._bl_sockets(direc)[active_sckname]
+					)
 				)
 			]
 
 			# Remove Sockets
-			for bl_socket in bl_sockets_to_remove:
-				bl_socket_name = bl_socket.name
+			## -> The symptom of using a deleted socket is... hard crash.
+			## -> Therefore, we must be EXTREMELY careful with bl_socket refs.
+			## -> The multi-stage for-loop helps us guard from deleted sockets.
+			for active_sckname in bl_sockets_to_remove:
+				bl_socket = self._bl_sockets(direc).get(active_sckname)
 
 				# 1. Report the socket removal to the NodeTree.
 				## -> The NodeLinkCache needs to be adjusted manually.
 				node_tree.on_node_socket_removed(bl_socket)
 
+			for active_sckname in bl_sockets_to_remove:
+				bl_sockets = self._bl_sockets(direc)
+				bl_socket = bl_sockets.get(active_sckname)
+
 				# 2. Perform the removal using Blender's API.
 				## -> Actually removes the socket.
-				bl_sockets.remove(bl_socket)
-
-				# 3. Invalidate the input socket cache across all kinds.
-				## -> Prevents phantom values from remaining available.
-				## -> Done after socket removal to protect from race condition.
-				self._compute_input.invalidate(
-					input_socket_name=bl_socket_name,
-					kind=...,
-					unit_system=...,
-				)
+				## -> Must be protected from auto-removed use-after-free.
+				if bl_socket is not None:
+					bl_sockets.remove(bl_socket)
 
 				if direc == 'input':
+					# 3. Invalidate the input socket cache across all kinds.
+					## -> Prevents phantom values from remaining available.
+					## -> Done after socket removal to protect from race condition.
+					self._compute_input.invalidate(
+						input_socket_name=active_sckname,
+						kind=...,
+						unit_system=...,
+					)
+
 					# 4. Run all trigger-only `on_value_changed` callbacks.
 					## -> Runs any event methods that relied on the socket.
 					## -> Only methods that don't **require** the socket.
@@ -435,39 +449,69 @@ class MaxwellSimNode(bpy.types.Node, bl_instance.BLInstance):
 					triggered_event_methods = [
 						event_method
 						for event_method in self.filtered_event_methods_by_event(
-							ct.FlowEvent.DataChanged, (bl_socket_name, None, None)
+							ct.FlowEvent.DataChanged, (active_sckname, None, None)
 						)
-						if bl_socket_name
+						if active_sckname
 						not in event_method.callback_info.must_load_sockets
 					]
 					for event_method in triggered_event_methods:
 						event_method(self)
 
+				else:
+					# 3. Invalidate the output socket cache across all kinds.
+					## -> Prevents phantom values from remaining available.
+					## -> Done after socket removal to protect from race condition.
+					self.compute_output.invalidate(
+						input_socket_name=active_sckname,
+						kind=...,
+					)
+
 			# Update Sockets
-			for bl_socket in bl_sockets_to_update:
-				bl_socket_name = bl_socket.name
-				socket_def = active_socket_defs[bl_socket_name]
+			## -> The symptom of using a deleted socket is... hard crash.
+			## -> Therefore, we must be EXTREMELY careful with bl_socket refs.
+			## -> The multi-stage for-loop helps us guard from deleted sockets.
+			for active_sckname in bl_sockets_to_update:
+				bl_sockets = self._bl_sockets(direc)
+				bl_socket = bl_sockets.get(active_sckname)
 
-				# 1. Pretend to Initialize for the First Time
-				## -> NOTE: The socket's caches will be completely regenerated.
-				## -> NOTE: A full FlowKind update will occur, but only one.
-				bl_socket.is_initializing = True
-				socket_def.preinit(bl_socket)
-				socket_def.init(bl_socket)
-				socket_def.postinit(bl_socket)
+				if bl_socket is not None:
+					socket_def = active_socket_defs[active_sckname]
 
-				# 2. Re-Test Socket Capabilities
-				## -> Factors influencing CapabilitiesFlow may have changed.
-				## -> Therefore, we must re-test all link capabilities.
-				bl_socket.remove_invalidated_links()
+					# 1. Pretend to Initialize for the First Time
+					## -> NOTE: The socket's caches will be completely regenerated.
+					## -> NOTE: A full FlowKind update will occur, but only one.
+					bl_socket.is_initializing = True
+					socket_def.preinit(bl_socket)
+					socket_def.init(bl_socket)
+					socket_def.postinit(bl_socket)
 
-				# 3. Invalidate the input socket cache across all kinds.
-				## -> Prevents phantom values from remaining available.
-				self._compute_input.invalidate(
-					input_socket_name=bl_socket_name,
-					kind=...,
-					unit_system=...,
-				)
+			for active_sckname in bl_sockets_to_update:
+				bl_sockets = self._bl_sockets(direc)
+				bl_socket = bl_sockets.get(active_sckname)
+
+				if bl_socket is not None:
+					# 2. Re-Test Socket Capabilities
+					## -> Factors influencing CapabilitiesFlow may have changed.
+					## -> Therefore, we must re-test all link capabilities.
+					bl_socket.remove_invalidated_links()
+
+					if direc == 'input':
+						# 3. Invalidate the input socket cache across all kinds.
+						## -> Prevents phantom values from remaining available.
+						self._compute_input.invalidate(
+							input_socket_name=active_sckname,
+							kind=...,
+							unit_system=...,
+						)
+
+					if direc == 'output':
+						# 3. Invalidate the output socket cache across all kinds.
+						## -> Prevents phantom values from remaining available.
+						## -> Done after socket removal to protect from race condition.
+						self.compute_output.invalidate(
+							input_socket_name=active_sckname,
+							kind=...,
+						)
 
 	def _add_new_active_sockets(self):
 		"""Add and initialize all "active" sockets that aren't on the node.

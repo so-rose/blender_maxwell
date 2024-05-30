@@ -32,6 +32,8 @@ log = logger.get(__name__)
 
 
 class CylinderStructureNode(base.MaxwellSimNode):
+	"""A generic cylinder structure with configurable radius and height."""
+
 	node_type = ct.NodeType.CylinderStructure
 	bl_label = 'Cylinder Structure'
 	use_sim_node_name = True
@@ -64,27 +66,101 @@ class CylinderStructureNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Output Socket Computation
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Structure',
+		kind=ct.FlowKind.Value,
+		# Loaded
+		output_sockets={'Structure'},
+		output_socket_kinds={'Structure': {ct.FlowKind.Func, ct.FlowKind.Params}},
+	)
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		output_func = output_sockets['Structure'][ct.FlowKind.Func]
+		output_params = output_sockets['Structure'][ct.FlowKind.Params]
+
+		has_output_func = not ct.FlowSignal.check(output_func)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_output_func and has_output_params and not output_params.symbols:
+			return output_func.realize(output_params, disallow_jax=True)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'Structure',
+		kind=ct.FlowKind.Func,
+		# Loaded
 		input_sockets={'Center', 'Radius', 'Medium', 'Height'},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Radius': 'Tidy3DUnits',
-			'Height': 'Tidy3DUnits',
+		input_socket_kinds={
+			'Center': ct.FlowKind.Func,
+			'Radius': ct.FlowKind.Func,
+			'Height': ct.FlowKind.Func,
+			'Medium': ct.FlowKind.Func,
 		},
 	)
-	def compute_structure(self, input_sockets, unit_systems) -> td.Box:
-		return td.Structure(
-			geometry=td.Cylinder(
-				radius=input_sockets['Radius'],
-				center=input_sockets['Center'],
-				length=input_sockets['Height'],
-			),
-			medium=input_sockets['Medium'],
-		)
+	def compute_func(self, input_sockets) -> td.Box:
+		"""Compute a single cylinder structure object, given that all inputs are non-symbolic."""
+		center = input_sockets['Center']
+		radius = input_sockets['Radius']
+		height = input_sockets['Height']
+		medium = input_sockets['Medium']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_radius = not ct.FlowSignal.check(radius)
+		has_height = not ct.FlowSignal.check(height)
+		has_medium = not ct.FlowSignal.check(medium)
+
+		if has_center and has_radius and has_height and has_medium:
+			return (
+				center.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| radius.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| height.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| medium
+			).compose_within(
+				lambda els: td.Structure(
+					geometry=td.Cylinder(
+						center=els[0].flatten().tolist(),
+						radius=els[1],
+						length=els[2],
+					),
+					medium=els[3],
+				)
+			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Structure',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		input_sockets={'Center', 'Radius', 'Medium', 'Height'},
+		input_socket_kinds={
+			'Center': ct.FlowKind.Params,
+			'Radius': ct.FlowKind.Params,
+			'Height': ct.FlowKind.Params,
+			'Medium': ct.FlowKind.Params,
+		},
+	)
+	def compute_params(self, input_sockets) -> td.Box:
+		center = input_sockets['Center']
+		radius = input_sockets['Radius']
+		height = input_sockets['Height']
+		medium = input_sockets['Medium']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_radius = not ct.FlowSignal.check(radius)
+		has_height = not ct.FlowSignal.check(height)
+		has_medium = not ct.FlowSignal.check(medium)
+
+		if has_center and has_radius and has_height and has_medium:
+			return center | radius | height | medium
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - Preview

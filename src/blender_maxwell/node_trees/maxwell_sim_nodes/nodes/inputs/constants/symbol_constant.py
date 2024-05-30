@@ -104,6 +104,11 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	interval_inf_im: tuple[bool, bool] = bl_cache.BLField((True, True))
 	interval_closed_im: tuple[bool, bool] = bl_cache.BLField((True, True))
 
+	preview_value_z: int = bl_cache.BLField(0)
+	preview_value_q: tuple[int, int] = bl_cache.BLField((0, 1))
+	preview_value_re: float = bl_cache.BLField(0.0)
+	preview_value_im: float = bl_cache.BLField(0.0)
+
 	####################
 	# - Computed Properties
 	####################
@@ -122,6 +127,10 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			'interval_finite_im',
 			'interval_inf_im',
 			'interval_closed_im',
+			'preview_value_z',
+			'preview_value_q',
+			'preview_value_re',
+			'preview_value_im',
 		}
 	)
 	def symbol(self) -> sim_symbols.SimSymbol:
@@ -140,6 +149,10 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			interval_finite_im=self.interval_finite_im,
 			interval_inf_im=self.interval_inf_im,
 			interval_closed_im=self.interval_closed_im,
+			preview_value_z=self.preview_value_z,
+			preview_value_q=self.preview_value_q,
+			preview_value_re=self.preview_value_re,
+			preview_value_im=self.preview_value_im,
 		)
 
 	####################
@@ -164,36 +177,68 @@ class SymbolConstantNode(base.MaxwellSimNode):
 
 		col.prop(self, self.blfields['physical_type'], text='')
 
+		# Domain - Infinite
 		row = col.row(align=True)
 		row.alignment = 'CENTER'
-		row.label(text='Domain')
+		row.label(text='Domain - Is Infinite')
 
+		row = col.row(align=True)
+		if self.mathtype is spux.MathType.Complex:
+			row.prop(self, self.blfields['interval_inf'], text='ℝ')
+			row.prop(self, self.blfields['interval_inf_im'], text='𝕀')
+		else:
+			row.prop(self, self.blfields['interval_inf'], text='')
+
+		if any(not b for b in self.interval_inf):
+			# Domain - Closure
+			row = col.row(align=True)
+			row.alignment = 'CENTER'
+			row.label(text='Domain - Closure')
+
+			row = col.row(align=True)
+			if self.mathtype is spux.MathType.Complex:
+				row.prop(self, self.blfields['interval_closed'], text='ℝ')
+				row.prop(self, self.blfields['interval_closed_im'], text='𝕀')
+			else:
+				row.prop(self, self.blfields['interval_closed'], text='')
+
+			# Domain - Finite
+			row = col.row(align=True)
+			row.alignment = 'CENTER'
+			row.label(text='Domain - Interval')
+
+			row = col.row(align=True)
+			match self.mathtype:
+				case spux.MathType.Integer:
+					row.prop(self, self.blfields['interval_finite_z'], text='')
+
+				case spux.MathType.Rational:
+					row.prop(self, self.blfields['interval_finite_q'], text='')
+
+				case spux.MathType.Real:
+					row.prop(self, self.blfields['interval_finite_re'], text='')
+
+				case spux.MathType.Complex:
+					row.prop(self, self.blfields['interval_finite_re'], text='ℝ')
+					row.prop(self, self.blfields['interval_finite_im'], text='𝕀')
+
+		# Domain - Closure
+		row = col.row(align=True)
+		row.alignment = 'CENTER'
+		row.label(text='Preview Value')
 		match self.mathtype:
 			case spux.MathType.Integer:
-				col.prop(self, self.blfields['interval_finite_z'], text='')
-				col.prop(self, self.blfields['interval_inf'], text='Infinite')
-				col.prop(self, self.blfields['interval_closed'], text='Closed')
+				row.prop(self, self.blfields['preview_value_z'], text='')
 
 			case spux.MathType.Rational:
-				col.prop(self, self.blfields['interval_finite_q'], text='')
-				col.prop(self, self.blfields['interval_inf'], text='Infinite')
-				col.prop(self, self.blfields['interval_closed'], text='Closed')
+				row.prop(self, self.blfields['preview_value_q'], text='')
 
 			case spux.MathType.Real:
-				col.prop(self, self.blfields['interval_finite_re'], text='')
-				col.prop(self, self.blfields['interval_inf'], text='Infinite')
-				col.prop(self, self.blfields['interval_closed'], text='Closed')
+				row.prop(self, self.blfields['preview_value_re'], text='')
 
 			case spux.MathType.Complex:
-				col.prop(self, self.blfields['interval_finite_re'], text='ℝ')
-				col.prop(self, self.blfields['interval_inf'], text='ℝ Infinite')
-				col.prop(self, self.blfields['interval_closed'], text='ℝ Closed')
-
-				col.separator()
-
-				col.prop(self, self.blfields['interval_finite_im'], text='𝕀')
-				col.prop(self, self.blfields['interval_inf'], text='𝕀 Infinite')
-				col.prop(self, self.blfields['interval_closed'], text='𝕀 Closed')
+				row.prop(self, self.blfields['preview_value_re'], text='ℝ')
+				row.prop(self, self.blfields['preview_value_im'], text='𝕀')
 
 	####################
 	# - FlowKinds

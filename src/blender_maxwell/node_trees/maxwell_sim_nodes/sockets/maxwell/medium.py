@@ -14,7 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import math
+
 import bpy
+import jax.numpy as jnp
 import scipy as sc
 import sympy.physics.units as spu
 import tidy3d as td
@@ -28,9 +31,15 @@ from .. import base
 
 log = logger.get(__name__)
 
-VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
-
-FIXED_WL = 500 * spu.nm
+_VAC_SPEED_OF_LIGHT = sc.constants.speed_of_light * spu.meter / spu.second
+_FIXED_WL = 500 * spu.nm
+FIXED_FREQ = spux.scale_to_unit_system(
+	spu.convert_to(
+		_VAC_SPEED_OF_LIGHT / _FIXED_WL,
+		spu.hertz,
+	),
+	ct.UNITS_TIDY3D,
+)
 
 
 class MaxwellMediumBLSocket(base.MaxwellSimSocket):
@@ -49,24 +58,17 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	####################
 	@bl_cache.cached_bl_property(depends_on={'eps_rel', 'differentiable'})
 	def value(self) -> td.Medium:
-		freq = (
-			spu.convert_to(
-				VAC_SPEED_OF_LIGHT / FIXED_WL,
-				spu.hertz,
-			)
-			/ spu.hertz
-		)
+		eps_r_re = self.eps_rel[0]
+		conductivity = FIXED_FREQ * self.eps_rel[1]  ## TODO: Um?
 
 		if self.differentiable:
-			return tdadj.JaxMedium.from_nk(
-				n=self.eps_rel[0],
-				k=self.eps_rel[1],
-				freq=freq,
+			return tdadj.JaxMedium(
+				permittivity_jax=jnp.array(eps_r_re, dtype=float),
+				conductivity_jax=jnp.array(conductivity, dtype=float),
 			)
-		return td.Medium.from_nk(
-			n=self.eps_rel[0],
-			k=self.eps_rel[1],
-			freq=freq,
+		return td.Medium(
+			permittivity=eps_r_re,
+			conductivity=conductivity,
 		)
 
 	@value.setter

@@ -325,8 +325,16 @@ class FuncFlow(pyd.BaseModel):
 		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
 			{}
 		),
+		disallow_jax: bool = True,
 	) -> typ.Self:
-		"""Run the represented function with the best optimization available, given particular choices for all function arguments and for all unrealized symbols."""
+		"""Run the represented function with the best optimization available, given particular choices for all function arguments and for all unrealized symbols.
+
+		Parameters:
+			params: The parameter-tracking object from which function arguments will be computed.
+			symbol_values: Values for all `SimSymbol`s that are not yet realized in `params`.
+			disallow_jax: Don't use `self.func_jax` to evaluate, even if possible.
+				This is desirable when the overhead of `jax.jit()` is known in advance to exceed the performance benefits.
+		"""
 		if self.supports_jax:
 			return self.func_jax(
 				*params.scaled_func_args(symbol_values),

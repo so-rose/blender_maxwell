@@ -263,6 +263,11 @@ class SimSymbol(pyd.BaseModel):
 	interval_inf_im: tuple[bool, bool] = (True, True)
 	interval_closed_im: tuple[bool, bool] = (False, False)
 
+	preview_value_z: int = 0
+	preview_value_q: tuple[int, int] = (0, 1)
+	preview_value_re: float = 0.0
+	preview_value_im: float = 0.0
+
 	####################
 	# - Core
 	####################

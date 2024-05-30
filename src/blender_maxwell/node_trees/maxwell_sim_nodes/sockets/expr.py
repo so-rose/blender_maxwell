@@ -791,14 +791,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - FlowKind: Func (w/Params if Constant)
 	####################
-	@bl_cache.cached_bl_property(
-		depends_on={
-			'value',
-			'sorted_sp_symbols',
-			'sorted_symbols',
-			'output_sym',
-		}
-	)
+	@bl_cache.cached_bl_property(depends_on={'output_sym'})
 	def lazy_func(self) -> ct.FuncFlow:
 		"""Returns a lazy value that computes the expression returned by `self.value`.
 
@@ -806,42 +799,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Otherwise, the returned lazy value function will be a simple excuse for `self.params` to pass the verbatim `self.value`.
 		"""
 		if self.output_sym is not None:
-			match self.active_kind:
-				case ct.FlowKind.Value | ct.FlowKind.Func if (
-					self.sorted_symbols and not ct.FlowSignal.check(self.value)
-				):
-					return ct.FuncFlow(
-						func=sp.lambdify(
-							self.sorted_sp_symbols,
-							self.output_sym.conform(self.value, strip_unit=True),
-							'jax',
-						),
-						func_args=list(self.sorted_symbols),
-						func_output=self.output_sym,
-						supports_jax=True,
-					)
-
-				case ct.FlowKind.Value | ct.FlowKind.Func if not self.sorted_symbols:
-					return ct.FuncFlow(
-						func=lambda v: v,
-						func_args=[self.output_sym],
-						func_output=self.output_sym,
-						supports_jax=True,
-					)
-
-				case ct.FlowKind.Range if self.sorted_symbols:
-					msg = 'RangeFlow support not yet implemented for when self.sorted_symbols is not empty'
-					raise NotImplementedError(msg)
-
-				case ct.FlowKind.Range if (
-					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
-				):
-					return ct.FuncFlow(
-						func=lambda v: v,
-						func_args=[self.output_sym],
-						func_output=self.output_sym,
-						supports_jax=True,
-					)
+			return ct.FuncFlow(
+				func=lambda v: v,
+				func_args=[self.output_sym],
+				func_output=self.output_sym,
+				supports_jax=True,
+			)
 
 		return ct.FlowSignal.FlowPending
 
@@ -854,22 +817,15 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		If `self.value` has unknown symbols (as indicated by `self.symbols`), then these will be passed into `ParamsFlow`, which will thus be parameterized (and require realization before use).
 		Otherwise, `self.value` is passed verbatim as the only `ParamsFlow.func_arg`.
 		"""
-		output_sym = self.output_sym
-		if output_sym is not None:
+		if self.output_sym is not None:
 			match self.active_kind:
-				case ct.FlowKind.Value | ct.FlowKind.Func if self.sorted_symbols:
-					return ct.ParamsFlow(
-						arg_targets=list(self.sorted_symbols),
-						func_args=[sym.sp_symbol for sym in self.sorted_symbols],
-						symbols=set(self.sorted_symbols),
-					)
-
 				case ct.FlowKind.Value | ct.FlowKind.Func if (
-					not self.sorted_symbols and not ct.FlowSignal.check(self.value)
+					not ct.FlowSignal.check(self.value)
 				):
 					return ct.ParamsFlow(
 						arg_targets=[self.output_sym],
 						func_args=[self.value],
+						symbols=set(self.sorted_symbols),
 					)
 
 				case ct.FlowKind.Range if self.sorted_symbols:
@@ -899,19 +855,13 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		Otherwise, only the output name/size/mathtype/unit corresponding to the socket is passed along.
 		"""
-		output_sym = self.output_sym
-		if output_sym is not None:
+		if self.output_sym is not None:
 			match self.active_kind:
-				case ct.FlowKind.Value | ct.FlowKind.Func if self.sorted_symbols:
+				case ct.FlowKind.Value | ct.FlowKind.Func:
 					return ct.InfoFlow(
 						dims={sym: None for sym in self.sorted_symbols},
 						output=self.output_sym,
 					)
-
-				case ct.FlowKind.Value | ct.FlowKind.Func if (
-					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
-				):
-					return ct.InfoFlow(output=self.output_sym)
 
 				case ct.FlowKind.Range if self.sorted_symbols:
 					msg = 'InfoFlow support not yet implemented for when self.sorted_symbols is not empty'

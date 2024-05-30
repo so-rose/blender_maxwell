@@ -88,36 +88,19 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Structure',
 		kind=ct.FlowKind.Value,
 		# Loaded
-		input_sockets={'Medium', 'Center', 'Size'},
 		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
+		output_socket_kinds={'Structure': {ct.FlowKind.Func, ct.FlowKind.Params}},
 	)
-	def compute_value(self, input_sockets, output_sockets) -> td.Box:
-		"""Compute a single box structure object, given that all inputs are non-symbolic."""
-		center = input_sockets['Center']
-		size = input_sockets['Size']
-		medium = input_sockets['Medium']
-		output_params = output_sockets['Structure']
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		output_func = output_sockets['Structure'][ct.FlowKind.Func]
+		output_params = output_sockets['Structure'][ct.FlowKind.Params]
 
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_medium = not ct.FlowSignal.check(medium)
+		has_output_func = not ct.FlowSignal.check(output_func)
 		has_output_params = not ct.FlowSignal.check(output_params)
 
-		if (
-			has_center
-			and has_size
-			and has_medium
-			and has_output_params
-			and not output_params.symbols
-		):
-			return td.Structure(
-				geometry=td.Box(
-					center=spux.scale_to_unit_system(center, ct.UNITS_TIDY3D),
-					size=spux.scale_to_unit_system(size, ct.UNITS_TIDY3D),
-				),
-				medium=medium,
-			)
+		if has_output_func and has_output_params and not output_params.symbols:
+			return output_func.realize(output_params, disallow_jax=True)
 		return ct.FlowSignal.FlowPending
 
 	####################
@@ -134,45 +117,43 @@ class BoxStructureNode(base.MaxwellSimNode):
 			'Center': ct.FlowKind.Func,
 			'Size': ct.FlowKind.Func,
 		},
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def compute_structure_func(self, props, input_sockets, output_sockets) -> td.Box:
+	def compute_structure_func(self, props, input_sockets) -> td.Box:
 		"""Compute a possibly-differentiable function, producing a box structure from the input parameters."""
-		output_params = output_sockets['Structure']
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		medium = input_sockets['Medium']
 
-		has_output_params = not ct.FlowSignal.check(output_params)
 		has_center = not ct.FlowSignal.check(center)
 		has_size = not ct.FlowSignal.check(size)
 		has_medium = not ct.FlowSignal.check(medium)
 
-		if has_output_params and has_center and has_size and has_medium:
+		if has_center and has_size and has_medium:
 			differentiable = props['differentiable']
 			if differentiable:
-				return (center | size | medium).compose_within(
-					enclosing_func=lambda els: tdadj.JaxStructure(
+				return (
+					center.scale_to_unit_system(ct.UNITS_TIDY3D)
+					| size.scale_to_unit_system(ct.UNITS_TIDY3D)
+					| medium
+				).compose_within(
+					lambda els: tdadj.JaxStructure(
 						geometry=tdadj.JaxBox(
-							center=tuple(els[0].flatten()),
-							size=tuple(els[1].flatten()),
+							center_jax=tuple(els[0].flatten()),
+							size_jax=tuple(els[1].flatten()),
 						),
 						medium=els[2],
 					),
 					supports_jax=True,
 				)
-			return (center | size | medium).compose_within(
-				## TODO: Unit conversion within the composed function??
-				## -- We do need Tidy3D to be given ex. micrometers in particular.
-				## -- But the previous numerical output might not be micrometers.
-				## -- There must be a way to add a conversion in, without strangeness.
-				## -- Ex. can compose_within() take a unit system?
-				## -- This would require
-				enclosing_func=lambda els: td.Structure(
+			return (
+				center.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| size.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| medium
+			).compose_within(
+				lambda els: td.Structure(
 					geometry=td.Box(
-						center=tuple(els[0].flatten()),
-						size=tuple(els[1].flatten()),
+						center=els[0].flatten().tolist(),
+						size=els[1].flatten().tolist(),
 					),
 					medium=els[2],
 				),
@@ -187,7 +168,6 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Structure',
 		kind=ct.FlowKind.Params,
 		# Loaded
-		props={'differentiable'},
 		input_sockets={'Medium', 'Center', 'Size'},
 		input_socket_kinds={
 			'Medium': ct.FlowKind.Params,
@@ -195,7 +175,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 			'Size': ct.FlowKind.Params,
 		},
 	)
-	def compute_params(self, props, input_sockets) -> td.Box:
+	def compute_params(self, input_sockets) -> td.Box:
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		medium = input_sockets['Medium']
@@ -238,13 +218,16 @@ class BoxStructureNode(base.MaxwellSimNode):
 		output_sockets={'Structure'},
 		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def on_inputs_changed(self, managed_objs, input_sockets, output_sockets):
-		output_params = output_sockets['Structure']
+	def on_previewable_changed(self, managed_objs, input_sockets, output_sockets):
 		center = input_sockets['Center']
+		size = input_sockets['Size']
+		output_params = output_sockets['Structure']
 
-		has_output_params = not ct.FlowSignal.check(output_params)
 		has_center = not ct.FlowSignal.check(center)
-		if has_center and has_output_params and not output_params.symbols:
+		has_size = not ct.FlowSignal.check(size)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_center and has_size and has_output_params and not output_params.symbols:
 			## TODO: There are strategies for handling examples of symbol values.
 
 			# Push Loose Input Values to GeoNodes Modifier
@@ -254,7 +237,7 @@ class BoxStructureNode(base.MaxwellSimNode):
 					'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
 					'unit_system': ct.UNITS_BLENDER,
 					'inputs': {
-						'Size': input_sockets['Size'],
+						'Size': size,
 					},
 				},
 				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
