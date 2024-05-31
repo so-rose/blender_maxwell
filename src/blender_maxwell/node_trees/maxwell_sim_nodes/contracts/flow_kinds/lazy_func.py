@@ -624,7 +624,7 @@ class FuncFlow(pyd.BaseModel):
 			# Compose Unit-Converted FuncFlow
 			return self.compose_within(
 				enclosing_func=unit_convert_func,
-				supports_jax=True,
+				supports_jax=self.supports_jax,
 				enclosing_func_output=self.func_output.update(unit=None),
 			)
 

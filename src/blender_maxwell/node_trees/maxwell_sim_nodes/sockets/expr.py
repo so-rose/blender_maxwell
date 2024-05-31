@@ -408,7 +408,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		## NOTE: Depends on suppressed on_prop_changed
 		if ('selected_value_range', 'invalidate') in cleared_blfields:
 			self.active_kind = self.selected_value_range
-			self.on_active_kind_changed()
+			# self.on_active_kind_changed()
 
 		# Conditional Unit-Conversion
 		## -> This is niche functionality, but the only way to convert units.
@@ -434,6 +434,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				self.lazy_range = self.lazy_range.correct_unit(prev_unit)
 
 			self.prev_unit = self.active_unit
+			# self.unit = bl_cache.Signal.InvalidateCache
 
 	####################
 	# - Value Utilities
@@ -843,7 +844,9 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		return ct.FlowSignal.FlowPending
 
-	@bl_cache.cached_bl_property(depends_on={'sorted_symbols', 'output_sym'})
+	@bl_cache.cached_bl_property(
+		depends_on={'sorted_symbols', 'output_sym', 'lazy_range'}
+	)
 	def info(self) -> ct.InfoFlow:
 		r"""Returns parameter symbols/values to accompany `self.lazy_func`.
 

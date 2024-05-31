@@ -261,7 +261,7 @@ class ManagedBLImage(base.ManagedObj):
 		dpi: int | None = None,
 		bl_select: bool = False,
 	):
-		times = ['START', time.perf_counter()]
+		times = [time.perf_counter()]
 
 		# Compute Plot Dimensions
 		# aspect_ratio, _dpi, _width_inches, _height_inches, width_px, height_px = (

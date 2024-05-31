@@ -172,11 +172,11 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Previews,
 		# Loaded
 		props={'sim_node_name'},
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
+		output_sockets={'Source'},
+		output_socket_kinds={'Source': ct.FlowKind.Params},
 	)
 	def compute_previews(self, props, output_sockets):
-		output_params = output_sockets['Structure']
+		output_params = output_sockets['Source']
 		has_output_params = not ct.FlowSignal.check(output_params)
 
 		if has_output_params and not output_params.symbols:
@@ -184,6 +184,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		return ct.PreviewsFlow()
 
 	@events.on_value_changed(
+		# Trigger
 		socket_name={'Center'},
 		prop_name='pol',
 		run_on_init=True,
@@ -194,7 +195,7 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 		output_sockets={'Source'},
 		output_socket_kinds={'Source': ct.FlowKind.Params},
 	)
-	def on_inputs_changed(
+	def on_previewable_changed(
 		self, managed_objs, props, input_sockets, output_sockets
 	) -> None:
 		SFP = ct.SimFieldPols
@@ -220,8 +221,10 @@ class PointDipoleSourceNode(base.MaxwellSimNode):
 				'NODES',
 				{
 					'node_group': import_geonodes(GeoNodes.SourcePointDipole),
-					'inputs': {'Axis': axis},
 					'unit_system': ct.UNITS_BLENDER,
+					'inputs': {
+						'Axis': axis,
+					},
 				},
 				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
 			)

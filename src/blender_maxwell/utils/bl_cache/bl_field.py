@@ -307,7 +307,14 @@ class BLField:
 		## -> As a result, the value must be reloaded from the property.
 		## The 'on_prop_changed' method on the bl_instance might also be called.
 		if value is Signal.InvalidateCache or value is Signal.InvalidateCacheNoUpdate:
-			self.bl_prop.invalidate_nonpersist(bl_instance)
+			# Invalidate Non-Persistent Cache
+			## -> Invalidations via on_bl_prop_changed may come by here.
+			## -> In many cases, we may have suppressed that BLProp.write().
+			## -> BLProp.write() itself guarantees inv. of non-persist cache.
+			## -> In the meantime, don't strip away thread safety!
+			## -> (Dict ops are thread-safe in CPython; Blender Props are NOT)
+			if not self.suppressed_update.get(bl_instance.instance_id, False):
+				self.bl_prop.invalidate_nonpersist(bl_instance)
 
 			# Trigger Update Chain
 			## -> User can disable w/'use_prop_update=False'.

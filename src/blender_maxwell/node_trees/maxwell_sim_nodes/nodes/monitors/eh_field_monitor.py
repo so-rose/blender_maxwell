@@ -86,9 +86,8 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 			),
 		},
 	}
-	output_socket_sets: typ.ClassVar = {
-		'Freq Domain': {'Freq Monitor': sockets.MaxwellMonitorSocketDef()},
-		'Time Domain': {'Time Monitor': sockets.MaxwellMonitorSocketDef()},
+	output_sockets: typ.ClassVar = {
+		'Monitor': sockets.MaxwellMonitorSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -107,111 +106,190 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		layout.prop(self, self.blfields['fields'], expand=True)
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
-		'Freq Monitor',
-		props={'sim_node_name', 'fields'},
+		'Monitor',
+		kind=ct.FlowKind.Value,
+		# Loaded
+		output_sockets={'Monitor'},
+		output_socket_kinds={'Monitor': {ct.FlowKind.Func, ct.FlowKind.Params}},
+	)
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		output_func = output_sockets['Monitor'][ct.FlowKind.Func]
+		output_params = output_sockets['Monitor'][ct.FlowKind.Params]
+
+		has_output_func = not ct.FlowSignal.check(output_func)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_output_func and has_output_params and not output_params.symbols:
+			return output_func.realize(output_params, disallow_jax=True)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'Monitor',
+		kind=ct.FlowKind.Func,
+		# Loaded
+		props={'active_socket_set', 'sim_node_name', 'fields'},
 		input_sockets={
 			'Center',
 			'Size',
 			'Stride',
 			'Freqs',
-		},
-		input_socket_kinds={
-			'Freqs': ct.FlowKind.Range,
-		},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Size': 'Tidy3DUnits',
-			'Freqs': 'Tidy3DUnits',
-		},
-	)
-	def compute_freq_monitor(
-		self,
-		input_sockets: dict,
-		props: dict,
-		unit_systems: dict,
-	) -> td.FieldMonitor:
-		log.info(
-			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
-			props['sim_node_name'],
-			input_sockets['Center'],
-			input_sockets['Size'],
-		)
-		return td.FieldMonitor(
-			center=input_sockets['Center'],
-			size=input_sockets['Size'],
-			name=props['sim_node_name'],
-			interval_space=tuple(input_sockets['Stride']),
-			freqs=input_sockets['Freqs'].realize().values,
-			fields=props['fields'],
-		)
-
-	@events.computes_output_socket(
-		'Time Monitor',
-		props={'sim_node_name', 'fields'},
-		input_sockets={
-			'Center',
-			'Size',
-			'Stride',
 			't Range',
 			't Stride',
 		},
 		input_socket_kinds={
-			't Range': ct.FlowKind.Range,
-		},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Size': 'Tidy3DUnits',
-			't Range': 'Tidy3DUnits',
+			'Center': ct.FlowKind.Func,
+			'Size': ct.FlowKind.Func,
+			'Stride': ct.FlowKind.Func,
+			'Freqs': ct.FlowKind.Func,
+			't Range': ct.FlowKind.Func,
+			't Stride': ct.FlowKind.Func,
 		},
 	)
-	def compute_time_monitor(
-		self,
-		input_sockets: dict,
-		props: dict,
-		unit_systems: dict,
-	) -> td.FieldMonitor:
-		log.info(
-			'Computing FieldMonitor (name="%s") with center="%s", size="%s"',
-			props['sim_node_name'],
-			input_sockets['Center'],
-			input_sockets['Size'],
-		)
-		return td.FieldTimeMonitor(
-			center=input_sockets['Center'],
-			size=input_sockets['Size'],
-			name=props['sim_node_name'],
-			interval_space=tuple(input_sockets['Stride']),
-			start=input_sockets['t Range'].realize_start(),
-			stop=input_sockets['t Range'].realize_stop(),
-			interval=input_sockets['t Stride'],
-			fields=props['fields'],
-		)
+	def compute_func(self, props, input_sockets) -> td.FieldMonitor:
+		center = input_sockets['Center']
+		size = input_sockets['Size']
+		stride = input_sockets['Stride']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_size = not ct.FlowSignal.check(size)
+		has_stride = not ct.FlowSignal.check(stride)
+
+		if has_center and has_size and has_stride:
+			name = props['sim_node_name']
+			fields = props['fields']
+
+			common_func_flow = (
+				center.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| size.scale_to_unit_system(ct.UNITS_TIDY3D)
+				| stride
+			)
+
+			match props['active_socket_set']:
+				case 'Freq Domain':
+					freqs = input_sockets['Freqs']
+					has_freqs = not ct.FlowSignal.check(freqs)
+
+					if has_freqs:
+						return (
+							common_func_flow
+							| freqs.scale_to_unit_system(ct.UNITS_TIDY3D)
+						).compose_within(
+							lambda els: td.FieldMonitor(
+								center=els[0].flatten().tolist(),
+								size=els[1].flatten().tolist(),
+								name=name,
+								interval_space=els[2].flatten().tolist(),
+								freqs=els[3].flatten(),
+								fields=fields,
+							)
+						)
+
+				case 'Time Domain':
+					t_range = input_sockets['t Range']
+					t_stride = input_sockets['t Stride']
+
+					has_t_range = not ct.FlowSignal.check(t_range)
+					has_t_stride = not ct.FlowSignal.check(t_stride)
+
+					if has_t_range and has_t_stride:
+						return (
+							common_func_flow
+							| t_range.scale_to_unit_system(ct.UNITS_TIDY3D)
+							| t_stride.scale_to_unit_system(ct.UNITS_TIDY3D)
+						).compose_within(
+							lambda els: td.FieldTimeMonitor(
+								center=els[0].flatten().tolist(),
+								size=els[1].flatten().tolist(),
+								name=name,
+								interval_space=els[2].flatten().tolist(),
+								start=els[3][0],
+								stop=els[3][-1],
+								interval=els[4],
+								fields=fields,
+							)
+						)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Monitor',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		props={'active_socket_set'},
+		input_sockets={
+			'Center',
+			'Size',
+			'Stride',
+			'Freqs',
+			't Range',
+			't Stride',
+		},
+		input_socket_kinds={
+			'Center': ct.FlowKind.Params,
+			'Size': ct.FlowKind.Params,
+			'Stride': ct.FlowKind.Params,
+			'Freqs': ct.FlowKind.Params,
+			't Range': ct.FlowKind.Params,
+			't Stride': ct.FlowKind.Params,
+		},
+	)
+	def compute_params(self, props, input_sockets) -> None:
+		center = input_sockets['Center']
+		size = input_sockets['Size']
+		stride = input_sockets['Stride']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_size = not ct.FlowSignal.check(size)
+		has_stride = not ct.FlowSignal.check(stride)
+
+		if has_center and has_size and has_stride:
+			common_params = center | size | stride
+			match props['active_socket_set']:
+				case 'Freq Domain':
+					freqs = input_sockets['Freqs']
+					has_freqs = not ct.FlowSignal.check(freqs)
+
+					if has_freqs:
+						return common_params | freqs
+
+				case 'Time Domain':
+					t_range = input_sockets['t Range']
+					t_stride = input_sockets['t Stride']
+
+					has_t_range = not ct.FlowSignal.check(t_range)
+					has_t_stride = not ct.FlowSignal.check(t_stride)
+
+					if has_t_range and has_t_stride:
+						return common_params | t_range | t_stride
+		return ct.FlowSignal.FlowPending
 
 	####################
 	# - Preview
 	####################
 	@events.computes_output_socket(
-		'Time Monitor',
+		'Monitor',
 		kind=ct.FlowKind.Previews,
 		# Loaded
 		props={'sim_node_name'},
+		output_sockets={'Monitor'},
+		output_socket_kinds={'Monitor': ct.FlowKind.Params},
 	)
-	def compute_previews_time(self, props):
-		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+	def compute_previews(self, props, output_sockets):
+		output_params = output_sockets['Monitor']
+		has_output_params = not ct.FlowSignal.check(output_params)
 
-	@events.computes_output_socket(
-		'Freq Monitor',
-		kind=ct.FlowKind.Previews,
-		# Loaded
-		props={'sim_node_name'},
-	)
-	def compute_previews_freq(self, props):
-		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+		if has_output_params and not output_params.symbols:
+			return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+		return ct.PreviewsFlow()
 
 	@events.on_value_changed(
 		# Trigger
@@ -220,29 +298,31 @@ class EHFieldMonitorNode(base.MaxwellSimNode):
 		# Loaded
 		managed_objs={'modifier'},
 		input_sockets={'Center', 'Size'},
-		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
-		scale_input_sockets={
-			'Center': 'BlenderUnits',
-		},
+		output_sockets={'Monitor'},
+		output_socket_kinds={'Monitor': ct.FlowKind.Params},
 	)
-	def on_inputs_changed(
-		self,
-		managed_objs,
-		input_sockets,
-		unit_systems,
-	):
-		# Push Input Values to GeoNodes Modifier
-		managed_objs['modifier'].bl_modifier(
-			'NODES',
-			{
-				'node_group': import_geonodes(GeoNodes.MonitorEHField),
-				'unit_system': unit_systems['BlenderUnits'],
-				'inputs': {
-					'Size': input_sockets['Size'],
+	def on_previewable_changed(self, managed_objs, input_sockets, output_sockets):
+		center = input_sockets['Center']
+		size = input_sockets['Size']
+		output_params = output_sockets['Monitor']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_size = not ct.FlowSignal.check(size)
+		has_output_params = not ct.FlowSignal.check(output_params)
+
+		if has_center and has_size and has_output_params and not output_params.symbols:
+			# Push Input Values to GeoNodes Modifier
+			managed_objs['modifier'].bl_modifier(
+				'NODES',
+				{
+					'node_group': import_geonodes(GeoNodes.MonitorEHField),
+					'unit_system': ct.UNITS_BLENDER,
+					'inputs': {
+						'Size': size,
+					},
 				},
-			},
-			location=input_sockets['Center'],
-		)
+				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
+			)
 
 
 ####################

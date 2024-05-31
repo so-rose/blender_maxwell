@@ -182,20 +182,23 @@ class CachedBLProperty:
 				# Fill Caches
 				## -> persist=True: Fill Persist and Non-Persist Cache
 				## -> persist=False: Fill Non-Persist Cache
-				if self.persist:
-					with self.suppress_update(bl_instance):
-						self.bl_prop.write(bl_instance, self.getter_method(bl_instance))
+				if not self.suppressed_update.get(bl_instance.instance_id, False):
+					if self.persist:
+						with self.suppress_update(bl_instance):
+							self.bl_prop.write(
+								bl_instance, self.getter_method(bl_instance)
+							)
 
-				else:
-					self.bl_prop.write_nonpersist(
-						bl_instance, self.getter_method(bl_instance)
-					)
+					else:
+						self.bl_prop.write_nonpersist(
+							bl_instance, self.getter_method(bl_instance)
+						)
 
 				# Trigger Update
 				## -> Use InvalidateCacheNoUpdate to explicitly disable update.
 				## -> If 'suppress_update' context manager is active, don't update.
 				if value is Signal.InvalidateCache and not self.suppressed_update.get(
-					bl_instance.instance_id
+					bl_instance.instance_id, False
 				):
 					bl_instance.on_prop_changed(self.bl_prop.name)
 

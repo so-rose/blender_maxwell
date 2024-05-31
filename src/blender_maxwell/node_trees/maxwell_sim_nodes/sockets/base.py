@@ -282,9 +282,9 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 
 			# Property Callbacks: Per-Socket
 			## -> NOTE: User-defined handlers might recurse on_prop_changed.
-			self.is_initializing = True
+			# self.is_initializing = True
 			self.on_socket_props_changed(set_of_cleared_blfields)
-			self.is_initializing = False
+			# self.is_initializing = False
 
 			# Trigger Event
 			## -> Before SocketDef.postinit(), never emit DataChanged.

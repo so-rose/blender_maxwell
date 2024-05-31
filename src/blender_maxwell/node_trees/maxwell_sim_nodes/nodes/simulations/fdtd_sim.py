@@ -57,10 +57,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 		'Single': {
 			'Sim': sockets.MaxwellFDTDSimSocketDef(active_kind=ct.FlowKind.Value),
 		},
-		'Batch': {
-			'Sim': sockets.MaxwellFDTDSimSocketDef(active_kind=ct.FlowKind.Array),
-		},
-		'Lazy': {
+		'Func': {
 			'Sim': sockets.MaxwellFDTDSimSocketDef(active_kind=ct.FlowKind.Func),
 		},
 	}
@@ -101,7 +98,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 		# Declare Loose Sockets that Realize Symbols
 		## -> This happens if Params contains not-yet-realized symbols.
 		active_socket_set = props['active_socket_set']
-		if active_socket_set in ['Value', 'Batch'] and has_params and params.symbols:
+		if active_socket_set == 'Single' and has_params and params.symbols:
 			if set(self.loose_input_sockets) != {sym.name for sym in params.symbols}:
 				self.loose_input_sockets = {
 					sym.name: sockets.ExprSocketDef(
@@ -128,51 +125,19 @@ class FDTDSimNode(base.MaxwellSimNode):
 		'Sim',
 		kind=ct.FlowKind.Value,
 		# Loaded
-		props={'differentiable'},
-		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
-		input_socket_kinds={
-			'Sources': ct.FlowKind.Array,
-			'Structures': ct.FlowKind.Array,
-			'Monitors': ct.FlowKind.Array,
-		},
 		output_sockets={'Sim'},
-		output_socket_kinds={'Sim': ct.FlowKind.Params},
+		output_socket_kinds={'Sim': {ct.FlowKind.Func, ct.FlowKind.Params}},
 	)
-	def compute_fdtd_sim_value(
-		self, props, input_sockets, output_sockets
-	) -> td.Simulation | tdadj.JaxSimulation | ct.FlowSignal:
-		"""Compute a single FDTD simulation definition, so long as the inputs are neither symbolic or differentiable."""
-		sim_domain = input_sockets['Domain']
-		sources = input_sockets['Sources']
-		structures = input_sockets['Structures']
-		bounds = input_sockets['BCs']
-		monitors = input_sockets['Monitors']
-		output_params = output_sockets['Sim']
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		output_func = output_sockets['Sim'][ct.FlowKind.Func]
+		output_params = output_sockets['Sim'][ct.FlowKind.Params]
 
-		has_sim_domain = not ct.FlowSignal.check(sim_domain)
-		has_sources = not ct.FlowSignal.check(sources)
-		has_structures = not ct.FlowSignal.check(structures)
-		has_bounds = not ct.FlowSignal.check(bounds)
-		has_monitors = not ct.FlowSignal.check(monitors)
+		has_output_func = not ct.FlowSignal.check(output_func)
 		has_output_params = not ct.FlowSignal.check(output_params)
 
-		differentiable = props['differentiable']
-		if (
-			has_sim_domain
-			and has_sources
-			and has_structures
-			and has_bounds
-			and has_monitors
-			and has_output_params
-			and not differentiable
-		):
-			return td.Simulation(
-				**sim_domain,
-				sources=sources,
-				structures=structures,
-				boundary_spec=bounds,
-				monitors=monitors,
-			)
+		if has_output_func and has_output_params and not output_params.symbols:
+			return output_func.realize(output_params, disallow_jax=True)
 		return ct.FlowSignal.FlowPending
 
 	####################
@@ -185,6 +150,8 @@ class FDTDSimNode(base.MaxwellSimNode):
 		props={'differentiable'},
 		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
 		input_socket_kinds={
+			'BCs': ct.FlowKind.Func,
+			'Domain': ct.FlowKind.Func,
 			'Sources': ct.FlowKind.Func,
 			'Structures': ct.FlowKind.Func,
 			'Monitors': ct.FlowKind.Func,
@@ -196,17 +163,17 @@ class FDTDSimNode(base.MaxwellSimNode):
 		self, props, input_sockets, output_sockets
 	) -> td.Simulation | tdadj.JaxSimulation | ct.FlowSignal:
 		"""Compute a single simulation, given that all inputs are non-symbolic."""
+		bounds = input_sockets['BCs']
 		sim_domain = input_sockets['Domain']
 		sources = input_sockets['Sources']
 		structures = input_sockets['Structures']
-		bounds = input_sockets['BCs']
 		monitors = input_sockets['Monitors']
 		output_params = output_sockets['Sim']
 
+		has_bounds = not ct.FlowSignal.check(bounds)
 		has_sim_domain = not ct.FlowSignal.check(sim_domain)
 		has_sources = not ct.FlowSignal.check(sources)
 		has_structures = not ct.FlowSignal.check(structures)
-		has_bounds = not ct.FlowSignal.check(bounds)
 		has_monitors = not ct.FlowSignal.check(monitors)
 		has_output_params = not ct.FlowSignal.check(output_params)
 
@@ -220,28 +187,16 @@ class FDTDSimNode(base.MaxwellSimNode):
 		):
 			differentiable = props['differentiable']
 			if differentiable:
-				return (
-					sim_domain | sources | structures | bounds | monitors
-				).compose_within(
-					enclosing_func=lambda els: tdadj.JaxSimulation(
-						**els[0],
-						sources=els[1],
-						structures=els[2]['static'],
-						input_structures=els[2]['differentiable'],
-						boundary_spec=els[3],
-						monitors=els[4]['static'],
-						output_monitors=els[4]['differentiable'],
-					),
-					supports_jax=True,
-				)
+				raise NotImplementedError
+
 			return (
-				sim_domain | sources | structures | bounds | monitors
+				bounds | sim_domain | sources | structures | monitors
 			).compose_within(
 				enclosing_func=lambda els: td.Simulation(
-					**els[0],
-					sources=els[1],
-					structures=els[2],
-					boundary_spec=els[3],
+					boundary_spec=els[0],
+					**els[1],
+					sources=els[2],
+					structures=els[3],
 					monitors=els[4],
 				),
 				supports_jax=False,
@@ -258,6 +213,8 @@ class FDTDSimNode(base.MaxwellSimNode):
 		props={'differentiable'},
 		input_sockets={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
 		input_socket_kinds={
+			'BCs': ct.FlowKind.Params,
+			'Domain': ct.FlowKind.Params,
 			'Sources': ct.FlowKind.Params,
 			'Structures': ct.FlowKind.Params,
 			'Monitors': ct.FlowKind.Params,
@@ -267,31 +224,26 @@ class FDTDSimNode(base.MaxwellSimNode):
 		self, props, input_sockets
 	) -> td.Simulation | tdadj.JaxSimulation | ct.FlowSignal:
 		"""Compute a single simulation, given that all inputs are non-symbolic."""
+		bounds = input_sockets['BCs']
 		sim_domain = input_sockets['Domain']
 		sources = input_sockets['Sources']
 		structures = input_sockets['Structures']
-		bounds = input_sockets['BCs']
 		monitors = input_sockets['Monitors']
 
+		has_bounds = not ct.FlowSignal.check(bounds)
 		has_sim_domain = not ct.FlowSignal.check(sim_domain)
 		has_sources = not ct.FlowSignal.check(sources)
 		has_structures = not ct.FlowSignal.check(structures)
-		has_bounds = not ct.FlowSignal.check(bounds)
 		has_monitors = not ct.FlowSignal.check(monitors)
 
 		if (
-			has_sim_domain
+			has_bounds
+			and has_sim_domain
 			and has_sources
 			and has_structures
-			and has_bounds
 			and has_monitors
 		):
-			# Determine Differentiable Match
-			## -> 'structures' is diff when **any** are diff.
-			## -> 'monitors' is also diff when **any** are diff.
-			## -> Only parameters through diff structs can be diff'ed by.
-			## -> Similarly, only diff monitors will have gradients computed.
-			return sim_domain | sources | structures | bounds | monitors
+			return bounds | sim_domain | sources | structures | monitors
 		return ct.FlowSignal.FlowPending
 
 

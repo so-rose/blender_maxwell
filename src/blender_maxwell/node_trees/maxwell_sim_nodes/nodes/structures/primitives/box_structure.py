@@ -213,8 +213,8 @@ class BoxStructureNode(base.MaxwellSimNode):
 		socket_name={'Center', 'Size'},
 		run_on_init=True,
 		# Loaded
-		input_sockets={'Center', 'Size'},
 		managed_objs={'modifier'},
+		input_sockets={'Center', 'Size'},
 		output_sockets={'Structure'},
 		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)

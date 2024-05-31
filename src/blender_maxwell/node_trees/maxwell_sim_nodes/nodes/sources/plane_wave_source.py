@@ -71,7 +71,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Angled Source': sockets.MaxwellSourceSocketDef(),
+		'Angled Source': sockets.MaxwellSourceSocketDef(active_kind=ct.FlowKind.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -103,8 +103,8 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	)
 	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
-		output_func = output_sockets['Source'][ct.FlowKind.Func]
-		output_params = output_sockets['Source'][ct.FlowKind.Params]
+		output_func = output_sockets['Angled Source'][ct.FlowKind.Func]
+		output_params = output_sockets['Angled Source'][ct.FlowKind.Params]
 
 		has_output_func = not ct.FlowSignal.check(output_func)
 		has_output_params = not ct.FlowSignal.check(output_params)
@@ -122,11 +122,11 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		# Loaded
 		props={'sim_node_name', 'injection_axis', 'injection_direction'},
 		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Spherical': 'Tidy3DUnits',
-			'Pol ∡': 'Tidy3DUnits',
+		input_socket_kinds={
+			'Temporal Shape': ct.FlowKind.Func,
+			'Center': ct.FlowKind.Func,
+			'Spherical': ct.FlowKind.Func,
+			'Pol ∡': ct.FlowKind.Func,
 		},
 	)
 	def compute_func(self, props, input_sockets) -> None:
@@ -157,15 +157,45 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 			).compose_within(
 				lambda els: td.PlaneWave(
 					name=name,
-					center=els[0],
+					center=els[0].flatten().tolist(),
 					size=size,
 					source_time=els[1],
 					direction=inj_dir,
-					angle_theta=els[2][0],
-					angle_phi=els[2][1],
+					angle_theta=els[2][0].item(0),
+					angle_phi=els[2][1].item(0),
 					pol_angle=els[3],
 				)
 			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Angled Source',
+		kind=ct.FlowKind.Params,
+		# Loaded
+		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
+		input_socket_kinds={
+			'Temporal Shape': ct.FlowKind.Params,
+			'Center': ct.FlowKind.Params,
+			'Spherical': ct.FlowKind.Params,
+			'Pol ∡': ct.FlowKind.Params,
+		},
+	)
+	def compute_params(self, input_sockets) -> None:
+		center = input_sockets['Center']
+		temporal_shape = input_sockets['Temporal Shape']
+		spherical = input_sockets['Spherical']
+		pol_ang = input_sockets['Pol ∡']
+
+		has_center = not ct.FlowSignal.check(center)
+		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
+		has_spherical = not ct.FlowSignal.check(spherical)
+		has_pol_ang = not ct.FlowSignal.check(pol_ang)
+
+		if has_center and has_temporal_shape and has_spherical and has_pol_ang:
+			return center | temporal_shape | spherical | pol_ang
 		return ct.FlowSignal.FlowPending
 
 	####################
@@ -176,11 +206,11 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		kind=ct.FlowKind.Previews,
 		# Loaded
 		props={'sim_node_name'},
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
+		output_sockets={'Angled Source'},
+		output_socket_kinds={'Angled Source': ct.FlowKind.Params},
 	)
 	def compute_previews(self, props, output_sockets):
-		output_params = output_sockets['Structure']
+		output_params = output_sockets['Angled Source']
 		has_output_params = not ct.FlowSignal.check(output_params)
 
 		if has_output_params and not output_params.symbols:
@@ -199,7 +229,9 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 		output_sockets={'Angled Source'},
 		output_socket_kinds={'Angled Source': ct.FlowKind.Params},
 	)
-	def on_inputs_changed(self, managed_objs, props, input_sockets, output_sockets):
+	def on_previewable_changed(
+		self, managed_objs, props, input_sockets, output_sockets
+	):
 		center = input_sockets['Center']
 		spherical = input_sockets['Spherical']
 		pol_ang = input_sockets['Pol ∡']

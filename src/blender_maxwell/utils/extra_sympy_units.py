@@ -1408,7 +1408,11 @@ class PhysicalType(enum.StrEnum):
 			ValueError: If no `PhysicalType` could be matched, and `optional` is `False`.
 		"""
 		if unit is None:
-			return ct.PhysicalType.NonPhysical
+			return PhysicalType.NonPhysical
+
+		## TODO_ This enough?
+		if unit in [spu.radian, spu.degree]:
+			return PhysicalType.Angle
 
 		unit_dim_deps = unit_to_unit_dim_deps(unit)
 		if unit_dim_deps is not None:

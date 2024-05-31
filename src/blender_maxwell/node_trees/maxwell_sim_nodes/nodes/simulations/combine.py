@@ -163,7 +163,9 @@ class CombineNode(base.MaxwellSimNode):
 					if not ct.FlowSignal.check(inp)
 				]
 				if func_flows:
-					return func_flows
+					return functools.reduce(
+						lambda a, b: a | b, func_flows
+					).compose_within(lambda els: list(els))
 				return ct.FlowSignal.FlowPending
 
 			case (ct.FlowKind.Func, ct.FlowKind.Params):
@@ -171,11 +173,13 @@ class CombineNode(base.MaxwellSimNode):
 					params_flow
 					for inp_sckname in self.inputs.keys()  # noqa: SIM118
 					if not ct.FlowSignal.check(
-						params_flow := self._compute_input(inp_sckname, kind='params')
+						params_flow := self._compute_input(
+							inp_sckname, kind=ct.FlowKind.Params
+						)
 					)
 				]
 				if params_flows:
-					return params_flows
+					return functools.reduce(lambda a, b: a | b, params_flows)
 				return ct.FlowSignal.FlowPending
 
 		return ct.FlowSignal.FlowPending
