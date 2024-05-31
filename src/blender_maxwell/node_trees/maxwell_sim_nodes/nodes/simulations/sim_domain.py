@@ -134,8 +134,8 @@ class SimDomainNode(base.MaxwellSimNode):
 			).compose_within(
 				lambda els: {
 					'run_time': els[0],
-					'center': tuple(els[1].flatten()),
-					'size': tuple(els[2].flatten()),
+					'center': els[1].flatten().tolist(),
+					'size': els[2].flatten().tolist(),
 					'grid_spec': els[3],
 					'medium': els[4],
 				},

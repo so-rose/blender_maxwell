@@ -68,7 +68,7 @@ class SimSymbolName(enum.StrEnum):
 	LowerTheta = enum.auto()
 	LowerPhi = enum.auto()
 
-	# Fields
+	# EM Fields
 	Ex = enum.auto()
 	Ey = enum.auto()
 	Ez = enum.auto()
@@ -96,6 +96,10 @@ class SimSymbolName(enum.StrEnum):
 
 	DiffOrderX = enum.auto()
 	DiffOrderY = enum.auto()
+
+	BlochX = enum.auto()
+	BlochY = enum.auto()
+	BlochZ = enum.auto()
 
 	####################
 	# - UI
@@ -168,6 +172,9 @@ class SimSymbolName(enum.StrEnum):
 				SSN.Flux: 'flux',
 				SSN.DiffOrderX: 'order_x',
 				SSN.DiffOrderY: 'order_y',
+				SSN.BlochX: 'bloch_x',
+				SSN.BlochY: 'bloch_y',
+				SSN.BlochZ: 'bloch_z',
 			}
 		)[self]
 

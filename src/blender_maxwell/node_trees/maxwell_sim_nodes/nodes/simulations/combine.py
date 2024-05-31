@@ -162,10 +162,15 @@ class CombineNode(base.MaxwellSimNode):
 					for inp in loose_input_sockets.values()
 					if not ct.FlowSignal.check(inp)
 				]
-				if func_flows:
+
+				if len(func_flows) > 1:
 					return functools.reduce(
 						lambda a, b: a | b, func_flows
 					).compose_within(lambda els: list(els))
+
+				if len(func_flows) == 1:
+					return func_flows[0].compose_within(lambda el: [el])
+
 				return ct.FlowSignal.FlowPending
 
 			case (ct.FlowKind.Func, ct.FlowKind.Params):

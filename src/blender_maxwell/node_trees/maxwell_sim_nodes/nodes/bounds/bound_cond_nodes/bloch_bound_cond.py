@@ -322,7 +322,9 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 
 				if has_bloch_vector:
 					return bloch_vector.compose_within(
-						enclosing_func=lambda: td.BlochBoundary(bloch_vec=bloch_vector),
+						enclosing_func=lambda _bloch_vector: td.BlochBoundary(
+							bloch_vec=_bloch_vector
+						),
 						supports_jax=False,
 					)
 				return ct.FlowSignal.FlowPending

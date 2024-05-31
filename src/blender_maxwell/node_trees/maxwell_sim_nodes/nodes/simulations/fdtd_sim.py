@@ -83,8 +83,8 @@ class FDTDSimNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Sources', 'Structures', 'Domain', 'BCs', 'Monitors'},
-		run_on_init=True,
+		socket_name={'BCs', 'Domain', 'Sources', 'Structures', 'Monitors'},
+		prop_name={'active_socket_set'},
 		# Loaded
 		props={'active_socket_set'},
 		output_sockets={'Sim'},
@@ -92,14 +92,18 @@ class FDTDSimNode(base.MaxwellSimNode):
 	)
 	def on_any_changed(self, props, output_sockets) -> None:
 		"""Create loose input sockets."""
-		params = output_sockets['Sim']
-		has_params = not ct.FlowSignal.check(params)
+		output_params = output_sockets['Sim']
+		has_output_params = not ct.FlowSignal.check(output_params)
 
-		# Declare Loose Sockets that Realize Symbols
-		## -> This happens if Params contains not-yet-realized symbols.
 		active_socket_set = props['active_socket_set']
-		if active_socket_set == 'Single' and has_params and params.symbols:
-			if set(self.loose_input_sockets) != {sym.name for sym in params.symbols}:
+		if (
+			active_socket_set == 'Single'
+			and has_output_params
+			and output_params.symbols
+		):
+			if set(self.loose_input_sockets) != {
+				sym.name for sym in output_params.symbols
+			}:
 				self.loose_input_sockets = {
 					sym.name: sockets.ExprSocketDef(
 						**(
@@ -112,7 +116,7 @@ class FDTDSimNode(base.MaxwellSimNode):
 							}
 						)
 					)
-					for sym, expr_info in params.sym_expr_infos.items()
+					for sym, expr_info in output_params.sym_expr_infos.items()
 				}
 
 		elif self.loose_input_sockets:
@@ -125,10 +129,13 @@ class FDTDSimNode(base.MaxwellSimNode):
 		'Sim',
 		kind=ct.FlowKind.Value,
 		# Loaded
+		all_loose_input_sockets=True,
 		output_sockets={'Sim'},
 		output_socket_kinds={'Sim': {ct.FlowKind.Func, ct.FlowKind.Params}},
 	)
-	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_value(
+		self, loose_input_sockets, output_sockets
+	) -> ct.ParamsFlow | ct.FlowSignal:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
 		output_func = output_sockets['Sim'][ct.FlowKind.Func]
 		output_params = output_sockets['Sim'][ct.FlowKind.Params]
@@ -136,8 +143,15 @@ class FDTDSimNode(base.MaxwellSimNode):
 		has_output_func = not ct.FlowSignal.check(output_func)
 		has_output_params = not ct.FlowSignal.check(output_params)
 
-		if has_output_func and has_output_params and not output_params.symbols:
-			return output_func.realize(output_params, disallow_jax=True)
+		if has_output_func and has_output_params:
+			return output_func.realize(
+				output_params,
+				symbol_values={
+					sym: loose_input_sockets[sym.name]
+					for sym in output_params.sorted_symbols
+				},
+				disallow_jax=True,
+			)
 		return ct.FlowSignal.FlowPending
 
 	####################
