@@ -24,8 +24,8 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
+from blender_maxwell.utils import sympy_extra as spux
 
 from .array import ArrayFlow
 
@@ -95,10 +95,12 @@ class RangeFlow(pyd.BaseModel):
 	stop: spux.ScalarUnitlessRealExpr
 	steps: int = 0
 	scaling: ScalingMode = ScalingMode.Lin
+	## TODO: No support for non-Lin (yet)
 
 	unit: spux.Unit | None = None
 
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
+	## TODO: No proper support for symbols (yet)
 
 	# Helper Attributes
 	pre_fourier_ideal_midpoint: spux.ScalarUnitlessRealExpr | None = None
@@ -112,18 +114,26 @@ class RangeFlow(pyd.BaseModel):
 		steps: int = 50,
 		scaling: ScalingMode | str = ScalingMode.Lin,
 	) -> typ.Self:
-		if sym.domain.start.is_infinite or sym.domain.end.is_infinite:
-			use_steps = 0
-		else:
-			use_steps = steps
+		if (
+			sym.mathtype is not spux.MathType.Complex
+			and sym.rows == 1
+			and sym.cols == 1
+		):
+			if sym.domain.inf.is_infinite or sym.domain.sup.is_infinite:
+				_steps = 0
+			else:
+				_steps = steps
 
-		return RangeFlow(
-			start=sym.domain.start if sym.domain.start.is_finite else sp.S(-1),
-			stop=sym.domain.end if sym.domain.end.is_finite else sp.S(1),
-			steps=use_steps,
-			scaling=ScalingMode(scaling),
-			unit=sym.unit,
-		)
+			return RangeFlow(
+				start=sym.domain.inf if sym.domain.inf.is_finite else sp.S(-1),
+				stop=sym.domain.sup if sym.domain.sup.is_finite else sp.S(1),
+				steps=_steps,
+				scaling=ScalingMode(scaling),
+				unit=sym.unit,
+			)
+
+		msg = f'RangeFlow is incompatible with SimSymbol {sym}'
+		raise ValueError(msg)
 
 	def to_sym(
 		self,

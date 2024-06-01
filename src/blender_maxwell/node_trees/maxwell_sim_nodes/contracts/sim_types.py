@@ -29,7 +29,7 @@ import tidy3d as td
 
 from blender_maxwell.contracts import BLEnumElement
 from blender_maxwell.services import tdcloud
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 
 from .flow_kinds.info import InfoFlow

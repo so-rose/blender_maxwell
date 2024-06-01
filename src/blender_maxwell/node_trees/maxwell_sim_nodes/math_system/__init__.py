@@ -14,23 +14,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import typing as typ
+from .filter import FilterOperation
+from .map import MapOperation
+from .operate import BinaryOperation
+from .reduce import ReduceOperation
+from .transform import TransformOperation
 
-from blender_maxwell.utils import sympy_extra as spux
-
-from . import FlowKind
-
-
-class ExprInfo(typ.TypedDict):
-	active_kind: FlowKind
-	size: spux.NumberSize1D
-	mathtype: spux.MathType
-	physical_type: spux.PhysicalType
-
-	# Value
-	default_value: spux.SympyExpr
-
-	# Range
-	default_min: spux.SympyExpr
-	default_max: spux.SympyExpr
-	default_steps: int
+__all__ = [
+	'FilterOperation',
+	'MapOperation',
+	'BinaryOperation',
+	'ReduceOperation',
+	'TransformOperation',
+]

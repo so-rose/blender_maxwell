@@ -24,7 +24,7 @@ import tidy3d as td
 import tidy3d.plugins.adjoint as tdadj
 
 from blender_maxwell.utils import bl_cache, logger
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
 from .. import base

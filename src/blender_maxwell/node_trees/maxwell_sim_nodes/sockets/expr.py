@@ -24,7 +24,7 @@ import pydantic as pyd
 import sympy as sp
 
 from blender_maxwell.utils import bl_cache, logger, sim_symbols
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 from .. import contracts as ct
 from . import base
@@ -155,12 +155,14 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					unit=self.unit,
 					rows=self.size.rows,
 					cols=self.size.cols,
+					is_constant=True,
+					## TODO: Should we set preview values
 					exclude_zero=(
 						not self.value.is_zero
 						if self.value.is_zero is not None
 						else False
 					),
-					## TODO: Does this work for matrix elements?
+					## TODO: Does this 0-check work for matrix elements?
 				)
 
 			case ct.FlowKind.Range if self.symbols:
@@ -208,7 +210,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		sim_symbols.SimSymbolName.Expr
 	)
 	output_name: sim_symbols.SimSymbolName = bl_cache.BLField(
-		sim_symbols.SimSymbolName.Expr
+		sim_symbols.SimSymbolName.Constant
 	)
 	symbols: list[sim_symbols.SimSymbol] = bl_cache.BLField([])
 
@@ -441,12 +443,11 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	def _to_raw_value(self, expr: spux.SympyExpr, force_complex: bool = False):
 		"""Cast the given expression to the appropriate raw value, with scaling guided by `self.unit`."""
-		if self.unit is not None:
-			pyvalue = spux.sympy_to_python(spux.scale_to_unit(expr, self.unit))
-		else:
-			pyvalue = spux.sympy_to_python(expr)
+		pyvalue = spux.scale_to_unit(expr, self.unit)
 
 		# Cast complex -> tuple[float, float]
+		## -> We can't set complex to BLProps.
+		## -> We must deconstruct it appropriately.
 		if isinstance(pyvalue, complex) or (
 			isinstance(pyvalue, int | float) and force_complex
 		):

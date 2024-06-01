@@ -226,7 +226,7 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger, sim_symbols
 
 from .array import ArrayFlow
@@ -335,7 +335,7 @@ class FuncFlow(pyd.BaseModel):
 			disallow_jax: Don't use `self.func_jax` to evaluate, even if possible.
 				This is desirable when the overhead of `jax.jit()` is known in advance to exceed the performance benefits.
 		"""
-		if self.supports_jax:
+		if self.supports_jax and not disallow_jax:
 			return self.func_jax(
 				*params.scaled_func_args(symbol_values),
 				**params.scaled_func_kwargs(symbol_values),

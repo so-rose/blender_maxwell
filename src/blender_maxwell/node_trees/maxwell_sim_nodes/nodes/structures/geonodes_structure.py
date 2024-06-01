@@ -20,7 +20,7 @@ import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 
 from ... import bl_socket_map, managed_objs, sockets

@@ -32,7 +32,7 @@ import scipy as sc
 import sympy as sp
 import sympy.physics.units as spu
 
-from . import extra_sympy_units as spux
+from . import sympy_extra as spux
 
 SUPPORTED_SCIPY_PREFIX = '1.12'
 if not sc.version.full_version.startswith(SUPPORTED_SCIPY_PREFIX):

@@ -14,23 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import typing as typ
+import sympy as sp
+import sympy.physics.units as spu
 
-from blender_maxwell.utils import sympy_extra as spux
-
-from . import FlowKind
-
-
-class ExprInfo(typ.TypedDict):
-	active_kind: FlowKind
-	size: spux.NumberSize1D
-	mathtype: spux.MathType
-	physical_type: spux.PhysicalType
-
-	# Value
-	default_value: spux.SympyExpr
-
-	# Range
-	default_min: spux.SympyExpr
-	default_max: spux.SympyExpr
-	default_steps: int
+####################
+# - Underlying "Sympy Type"
+####################
+SympyType = sp.Basic | sp.MatrixBase | spu.Quantity | spu.Dimension

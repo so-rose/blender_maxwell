@@ -25,8 +25,8 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from . import extra_sympy_units as spux
 from . import logger, serialize
+from . import sympy_extra as spux
 
 int_min = -(2**64)
 int_max = 2**64
@@ -101,6 +101,12 @@ class SimSymbolName(enum.StrEnum):
 	BlochY = enum.auto()
 	BlochZ = enum.auto()
 
+	# New Backwards Compatible Entries
+	## -> Ordered lists carry a particular enum integer index.
+	## -> Therefore, anything but adding an index breaks backwards compat.
+	## -> ...With all previous files.
+	ConstantRange = enum.auto()
+
 	####################
 	# - UI
 	####################
@@ -143,7 +149,8 @@ class SimSymbolName(enum.StrEnum):
 			}
 			| {
 				# Generic
-				SSN.Constant: 'constant',
+				SSN.Constant: 'cst',
+				SSN.ConstantRange: 'cst_range',
 				SSN.Expr: 'expr',
 				SSN.Data: 'data',
 				# Greek Letters
@@ -210,24 +217,43 @@ def mk_interval(
 	interval_finite: tuple[int | Fraction | float, int | Fraction | float],
 	interval_inf: tuple[bool, bool],
 	interval_closed: tuple[bool, bool],
-	unit_factor: typ.Literal[1] | spux.Unit,
 ) -> sp.Interval:
 	"""Create a symbolic interval from the tuples (and unit) defining it."""
 	return sp.Interval(
-		start=(interval_finite[0] * unit_factor if not interval_inf[0] else -sp.oo),
-		end=(interval_finite[1] * unit_factor if not interval_inf[1] else sp.oo),
+		start=(interval_finite[0] if not interval_inf[0] else -sp.oo),
+		end=(interval_finite[1] if not interval_inf[1] else sp.oo),
 		left_open=(True if interval_inf[0] else not interval_closed[0]),
 		right_open=(True if interval_inf[1] else not interval_closed[1]),
 	)
 
 
 class SimSymbol(pyd.BaseModel):
-	"""A declarative representation of a symbolic variable.
+	"""A convenient, constrained representation of a symbolic variable suitable for many tasks.
 
-	`sympy`'s symbols aren't quite flexible enough for our needs: The symbols that we're transporting often need exact domain information, an associated unit dimension, and a great deal of determinism in checks thereof.
+	The original motivation was to enhance `sp.Symbol` with greater flexibility, semantic context, and a UI-friendly representation.
+	Today, `SimSymbol` is a fully capable primitive for defining the interfaces between externally tracked mathematical elements, and planning the required operations between them.
 
-	This dataclass is UI-friendly, as it only uses field type annotations/defaults supported by `bl_cache.BLProp`.
-	It's easy to persist, easy to transport, and has many helpful properties which greatly simplify working with symbols.
+	A symbol represented as `SimSymbol` carries all the semantic meaning of that symbol, and comes with a comprehensive library of useful (computed) properties and methods.
+	It is immutable, hashable, and serializable, and as a `pydantic.BaseModel` with aggressive property caching, its performance properties should also be well-suited for use in the hot-loops of ex. UI draw methods.
+
+	Attributes:
+		sym_name: For humans and computers, symbol names induces a lot of implicit semantics.
+		mathtype: Symbols are associated with some set of valid values.
+			We choose to constrain `SimSymbol` to only associate with _mathematical_ (aka. number-like) sets.
+			This prohibits ex. booleans and predicate-logic applications, but eases a lot of burdens associated with actually using `SimSymbol`.
+		physical_type: Symbols may be associated with a particular unit dimension expression.
+			This allows the symbol to have _physical meaning_.
+			This information is **generally not** encoded in auxiliary attributes like `self.domain`, but **generally is** encoded by computed properties/methods.
+		unit: Symbols may be associated with a particular unit, which must be compatible with the `PhysicalType`.
+			**NOTE**: Unit expressions may well have physical meaning, without being strictly conformable to a pre-blessed `PhysicalType`s.
+			We do try to avoid such cases, but for the sake of correctness, our chosen convention is to let `self.physical_type` be "`NonPhysical`", while still allowing a unit.
+		size: Symbols may themselves have shape.
+			**NOTE**: We deliberately choose to constrain `SimSymbol`s to two dimensions, allowing them to represent scalars, vectors, covectors, and matrices, but **not** arbitrary tensors.
+			This is a practical tradeoff, made both to make it easier (in terms of mathematical analysis) to implement `SimSymbol`, but also to make it easier to define UI elements that drive / are driven by `SimSymbol`s.
+		domain: Symbols are associated with a _domain of valid values_, expressed with any mathematical set implemented as a subclass of `sympy.Set`.
+			By using a true symbolic set, we gain unbounded flexibility in how to define the validity of a set, including an extremely capable `* in self.domain` operator encapsulating a lot of otherwise very manual logic.
+			**NOTE** that `self.unit` is **not** baked into the domain, due to practicalities associated with subclasses of `sp.Set`.
+
 	"""
 
 	model_config = pyd.ConfigDict(frozen=True)
@@ -238,11 +264,8 @@ class SimSymbol(pyd.BaseModel):
 
 	# Units
 	## -> 'None' indicates that no particular unit has yet been chosen.
-	## -> Not exposed in the UI; must be set some other way.
+	## -> When 'self.physical_type' is NonPhysical, can only be None.
 	unit: spux.Unit | None = None
-	## -> TODO: We currently allowing units that don't match PhysicalType
-	## -> -- In particular, NonPhysical w/units means "unknown units".
-	## -> -- This is essential for the Scientific Constant Node.
 
 	# Size
 	## -> All SimSymbol sizes are "2D", but interpreted by convention.
@@ -253,39 +276,96 @@ class SimSymbol(pyd.BaseModel):
 	rows: int = 1
 	cols: int = 1
 
-	# Scalar Domain: "Interval"
-	## -> NOTE: interval_finite_*[0] must be strictly smaller than [1].
-	## -> See self.domain.
-	## -> We have to deconstruct symbolic interval semantics a bit for UI.
-	is_constant: bool = False
-	exclude_zero: bool = False
+	# Valid Domain
+	## -> Declares the valid set of values that may be given to this symbol.
+	## -> By convention, units are not encoded in the domain sp.Set.
+	## -> 'sp.Set's are extremely expressive and cool.
+	domain: spux.SympyExpr | None = None
 
-	interval_finite_z: tuple[int, int] = (0, 1)
-	interval_finite_q: tuple[tuple[int, int], tuple[int, int]] = ((0, 1), (1, 1))
-	interval_finite_re: tuple[float, float] = (0.0, 1.0)
-	interval_inf: tuple[bool, bool] = (True, True)
-	interval_closed: tuple[bool, bool] = (False, False)
+	@functools.cached_property
+	def domain_mat(self) -> sp.Set | sp.matrices.MatrixSet:
+		if self.rows > 1 or self.cols > 1:
+			return sp.matrices.MatrixSet(self.rows, self.cols, self.domain)
+		return self.domain
 
-	interval_finite_im: tuple[float, float] = (0.0, 1.0)
-	interval_inf_im: tuple[bool, bool] = (True, True)
-	interval_closed_im: tuple[bool, bool] = (False, False)
-
-	preview_value_z: int = 0
-	preview_value_q: tuple[int, int] = (0, 1)
-	preview_value_re: float = 0.0
-	preview_value_im: float = 0.0
+	preview_value: spux.SympyExpr | None = None
 
 	####################
-	# - Core
+	# - Validators
+	####################
+	## TODO: Check domain against MathType
+	## -- Surprisingly hard without a lot of special-casing.
+
+	## TODO: Check that size is valid for the PhysicalType.
+
+	## TODO: Check that constant value (domain=FiniteSet(cst)) is compatible with the MathType.
+
+	## TODO: Check that preview_value is in the domain.
+
+	@pyd.model_validator(mode='after')
+	def set_undefined_domain_from_mathtype(self) -> typ.Self:
+		"""When the domain is not set, then set it using the symbolic set of the MathType."""
+		if self.domain is None:
+			object.__setattr__(self, 'domain', self.mathtype.symbolic_set)
+		return self
+
+	@pyd.model_validator(mode='after')
+	def conform_undefined_preview_value_to_constant(self) -> typ.Self:
+		"""When the `SimSymbol` is a constant, but the preview value is not set, then set the preview value from the constant."""
+		if self.is_constant and not self.preview_value:
+			object.__setattr__(self, 'preview_value', self.constant_value)
+		return self
+
+	@pyd.model_validator(mode='after')
+	def conform_preview_value(self) -> typ.Self:
+		"""Conform the given preview value to the `SimSymbol`."""
+		if self.is_constant and not self.preview_value:
+			object.__setattr__(
+				self,
+				'preview_value',
+				self.conform(self.preview_value, strip_units=True),
+			)
+		return self
+
+	####################
+	# - Domain
 	####################
 	@functools.cached_property
-	def name(self) -> str:
-		"""Usable name for the symbol."""
-		return self.sym_name.name
+	def is_constant(self) -> bool:
+		"""When the symbol domain is a single-element `sp.FiniteSet`, then the symbol can be considered to be a constant."""
+		return isinstance(self.domain, sp.FiniteSet) and len(self.domain) == 1
+
+	@functools.cached_property
+	def constant_value(self) -> bool:
+		"""Get the constant when `is_constant` is True.
+
+		The `self.unit_factor` is multiplied onto the constant at this point.
+		"""
+		if self.is_constant:
+			return next(iter(self.domain)) * self.unit_factor
+
+		msg = 'Tried to get constant value of non-constant SimSymbol.'
+		raise ValueError(msg)
+
+	@functools.cached_property
+	def is_nonzero(self) -> bool:
+		"""Whether $0$ is a valid value for this symbol.
+
+		When shaped, $0$ refers to the relevant shaped object with all elements $0$.
+
+		Notes:
+			Most notably, this symbol cannot be used as the right hand side of a division operation when this property is `False`.
+		"""
+		return 0 in self.domain
 
 	####################
 	# - Labels
 	####################
+	@functools.cached_property
+	def name(self) -> str:
+		"""Usable string name for the symbol."""
+		return self.sym_name.name
+
 	@functools.cached_property
 	def name_pretty(self) -> str:
 		"""Pretty (possibly unicode) name for the thing."""
@@ -340,7 +420,8 @@ class SimSymbol(pyd.BaseModel):
 		return self.unit if self.unit is not None else sp.S(1)
 
 	@functools.cached_property
-	def size(self) -> tuple[int, ...] | None:
+	def size(self) -> spux.NumberSize1D | None:
+		"""The 1D number size of this `SimSymbol`, if it has one; else None."""
 		return {
 			(1, 1): spux.NumberSize1D.Scalar,
 			(2, 1): spux.NumberSize1D.Vec2,
@@ -350,13 +431,17 @@ class SimSymbol(pyd.BaseModel):
 
 	@functools.cached_property
 	def shape(self) -> tuple[int, ...]:
+		"""Deterministic chosen shape of this `SimSymbol`.
+
+		Derived from `self.rows` and `self.cols`.
+
+		Is never `None`; instead, empty tuple `()` is used.
+		"""
 		match (self.rows, self.cols):
 			case (1, 1):
 				return ()
 			case (_, 1):
 				return (self.rows,)
-			case (1, _):
-				return (1, self.rows)
 			case (_, _):
 				return (self.rows, self.cols)
 
@@ -364,116 +449,6 @@ class SimSymbol(pyd.BaseModel):
 	def shape_len(self) -> spux.SympyExpr:
 		"""Factor corresponding to the tracked unit, which can be multiplied onto exported values without `None`-checking."""
 		return len(self.shape)
-
-	@functools.cached_property
-	def domain(self) -> sp.Interval | sp.Set:
-		"""Return the scalar domain of valid values for each element of the symbol.
-
-		For integer/rational/real symbols, the domain is an interval defined using the `interval_*` properties.
-		This interval **must** have the property`start <= stop`.
-
-		Otherwise, the domain is the symbolic set corresponding to `self.mathtype`.
-		"""
-		match self.mathtype:
-			case spux.MathType.Integer:
-				return mk_interval(
-					self.interval_finite_z,
-					self.interval_inf,
-					self.interval_closed,
-					self.unit_factor,
-				)
-
-			case spux.MathType.Rational:
-				return mk_interval(
-					Fraction(*self.interval_finite_q),
-					self.interval_inf,
-					self.interval_closed,
-					self.unit_factor,
-				)
-
-			case spux.MathType.Real:
-				return mk_interval(
-					self.interval_finite_re,
-					self.interval_inf,
-					self.interval_closed,
-					self.unit_factor,
-				)
-
-			case spux.MathType.Complex:
-				return (
-					mk_interval(
-						self.interval_finite_re,
-						self.interval_inf,
-						self.interval_closed,
-						self.unit_factor,
-					),
-					mk_interval(
-						self.interval_finite_im,
-						self.interval_inf_im,
-						self.interval_closed_im,
-						self.unit_factor,
-					),
-				)
-
-	@functools.cached_property
-	def valid_domain_value(self) -> spux.SympyExpr:
-		"""A single value guaranteed to be conformant to this `SimSymbol` and within `self.domain`."""
-		match (self.domain.start.is_finite, self.domain.end.is_finite):
-			case (True, True):
-				if self.mathtype is spux.MathType.Integer:
-					return (self.domain.start + self.domain.end) // 2
-				return (self.domain.start + self.domain.end) / 2
-
-			case (True, False):
-				one = sp.S(self.mathtype.coerce_compatible_pyobj(-1))
-				return self.domain.start + one
-
-			case (False, True):
-				one = sp.S(self.mathtype.coerce_compatible_pyobj(-1))
-				return self.domain.end - one
-
-			case (False, False):
-				return sp.S(self.mathtype.coerce_compatible_pyobj(-1))
-
-	@functools.cached_property
-	def is_nonzero(self) -> bool:
-		"""Whether or not the value of this symbol can ever be $0$.
-
-		Notes:
-			Most notably, this symbol cannot be used as the right hand side of a division operation when this property is `False`.
-		"""
-		if self.exclude_zero:
-			return True
-
-		def check_real_domain(real_domain):
-			return (
-				(
-					real_domain.left == 0
-					and real_domain.left_open
-					or real_domain.right == 0
-					and real_domain.right_open
-				)
-				or real_domain.left > 0
-				or real_domain.right < 0
-			)
-
-		if self.mathtype is spux.MathType.Complex:
-			return check_real_domain(self.domain[0]) and check_real_domain(
-				self.domain[1]
-			)
-		return check_real_domain(self.domain)
-
-	@functools.cached_property
-	def can_diff(self) -> bool:
-		"""Whether this symbol can be used as the input / output variable when differentiating."""
-		# Check Constants
-		## -> Constants (w/pinned values) are never differentiable.
-		if self.is_constant:
-			return False
-
-		# TODO: Discontinuities (especially across 0)?
-
-		return self.mathtype in [spux.MathType.Real, spux.MathType.Complex]
 
 	####################
 	# - Properties
@@ -511,9 +486,9 @@ class SimSymbol(pyd.BaseModel):
 
 		# Positive/Negative Assumption
 		if self.mathtype is not spux.MathType.Complex:
-			if self.domain.left >= 0:
+			if self.domain.inf >= 0:
 				mathtype_kwargs |= {'positive': True}
-			elif self.domain.right <= 0:
+			elif self.domain.sup < 0:
 				mathtype_kwargs |= {'negative': True}
 
 		# Scalar: Return Symbol
@@ -571,7 +546,7 @@ class SimSymbol(pyd.BaseModel):
 		"""
 		if self.size is not None:
 			if self.unit in self.physical_type.valid_units:
-				return {
+				socket_info = {
 					'output_name': self.sym_name,
 					# Socket Interface
 					'size': self.size,
@@ -580,23 +555,42 @@ class SimSymbol(pyd.BaseModel):
 					# Defaults: Units
 					'default_unit': self.unit,
 					'default_symbols': [],
-					# Defaults: FlowKind.Value
-					'default_value': self.conform(
-						self.valid_domain_value, strip_unit=True
-					),
-					# Defaults: FlowKind.Range
-					'default_min': self.conform(self.domain.start, strip_unit=True),
-					'default_max': self.conform(self.domain.end, strip_unit=True),
 				}
+
+				# Defaults: FlowKind.Value
+				if self.preview_value:
+					socket_info |= {
+						'default_value': self.conform(
+							self.preview_value, strip_unit=True
+						)
+					}
+
+				# Defaults: FlowKind.Range
+				if (
+					self.mathtype is not spux.MathType.Complex
+					and self.rows == 1
+					and self.cols == 1
+				):
+					socket_info |= {
+						'default_min': self.domain.inf,
+						'default_max': self.domain.sup,
+					}
+					## TODO: Handle discontinuities / disjointness / open boundaries.
+
 			msg = f'Tried to generate an ExprSocket from a SymSymbol "{self.name}", but its unit ({self.unit}) is not a valid unit of its physical type ({self.physical_type}) (SimSymbol={self})'
 			raise NotImplementedError(msg)
+
 		msg = f'Tried to generate an ExprSocket from a SymSymbol "{self.name}", but its size ({self.rows} by {self.cols}) is incompatible with ExprSocket (SimSymbol={self})'
 		raise NotImplementedError(msg)
 
 	####################
-	# - Operations
+	# - Operations: Raw Update
 	####################
 	def update(self, **kwargs) -> typ.Self:
+		"""Create a new `SimSymbol`, such that the given keyword arguments override the existing values."""
+		if not kwargs:
+			return self
+
 		def get_attr(attr: str):
 			_notfound = 'notfound'
 			if kwargs.get(attr, _notfound) is _notfound:
@@ -610,61 +604,101 @@ class SimSymbol(pyd.BaseModel):
 			unit=get_attr('unit'),
 			rows=get_attr('rows'),
 			cols=get_attr('cols'),
-			interval_finite_z=get_attr('interval_finite_z'),
-			interval_finite_q=get_attr('interval_finite_q'),
-			interval_finite_re=get_attr('interval_finite_re'),
-			interval_inf=get_attr('interval_inf'),
-			interval_closed=get_attr('interval_closed'),
-			interval_finite_im=get_attr('interval_finite_im'),
-			interval_inf_im=get_attr('interval_inf_im'),
-			interval_closed_im=get_attr('interval_closed_im'),
+			domain=get_attr('domain'),
 		)
 
-	def set_finite_domain(  # noqa: PLR0913
-		self,
-		start: int | float,
-		end: int | float,
-		start_closed: bool = True,
-		end_closed: bool = True,
-		start_im: bool = float,
-		end_im: bool = float,
-		start_closed_im: bool = True,
-		end_closed_im: bool = True,
-	) -> typ.Self:
-		"""Update the symbol with a finite range."""
-		closed_re = (start_closed, end_closed)
-		closed_im = (start_closed_im, end_closed_im)
-		match self.mathtype:
-			case spux.MathType.Integer:
-				return self.update(
-					interval_finite_z=(start, end),
-					interval_inf=(False, False),
-					interval_closed=closed_re,
-				)
-			case spux.MathType.Rational:
-				return self.update(
-					interval_finite_q=(start, end),
-					interval_inf=(False, False),
-					interval_closed=closed_re,
-				)
-			case spux.MathType.Real:
-				return self.update(
-					interval_finite_re=(start, end),
-					interval_inf=(False, False),
-					interval_closed=closed_re,
-				)
-			case spux.MathType.Complex:
-				return self.update(
-					interval_finite_re=(start, end),
-					interval_finite_im=(start_im, end_im),
-					interval_inf=(False, False),
-					interval_closed=closed_re,
-					interval_closed_im=closed_im,
-				)
+	####################
+	# - Operations: Comparison
+	####################
+	def compare(self, other: typ.Self) -> typ.Self:
+		"""Whether this SimSymbol can be considered equivalent to another, and thus universally usable in arbitrary mathematical operations together.
 
-	def set_size(self, rows: int, cols: int) -> typ.Self:
-		return self.update(rows=rows, cols=cols)
+		In particular, two attributes are ignored:
+		- **Name**: The particluar choices of name are not generally important.
+		- **Unit**: The particulars of unit equivilancy are not generally important; only that the `PhysicalType` is equal, and thus that they are compatible.
 
+		While not usable in all cases, this method ends up being very helpful for simplifying certain checks that would otherwise take up a lot of space.
+		"""
+		return (
+			self.mathtype is other.mathtype
+			and self.physical_type is other.physical_type
+			and self.compare_size(other)
+			and self.domain == other.domain
+		)
+
+	def compare_size(self, other: typ.Self) -> typ.Self:
+		"""Compare the size of this `SimSymbol` with another."""
+		return self.rows == other.rows and self.cols == other.cols
+
+	def compare_addable(
+		self, other: typ.Self, allow_differing_unit: bool = False
+	) -> bool:
+		"""Whether two `SimSymbol`s can be added."""
+		common = (
+			self.compare_size(other.output)
+			and self.physical_type is other.physical_type
+			and not (
+				self.physical_type is spux.NonPhysical
+				and self.unit is not None
+				and self.unit != other.unit
+			)
+			and not (
+				other.physical_type is spux.NonPhysical
+				and other.unit is not None
+				and self.unit != other.unit
+			)
+		)
+		if not allow_differing_unit:
+			return common and self.output.unit == other.output.unit
+		return common
+
+	def compare_multiplicable(self, other: typ.Self) -> bool:
+		"""Whether two `SimSymbol`s can be multiplied."""
+		return self.shape_len == 0 or self.compare_size(other)
+
+	def compare_exponentiable(self, other: typ.Self) -> bool:
+		"""Whether two `SimSymbol`s can be exponentiated.
+
+		"Hadamard Power" is defined for any combination of scalar/vector/matrix operands, for any `MathType` combination.
+		The only important thing to check is that the exponent cannot have a physical unit.
+
+		Sometimes, people write equations with units in the exponent.
+		This is a notational shorthand that only works in the context of an implicit, cancelling factor.
+		We reject such things.
+
+		See https://physics.stackexchange.com/questions/109995/exponential-or-logarithm-of-a-dimensionful-quantity
+		"""
+		return (
+			other.physical_type is spux.PhysicalType.NonPhysical and other.unit is None
+		)
+
+	####################
+	# - Operations: Copying Setters
+	####################
+	def set_constant(self, constant_value: spux.SympyType) -> typ.Self:
+		"""Set the constant value of this `SimSymbol`, by setting it as the only value in a `sp.FiniteSet` domain.
+
+		The `constant_value` will be conformed and stripped (with `self.conform()`) before being injected into the new `sp.FiniteSet` domain.
+
+		Warnings:
+			Keep in mind that domains do not encode units, for practical reasons related to the diverging ways in which various `sp.Set` subclasses interpret units.
+
+			This isn't noticeable in normal constant-symbol workflows, where the constant is retrieved using `self.constant_value` (which adds `self.unit_factor`).
+			However, **remember that retrieving the domain directly won't add the unit**.
+
+			Ye been warned!
+		"""
+		if self.is_constant:
+			return self.update(
+				domain=sp.FiniteSet(self.conform(constant_value, strip_unit=True))
+			)
+
+		msg = 'Tried to set constant value of non-constant SimSymbol.'
+		raise ValueError(msg)
+
+	####################
+	# - Operations: Conforming Mappers
+	####################
 	def conform(
 		self, sp_obj: spux.SympyType, strip_unit: bool = False
 	) -> spux.SympyType:
@@ -732,6 +766,9 @@ class SimSymbol(pyd.BaseModel):
 
 		return res  # noqa: RET504
 
+	####################
+	# - Creation
+	####################
 	@staticmethod
 	def from_expr(
 		sym_name: SimSymbolName,

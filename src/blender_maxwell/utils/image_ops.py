@@ -30,7 +30,7 @@ import matplotlib.figure
 import seaborn as sns
 
 from blender_maxwell import contracts as ct
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 
 sns.set_theme()

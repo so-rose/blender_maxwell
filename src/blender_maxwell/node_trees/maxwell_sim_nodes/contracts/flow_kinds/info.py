@@ -18,8 +18,8 @@ import dataclasses
 import functools
 import typing as typ
 
-from blender_maxwell.utils import extra_sympy_units as spux
 from blender_maxwell.utils import logger, sim_symbols
+from blender_maxwell.utils import sympy_extra as spux
 
 from .array import ArrayFlow
 from .lazy_range import RangeFlow
@@ -89,6 +89,7 @@ class InfoFlow:
 		return None
 
 	def dim_by_idx(self, idx: int) -> sim_symbols.SimSymbol | None:
+		"""Retrieve the dimension associated with a particular index."""
 		if idx > 0 and idx < len(self.dims) - 1:
 			return list(self.dims.keys())[idx]
 		return None
@@ -179,15 +180,23 @@ class InfoFlow:
 		While that sounds fancy and all, it boils down to:
 
 		$$
-			\texttt{dims} + |\texttt{output}.\texttt{shape}|
+			|\texttt{dims}| + |\texttt{output}.\texttt{shape}|
 		$$
 
-		Doing so characterizes the full dimensionality of the tensor, which also perfectly matches the length of the raw data's shape exactly.
+		Doing so characterizes the full dimensionality of the tensor, which also perfectly matches the length of the raw data's shape.
 
 		Notes:
 			Corresponds to `len(raw_data.shape)`, if `raw_data` is the n-dimensional array corresponding to this `InfoFlow`.
 		"""
-		return len(self.input_mathtypes) + self.output_shape_len
+		return len(self.dims) + self.output_shape_len
+
+	@functools.cached_property
+	def is_scalar(self) -> tuple[spux.MathType, int, int]:
+		"""Whether the described object can be described as "scalar".
+
+		True when `self.order == 0`.
+		"""
+		return self.order == 0
 
 	####################
 	# - Properties
@@ -203,6 +212,58 @@ class InfoFlow:
 			}
 			for dim, dim_idx in self.dims.items()
 		}
+
+	####################
+	# - Operations: Comparison
+	####################
+	def compare_dims_identical(self, other: typ.Self) -> bool:
+		"""Whether that the quantity and properites of all dimension `SimSymbol`s are "identical".
+
+		"Identical" is defined according to the semantics of `SimSymbol.compare()`, which generally means that everything but the exact name and unit are different.
+		"""
+		return len(self.dims) == len(other.dims) and all(
+			dim_l.compare(dim_r)
+			for dim_l, dim_r in zip(self.dims, other.dims, strict=True)
+		)
+
+	def compare_addable(
+		self, other: typ.Self, allow_differing_unit: bool = False
+	) -> bool:
+		"""Whether the two `InfoFlows` can be added/subtracted elementwise.
+
+		Parameters:
+			allow_differing_unit: When set,
+				Forces the user to be explicit about specifying
+		"""
+		return self.compare_dims_identical(other) and self.output.compare_addable(
+			other.output, allow_differing_unit=allow_differing_unit
+		)
+
+	def compare_multiplicable(self, other: typ.Self) -> bool:
+		"""Whether the two `InfoFlow`s can be multiplied (elementwise).
+
+		- The output `SimSymbol`s must be able to be multiplied.
+		- Either the LHS is a scalar, the RHS is a scalar, or the dimensions are identical.
+		"""
+		return self.output.compare_multiplicable(other.output) and (
+			(len(self.dims) == 0 and self.output.shape_len == 0)
+			or (len(other.dims) == 0 and other.output.shape_len == 0)
+			or self.compare_dims_identical(other)
+		)
+
+	def compare_exponentiable(self, other: typ.Self) -> bool:
+		"""Whether the two `InfoFlow`s can be exponentiated.
+
+		In general, we follow the rules of the "Hadamard Power" operator, which is also in use in `numpy` broadcasting rules.
+
+		- The output `SimSymbol`s must be able to be exponentiated (mainly, the exponent can't have a unit).
+		- Either the LHS is a scalar, the RHS is a scalar, or the dimensions are identical.
+		"""
+		return self.output.compare_exponentiable(other.output) and (
+			(len(self.dims) == 0 and self.output.shape_len == 0)
+			or (len(other.dims) == 0 and other.output.shape_len == 0)
+			or self.compare_dims_identical(other)
+		)
 
 	####################
 	# - Operations: Dimensions
@@ -319,6 +380,7 @@ class InfoFlow:
 		op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
 		unit_op: typ.Callable[[spux.SympyExpr, spux.SympyExpr], spux.SympyExpr],
 	) -> spux.SympyExpr:
+		"""Apply an operation between two the values and units of two `InfoFlow`s by reconstructing the properties of the new output `SimSymbol`."""
 		sym_name = sim_symbols.SimSymbolName.Expr
 		expr = op(self.output.sp_symbol_phy, other.output.sp_symbol_phy)
 		unit_expr = unit_op(self.output.unit_factor, other.output.unit_factor)
@@ -341,11 +403,11 @@ class InfoFlow:
 		cols = self.output.cols
 		match (rows, cols):
 			case (1, 1):
-				new_output = self.output.set_size(len(last_idx), 1)
+				new_output = self.output.update(rows=len(last_idx), cols=1)
 			case (_, 1):
-				new_output = self.output.set_size(rows, len(last_idx))
+				new_output = self.output.update(rows=rows, cols=len(last_idx))
 			case (1, _):
-				new_output = self.output.set_size(len(last_idx), cols)
+				new_output = self.output.update(rows=len(last_idx), cols=cols)
 			case (_, _):
 				raise NotImplementedError  ## Not yet :)
 

@@ -23,7 +23,7 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger, sim_symbols
 
 from .array import ArrayFlow
@@ -52,11 +52,6 @@ class ParamsFlow(pyd.BaseModel):
 	realized_symbols: dict[
 		sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
 	] = pyd.Field(default_factory=dict)
-
-	@functools.cached_property
-	def diff_symbols(self) -> set[sim_symbols.SimSymbol]:
-		"""Set of all unrealized `SimSymbol`s that can act as inputs when differentiating the function for which this `ParamsFlow` tracks arguments."""
-		return {sym for sym in self.symbols if sym.can_diff}
 
 	####################
 	# - Symbols

@@ -31,8 +31,8 @@ import uuid
 import msgspec
 import sympy as sp
 
-from . import extra_sympy_units as spux
 from . import logger
+from . import sympy_extra as spux
 
 log = logger.get(__name__)
 

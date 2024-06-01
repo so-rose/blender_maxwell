@@ -21,7 +21,7 @@ import typing as typ
 import bpy
 import sympy as sp
 
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 
 from .socket_types import SocketType

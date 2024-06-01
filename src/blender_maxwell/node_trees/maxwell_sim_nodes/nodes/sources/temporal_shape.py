@@ -28,7 +28,7 @@ from tidy3d.components.data.data_array import TimeDataArray as td_TimeDataArray
 from tidy3d.components.data.dataset import TimeDataset as td_TimeDataset
 
 from blender_maxwell.utils import bl_cache, logger, sim_symbols
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets

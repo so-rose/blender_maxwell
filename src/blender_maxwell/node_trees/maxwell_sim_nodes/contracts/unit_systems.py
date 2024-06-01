@@ -28,7 +28,7 @@ import typing as typ
 
 import sympy.physics.units as spu
 
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 ####################
 # - Unit Systems

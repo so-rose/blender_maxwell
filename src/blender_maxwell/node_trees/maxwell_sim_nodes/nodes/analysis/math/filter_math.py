@@ -20,224 +20,14 @@ import enum
 import typing as typ
 
 import bpy
-import jax.lax as jlax
-import jax.numpy as jnp
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache, logger, sim_symbols
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import bl_cache, sim_symbols
+from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
-from .... import sockets
+from .... import math_system, sockets
 from ... import base, events
-
-log = logger.get(__name__)
-
-
-class FilterOperation(enum.StrEnum):
-	"""Valid operations for the `FilterMathNode`.
-
-	Attributes:
-		DimToVec: Shift last dimension to output.
-		DimsToMat: Shift last 2 dimensions to output.
-		PinLen1: Remove a len(1) dimension.
-		Pin: Remove a len(n) dimension by selecting a particular index.
-		Swap: Swap the positions of two dimensions.
-	"""
-
-	# Slice
-	Slice = enum.auto()
-	SliceIdx = enum.auto()
-
-	# Pin
-	PinLen1 = enum.auto()
-	Pin = enum.auto()
-	PinIdx = enum.auto()
-
-	# Dimension
-	Swap = enum.auto()
-
-	####################
-	# - UI
-	####################
-	@staticmethod
-	def to_name(value: typ.Self) -> str:
-		FO = FilterOperation
-		return {
-			# Slice
-			FO.Slice: '≈a[v₁:v₂]',
-			FO.SliceIdx: '=a[i:j]',
-			# Pin
-			FO.PinLen1: 'a[0] → a',
-			FO.Pin: 'a[v] ⇝ a',
-			FO.PinIdx: 'a[i] → a',
-			# Reinterpret
-			FO.Swap: 'a₁ ↔ a₂',
-		}[value]
-
-	@staticmethod
-	def to_icon(value: typ.Self) -> str:
-		return ''
-
-	def bl_enum_element(self, i: int) -> ct.BLEnumElement:
-		FO = FilterOperation
-		return (
-			str(self),
-			FO.to_name(self),
-			FO.to_name(self),
-			FO.to_icon(self),
-			i,
-		)
-
-	####################
-	# - Ops from Info
-	####################
-	@staticmethod
-	def by_info(info: ct.InfoFlow) -> list[typ.Self]:
-		FO = FilterOperation
-		operations = []
-
-		# Slice
-		if info.dims:
-			operations.append(FO.SliceIdx)
-
-		# Pin
-		## PinLen1
-		## -> There must be a dimension with length 1.
-		if 1 in [dim_idx for dim_idx in info.dims.values() if dim_idx is not None]:
-			operations.append(FO.PinLen1)
-
-		## Pin | PinIdx
-		## -> There must be a dimension, full stop.
-		if info.dims:
-			operations += [FO.Pin, FO.PinIdx]
-
-		# Reinterpret
-		## Swap
-		## -> There must be at least two dimensions.
-		if len(info.dims) >= 2:  # noqa: PLR2004
-			operations.append(FO.Swap)
-
-		return operations
-
-	####################
-	# - Computed Properties
-	####################
-	@property
-	def func_args(self) -> list[sim_symbols.SimSymbol]:
-		FO = FilterOperation
-		return {
-			# Pin
-			FO.Pin: [sim_symbols.idx(None)],
-			FO.PinIdx: [sim_symbols.idx(None)],
-		}.get(self, [])
-
-	####################
-	# - Methods
-	####################
-	@property
-	def num_dim_inputs(self) -> None:
-		FO = FilterOperation
-		return {
-			# Slice
-			FO.Slice: 1,
-			FO.SliceIdx: 1,
-			# Pin
-			FO.PinLen1: 1,
-			FO.Pin: 1,
-			FO.PinIdx: 1,
-			# Reinterpret
-			FO.Swap: 2,
-		}[self]
-
-	def valid_dims(self, info: ct.InfoFlow) -> list[typ.Self]:
-		FO = FilterOperation
-		match self:
-			# Slice
-			case FO.Slice:
-				return [dim for dim in info.dims if not info.has_idx_labels(dim)]
-
-			case FO.SliceIdx:
-				return [dim for dim in info.dims if not info.has_idx_labels(dim)]
-
-			# Pin
-			case FO.PinLen1:
-				return [
-					dim
-					for dim, dim_idx in info.dims.items()
-					if not info.has_idx_cont(dim) and len(dim_idx) == 1
-				]
-
-			case FO.Pin:
-				return info.dims
-
-			case FO.PinIdx:
-				return [dim for dim in info.dims if not info.has_idx_cont(dim)]
-
-			# Dimension
-			case FO.Swap:
-				return info.dims
-
-		return []
-
-	def are_dims_valid(
-		self, info: ct.InfoFlow, dim_0: str | None, dim_1: str | None
-	) -> bool:
-		"""Check whether the given dimension inputs are valid in the context of this operation, and of the information."""
-		if self.num_dim_inputs == 1:
-			return dim_0 in self.valid_dims(info)
-
-		if self.num_dim_inputs == 2:  # noqa: PLR2004
-			valid_dims = self.valid_dims(info)
-			return dim_0 in valid_dims and dim_1 in valid_dims
-
-		return False
-
-	####################
-	# - UI
-	####################
-	def jax_func(
-		self,
-		axis_0: int | None,
-		axis_1: int | None,
-		slice_tuple: tuple[int, int, int] | None = None,
-	):
-		FO = FilterOperation
-		return {
-			# Pin
-			FO.Slice: lambda expr: jlax.slice_in_dim(
-				expr, slice_tuple[0], slice_tuple[1], slice_tuple[2], axis=axis_0
-			),
-			FO.SliceIdx: lambda expr: jlax.slice_in_dim(
-				expr, slice_tuple[0], slice_tuple[1], slice_tuple[2], axis=axis_0
-			),
-			# Pin
-			FO.PinLen1: lambda expr: jnp.squeeze(expr, axis_0),
-			FO.Pin: lambda expr, idx: jnp.take(expr, idx, axis=axis_0),
-			FO.PinIdx: lambda expr, idx: jnp.take(expr, idx, axis=axis_0),
-			# Dimension
-			FO.Swap: lambda expr: jnp.swapaxes(expr, axis_0, axis_1),
-		}[self]
-
-	def transform_info(
-		self,
-		info: ct.InfoFlow,
-		dim_0: sim_symbols.SimSymbol,
-		dim_1: sim_symbols.SimSymbol,
-		pin_idx: int | None = None,
-		slice_tuple: tuple[int, int, int] | None = None,
-	):
-		FO = FilterOperation
-		return {
-			FO.Slice: lambda: info.slice_dim(dim_0, slice_tuple),
-			FO.SliceIdx: lambda: info.slice_dim(dim_0, slice_tuple),
-			# Pin
-			FO.PinLen1: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
-			FO.Pin: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
-			FO.PinIdx: lambda: info.delete_dim(dim_0, pin_idx=pin_idx),
-			# Reinterpret
-			FO.Swap: lambda: info.swap_dimensions(dim_0, dim_1),
-		}[self]()
 
 
 class FilterMathNode(base.MaxwellSimNode):
@@ -304,7 +94,7 @@ class FilterMathNode(base.MaxwellSimNode):
 	####################
 	# - Properties: Operation
 	####################
-	operation: FilterOperation = bl_cache.BLField(
+	operation: math_system.FilterOperation = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_operations(),
 		cb_depends_on={'expr_info'},
 	)
@@ -313,7 +103,9 @@ class FilterMathNode(base.MaxwellSimNode):
 		if self.expr_info is not None:
 			return [
 				operation.bl_enum_element(i)
-				for i, operation in enumerate(FilterOperation.by_info(self.expr_info))
+				for i, operation in enumerate(
+					math_system.FilterOperation.by_info(self.expr_info)
+				)
 			]
 		return []
 
@@ -358,7 +150,7 @@ class FilterMathNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_label(self):
-		FO = FilterOperation
+		FO = math_system.FilterOperation
 		match self.operation:
 			# Slice
 			case FO.SliceIdx:
@@ -398,7 +190,7 @@ class FilterMathNode(base.MaxwellSimNode):
 					row.prop(self, self.blfields['active_dim_0'], text='')
 					row.prop(self, self.blfields['active_dim_1'], text='')
 
-			if self.operation is FilterOperation.SliceIdx:
+			if self.operation is math_system.FilterOperation.SliceIdx:
 				layout.prop(self, self.blfields['slice_tuple'], text='')
 
 	####################
@@ -434,7 +226,7 @@ class FilterMathNode(base.MaxwellSimNode):
 		## -> Works with continuous / discrete indexes.
 		## -> The user will be given a socket w/correct mathtype, unit, etc. .
 		if (
-			props['operation'] is FilterOperation.Pin
+			props['operation'] is math_system.FilterOperation.Pin
 			and dim_0 is not None
 			and (info.has_idx_cont(dim_0) or info.has_idx_discrete(dim_0))
 		):
@@ -460,7 +252,7 @@ class FilterMathNode(base.MaxwellSimNode):
 		# Loose Sockets: Pin Dim by-Value
 		## -> Works with discrete points / labelled integers.
 		elif (
-			props['operation'] is FilterOperation.PinIdx
+			props['operation'] is math_system.FilterOperation.PinIdx
 			and dim_0 is not None
 			and (info.has_idx_discrete(dim_0) or info.has_idx_labels(dim_0))
 		):
@@ -594,7 +386,10 @@ class FilterMathNode(base.MaxwellSimNode):
 
 			# Pin by-Value: Compute Nearest IDX
 			## -> Presume a sorted index array to be able to use binary search.
-			if props['operation'] is FilterOperation.Pin and has_pinned_value:
+			if (
+				props['operation'] is math_system.FilterOperation.Pin
+				and has_pinned_value
+			):
 				nearest_idx_to_value = info.dims[dim_0].nearest_idx_of(
 					pinned_value, require_sorted=True
 				)
@@ -605,7 +400,10 @@ class FilterMathNode(base.MaxwellSimNode):
 				)
 
 			# Pin by-Index
-			if props['operation'] is FilterOperation.PinIdx and has_pinned_axis:
+			if (
+				props['operation'] is math_system.FilterOperation.PinIdx
+				and has_pinned_axis
+			):
 				return params.compose_within(
 					enclosing_arg_targets=[sim_symbols.idx(None)],
 					enclosing_func_args=[sp.S(pinned_axis)],

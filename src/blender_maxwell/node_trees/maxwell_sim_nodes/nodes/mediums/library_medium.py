@@ -25,7 +25,7 @@ from tidy3d.material_library.material_library import MaterialItem as Tidy3DMediu
 from tidy3d.material_library.material_library import VariantItem as Tidy3DMediumVariant
 
 from blender_maxwell.utils import bl_cache, logger, sci_constants
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets

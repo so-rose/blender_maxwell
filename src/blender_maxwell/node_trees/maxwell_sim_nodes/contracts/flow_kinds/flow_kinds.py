@@ -19,7 +19,7 @@ import functools
 import typing as typ
 
 from blender_maxwell.contracts import BLEnumElement
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 from blender_maxwell.utils.staticproperty import staticproperty
 

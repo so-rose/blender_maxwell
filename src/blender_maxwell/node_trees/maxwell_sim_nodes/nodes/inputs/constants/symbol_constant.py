@@ -16,12 +16,13 @@
 
 import enum
 import typing as typ
+from fractions import Fraction
 
 import bpy
 import sympy as sp
 
 from blender_maxwell.utils import bl_cache, logger, sim_symbols
-from blender_maxwell.utils import extra_sympy_units as spux
+from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
 from .... import sockets
@@ -50,6 +51,8 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	)
 
 	size: spux.NumberSize1D = bl_cache.BLField(spux.NumberSize1D.Scalar)
+	## Use of NumberSize1D implicitly guarantees UI-realizability later.
+
 	mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real)
 	physical_type: spux.PhysicalType = bl_cache.BLField(spux.PhysicalType.NonPhysical)
 
@@ -109,31 +112,110 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	preview_value_re: float = bl_cache.BLField(0.0)
 	preview_value_im: float = bl_cache.BLField(0.0)
 
-	####################
-	# - Computed Properties
-	####################
 	@bl_cache.cached_bl_property(
 		depends_on={
-			'sym_name',
-			'size',
 			'mathtype',
-			'physical_type',
-			'unit',
 			'interval_finite_z',
 			'interval_finite_q',
 			'interval_finite_re',
-			'interval_inf',
-			'interval_closed',
 			'interval_finite_im',
-			'interval_inf_im',
-			'interval_closed_im',
+		}
+	)
+	def interval_finite(
+		self,
+	) -> (
+		tuple[int | Fraction | float, int | Fraction | float]
+		| tuple[tuple[float, float], tuple[float, float]]
+	):
+		"""Return the appropriate finite interval from the UI, as guided by `self.mathtype`."""
+		MT = spux.MathType
+		match self.mathtype:
+			case MT.Integer:
+				return self.interval_finite_z
+			case MT.Rational:
+				return [Fraction(*q) for q in self.interval_finite_q]
+			case MT.Real:
+				return self.interval_finite_re
+			case MT.Complex:
+				return (self.interval_finite_re, self.interval_finite_im)
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'mathtype',
 			'preview_value_z',
 			'preview_value_q',
 			'preview_value_re',
 			'preview_value_im',
 		}
 	)
+	def preview_value(
+		self,
+	) -> int | Fraction | float | complex:
+		"""Return the appropriate finite interval from the UI, as guided by `self.mathtype`."""
+		MT = spux.MathType
+		match self.mathtype:
+			case MT.Integer:
+				return self.preview_value_z
+			case MT.Rational:
+				return Fraction(*self.preview_value_q)
+			case MT.Real:
+				return self.preview_value_re
+			case MT.Complex:
+				return complex(self.preview_value_re, self.preview_value_im)
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'mathtype',
+			'interval_finite',
+			'interval_inf',
+			'interval_inf_im',
+			'interval_closed',
+			'interval_closed_im',
+		}
+	)
+	def domain(
+		self,
+	) -> sp.Interval | sp.sets.fancysets.CartesianComplexRegion:
+		"""Deduce the domain specified in the UI."""
+		MT = spux.MathType
+		match self.mathtype:
+			case MT.Integer | MT.Real | MT.Rational:
+				return sim_symbols.mk_interval(
+					self.interval_finite,
+					self.interval_inf,
+					self.interval_closed,
+				)
+
+			case MT.Complex:
+				region = self.interval_finite
+				domain_re = sim_symbols.mk_interval(
+					region[0],
+					self.interval_inf,
+					self.interval_closed,
+				)
+				domain_im = sim_symbols.mk_interval(
+					region[1],
+					self.interval_inf_im,
+					self.interval_closed_im,
+				)
+				return sp.ComplexRegion(domain_re, domain_im, polar=False)
+
+	####################
+	# - Computed Properties
+	####################
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'sym_name',
+			'mathtype',
+			'physical_type',
+			'unit',
+			'size',
+			'domain',
+			'preview_value',
+		}
+	)
 	def symbol(self) -> sim_symbols.SimSymbol:
+		"""Generate the `SimSymbol` matching the user-specification."""
 		return sim_symbols.SimSymbol(
 			sym_name=self.sym_name,
 			mathtype=self.mathtype,
@@ -141,18 +223,8 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			unit=self.unit,
 			rows=self.size.rows,
 			cols=self.size.cols,
-			interval_finite_z=self.interval_finite_z,
-			interval_finite_q=self.interval_finite_q,
-			interval_finite_re=self.interval_finite_re,
-			interval_inf=self.interval_inf,
-			interval_closed=self.interval_closed,
-			interval_finite_im=self.interval_finite_im,
-			interval_inf_im=self.interval_inf_im,
-			interval_closed_im=self.interval_closed_im,
-			preview_value_z=self.preview_value_z,
-			preview_value_q=self.preview_value_q,
-			preview_value_re=self.preview_value_re,
-			preview_value_im=self.preview_value_im,
+			domain=self.domain,
+			preview_value=self.preview_value,
 		)
 
 	####################
