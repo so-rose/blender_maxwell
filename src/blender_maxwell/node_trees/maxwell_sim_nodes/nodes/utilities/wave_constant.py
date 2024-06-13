@@ -22,7 +22,7 @@ import bpy
 import sympy as sp
 import sympy.physics.units as spu
 
-from blender_maxwell.utils import bl_cache, logger, sci_constants
+from blender_maxwell.utils import bl_cache, logger, sci_constants, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
@@ -31,9 +31,13 @@ from .. import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+
 
 class WaveConstantNode(base.MaxwellSimNode):
-	"""Translates vaccum wavelength/frequency into both, either as a scalar, or as a memory-efficient uniform range of values.
+	"""Translates vacuum wavelength / non-angular frequency into both, either as a scalar, or as a memory-efficient uniform range of values.
 
 	Socket Sets:
 		Wavelength: Input a wavelength (range) to produce both wavelength/frequency (ranges).
@@ -100,7 +104,7 @@ class WaveConstantNode(base.MaxwellSimNode):
 		run_on_init=True,
 	)
 	def on_use_range_changed(self, props: dict) -> None:
-		"""Synchronize the `active_kind` of input/output sockets, to either produce a `ct.FlowKind.Value` or a `ct.FlowKind.Range`."""
+		"""Synchronize the `active_kind` of input/output sockets, to either produce a `FK.Value` or a `FK.Range`."""
 		if self.inputs.get('WL') is not None:
 			active_input = self.inputs['WL']
 		else:
@@ -108,46 +112,46 @@ class WaveConstantNode(base.MaxwellSimNode):
 
 		# Modify Active Kind(s)
 		## Input active_kind -> Value/Range
-		active_input_uses_range = active_input.active_kind == ct.FlowKind.Range
+		active_input_uses_range = active_input.active_kind == FK.Range
 		if active_input_uses_range != props['use_range']:
-			active_input.active_kind = (
-				ct.FlowKind.Range if props['use_range'] else ct.FlowKind.Value
-			)
+			active_input.active_kind = FK.Range if props['use_range'] else FK.Value
 
 		## Output active_kind -> Value/Range
 		for active_output in self.outputs.values():
-			active_output_uses_range = active_output.active_kind == ct.FlowKind.Range
+			active_output_uses_range = active_output.active_kind == FK.Range
 			if active_output_uses_range != props['use_range']:
-				active_output.active_kind = (
-					ct.FlowKind.Range if props['use_range'] else ct.FlowKind.Value
-				)
+				active_output.active_kind = FK.Range if props['use_range'] else FK.Value
 
 	####################
-	# - FlowKinds
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.FlowKind.Value,
-		input_sockets={'WL', 'Freq'},
-		input_sockets_optional={'WL': True, 'Freq': True},
+		kind=FK.Value,
+		# Loaded
+		inscks_kinds={'WL': FK.Value, 'Freq': FK.Value},
+		input_sockets_optional={'WL', 'Freq'},
 	)
 	def compute_wl_value(self, input_sockets: dict) -> sp.Expr:
 		"""Compute a single wavelength value from either wavelength/frequency."""
-		has_wl = not ct.FlowSignal.check(input_sockets['WL'])
+		has_wl = not FS.check(input_sockets['WL'])
 		if has_wl:
 			return input_sockets['WL']
 
-		return sci_constants.vac_speed_of_light / input_sockets['Freq']
+		return spu.convert_to(
+			sci_constants.vac_speed_of_light / input_sockets['Freq'], spu.um
+		)
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.FlowKind.Value,
-		input_sockets={'WL', 'Freq'},
-		input_sockets_optional={'WL': True, 'Freq': True},
+		kind=FK.Value,
+		# Loaded
+		inscks_kinds={'WL': FK.Value, 'Freq': FK.Value},
+		input_sockets_optional={'WL', 'Freq'},
 	)
 	def compute_freq_value(self, input_sockets: dict) -> sp.Expr:
 		"""Compute a single frequency value from either wavelength/frequency."""
-		has_freq = not ct.FlowSignal.check(input_sockets['Freq'])
+		has_freq = not FS.check(input_sockets['Freq'])
 		if has_freq:
 			return input_sockets['Freq']
 
@@ -155,62 +159,117 @@ class WaveConstantNode(base.MaxwellSimNode):
 			sci_constants.vac_speed_of_light / input_sockets['WL'], spux.THz
 		)
 
+	####################
+	# - FlowKind.Range
+	####################
 	@events.computes_output_socket(
 		'WL',
-		kind=ct.FlowKind.Range,
-		input_sockets={'WL', 'Freq'},
-		input_socket_kinds={
-			'WL': ct.FlowKind.Range,
-			'Freq': ct.FlowKind.Range,
-		},
-		input_sockets_optional={'WL': True, 'Freq': True},
+		kind=FK.Range,
+		# Loaded
+		inscks_kinds={'WL': FK.Range, 'Freq': FK.Range},
+		input_sockets_optional={'WL', 'Freq'},
 	)
-	def compute_wl_range(self, input_sockets: dict) -> sp.Expr:
+	def compute_wl_range(self, input_sockets) -> sp.Expr:
 		"""Compute wavelength range from either wavelength/frequency ranges."""
-		has_wl = not ct.FlowSignal.check(input_sockets['WL'])
+		has_wl = not FS.check(input_sockets['WL'])
 		if has_wl:
 			return input_sockets['WL']
 
 		freq = input_sockets['Freq']
-		return ct.RangeFlow(
-			start=spux.scale_to_unit(
-				sci_constants.vac_speed_of_light / (freq.stop * freq.unit), spu.um
-			),
-			stop=spux.scale_to_unit(
-				sci_constants.vac_speed_of_light / (freq.start * freq.unit), spu.um
-			),
-			steps=freq.steps,
-			scaling=freq.scaling,
-			unit=spu.um,
+		return freq.rescale(
+			lambda bound: sci_constants.vac_speed_of_light / bound,
+			reverse=True,
+			new_unit=spu.um,
 		)
 
 	@events.computes_output_socket(
 		'Freq',
-		kind=ct.FlowKind.Range,
+		kind=FK.Range,
 		input_sockets={'WL', 'Freq'},
 		input_socket_kinds={
-			'WL': ct.FlowKind.Range,
-			'Freq': ct.FlowKind.Range,
+			'WL': FK.Range,
+			'Freq': FK.Range,
 		},
 		input_sockets_optional={'WL': True, 'Freq': True},
 	)
 	def compute_freq_range(self, input_sockets: dict) -> sp.Expr:
 		"""Compute frequency range from either wavelength/frequency ranges."""
-		has_freq = not ct.FlowSignal.check(input_sockets['Freq'])
+		has_freq = not FS.check(input_sockets['Freq'])
 		if has_freq:
 			return input_sockets['Freq']
 
 		wl = input_sockets['WL']
-		return ct.RangeFlow(
-			start=spux.scale_to_unit(
-				sci_constants.vac_speed_of_light / (wl.stop * wl.unit), spux.THz
-			),
-			stop=spux.scale_to_unit(
-				sci_constants.vac_speed_of_light / (wl.start * wl.unit), spux.THz
-			),
-			steps=wl.steps,
-			scaling=wl.scaling,
-			unit=spux.THz,
+		return wl.rescale(
+			lambda bound: sci_constants.vac_speed_of_light / bound,
+			reverse=True,
+			new_unit=spux.THz,
+		)
+
+	####################
+	# - FlowKind.Func
+	####################
+	# @events.computes_output_socket(
+	# 'WL',
+	# kind=FK.Func,
+	# # Loaded
+	# inscks_kinds={'WL': FK.Func, 'Freq': FK.Func},
+	# input_sockets_optional={'WL', 'Freq'},
+	# )
+	# def compute_wl_func(self, input_sockets: dict) -> ct.FuncFlow | FS:
+	# """Compute a single wavelength value from either wavelength/frequency."""
+	# wl = input_sockets['WL']
+	# has_wl = not FS.check(wl)
+	# if has_wl:
+	# return wl
+
+	# freq = input_sockets['Freq']
+	# has_freq = not FS.check(freq)
+	# if has_freq:
+	# return wl.compose_within(
+	# return spu.convert_to(
+	# sci_constants.vac_speed_of_light / input_sockets['Freq'], spu.um
+	# )
+
+	# return FS.FlowPending
+
+	# @events.computes_output_socket(
+	# 'Freq',
+	# kind=FK.Value,
+	# # Loaded
+	# inscks_kinds={'WL': FK.Value, 'Freq': FK.Value},
+	# input_sockets_optional={'WL', 'Freq'},
+	# )
+	# def compute_freq_value(self, input_sockets: dict) -> sp.Expr:
+	# """Compute a single frequency value from either wavelength/frequency."""
+	# has_freq = not FS.check(input_sockets['Freq'])
+	# if has_freq:
+	# return input_sockets['Freq']
+
+	# return spu.convert_to(
+	# sci_constants.vac_speed_of_light / input_sockets['WL'], spux.THz
+	# )
+
+	####################
+	# - FlowKind.Info
+	####################
+	@events.computes_output_socket(
+		'WL',
+		kind=FK.Info,
+	)
+	def compute_wl_info(self) -> ct.InfoFlow:
+		"""Just enough InfoFlow to enable `linked_capabilities`."""
+		return ct.InfoFlow(
+			output=sim_symbols.wl(spu.um),
+		)
+
+	@events.computes_output_socket(
+		'Freq',
+		kind=FK.Info,
+	)
+	def compute_freq_info(self) -> sp.Expr:
+		"""Compute frequency range from either wavelength/frequency ranges."""
+		return ct.InfoFlow(
+			output=sim_symbols.freq(spux.THz),
 		)
 
 
@@ -220,4 +279,4 @@ class WaveConstantNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	WaveConstantNode,
 ]
-BL_NODES = {ct.NodeType.WaveConstant: (ct.NodeCategory.MAXWELLSIM_INPUTS)}
+BL_NODES = {ct.NodeType.WaveConstant: (ct.NodeCategory.MAXWELLSIM_UTILITIES)}

@@ -20,6 +20,9 @@ from .... import contracts as ct
 from .... import sockets
 from ... import base, events
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+
 
 class BlenderConstantNode(base.MaxwellSimNode):
 	node_type = ct.NodeType.BlenderConstant
@@ -47,7 +50,7 @@ class BlenderConstantNode(base.MaxwellSimNode):
 	####################
 	# - Callbacks
 	####################
-	@events.computes_output_socket('Value', input_sockets={'Value'})
+	@events.computes_output_socket('Value', kind=FK.Params, input_sockets={'Value'})
 	def compute_value(self, input_sockets) -> typ.Any:
 		return input_sockets['Value']
 

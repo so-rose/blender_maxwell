@@ -25,11 +25,17 @@ import sympy as sp
 
 from blender_maxwell.utils import bl_cache, logger, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.frozendict import frozendict
 
 from .. import contracts as ct
 from . import base
 
 log = logger.get(__name__)
+FK = ct.FlowKind
+MT = spux.MathType
+
+UI_FLOAT_EPS = sp.Float(0.0001, 1)
+UI_FLOAT_PREC = 4
 
 Int2: typ.TypeAlias = tuple[int, int]
 Int3: typ.TypeAlias = tuple[int, int, int]
@@ -44,19 +50,21 @@ Float32: typ.TypeAlias = tuple[
 
 
 ####################
-# - Utilitives
+# - Utilities
 ####################
 def unicode_superscript(n: int) -> str:
 	"""Transform an integer into its unicode-based superscript character."""
 	return ''.join(['⁰¹²³⁴⁵⁶⁷⁸⁹'[ord(c) - ord('0')] for c in str(n)])
 
 
-def _check_sym_oo(sym):
-	return sym.is_real or sym.is_rational or sym.is_integer
-
-
 class InfoDisplayCol(enum.StrEnum):
-	"""Valid columns for specifying displayed information from an `ct.InfoFlow`."""
+	"""Valid columns for specifying displayed information from an `ct.InfoFlow`.
+
+	Attributes:
+		Length: Display the size of the dimensional index.
+		MathType: Display the `MT` of the dimensional symbol.
+		Unit: Display the unit of the dimensional symbol.
+	"""
 
 	Length = enum.auto()
 	MathType = enum.auto()
@@ -112,25 +120,33 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	use_socket_color = True
 
 	####################
-	# - Socket Interface
+	# - Identifier
 	####################
 	size: spux.NumberSize1D = bl_cache.BLField(spux.NumberSize1D.Scalar)
-	mathtype: spux.MathType = bl_cache.BLField(spux.MathType.Real)
+	mathtype: MT = bl_cache.BLField(MT.Real)
 	physical_type: spux.PhysicalType = bl_cache.BLField(spux.PhysicalType.NonPhysical)
 
+	####################
+	# - Output Symbol
+	####################
 	@bl_cache.cached_bl_property(
+		## -> CAREFUL: 'output_sym' changes recompiles `FuncFlow`.
 		depends_on={
-			'active_kind',
-			'symbols',
-			'raw_value_spstr',
-			'raw_min_spstr',
-			'raw_max_spstr',
+			# Identity
 			'output_name',
+			'active_kind',
 			'mathtype',
 			'physical_type',
 			'unit',
 			'size',
-			'value',
+			# Symbols / Symbolic Expression
+			'symbols',
+			'raw_value_spstr',
+			'raw_min_spstr',
+			'raw_max_spstr',
+			# Domain
+			'domain',
+			'steps',  ## -> Func needs to recompile anyway if steps changes.
 		}
 	)
 	def output_sym(self) -> sim_symbols.SimSymbol | None:
@@ -142,12 +158,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			NotImplementedError: When `active_kind` is neither `Value`, `Func`, or `Range`.
 		"""
 		match self.active_kind:
-			case ct.FlowKind.Value | ct.FlowKind.Func if self.symbols:
+			case FK.Value | FK.Func if self.symbols:
 				return self._parse_expr_symbol(
 					self._parse_expr_str(self.raw_value_spstr)
 				)
 
-			case ct.FlowKind.Value | ct.FlowKind.Func if not self.symbols:
+			case FK.Value | FK.Func if not self.symbols:
 				return sim_symbols.SimSymbol(
 					sym_name=self.output_name,
 					mathtype=self.mathtype,
@@ -155,17 +171,10 @@ class ExprBLSocket(base.MaxwellSimSocket):
 					unit=self.unit,
 					rows=self.size.rows,
 					cols=self.size.cols,
-					is_constant=True,
-					## TODO: Should we set preview values
-					exclude_zero=(
-						not self.value.is_zero
-						if self.value.is_zero is not None
-						else False
-					),
-					## TODO: Does this 0-check work for matrix elements?
+					domain=self.domain,
 				)
 
-			case ct.FlowKind.Range if self.symbols:
+			case FK.Range if self.symbols:
 				## TODO: Support RangeFlow
 				## -- It's hard; we need a min-span set over bound domains.
 				## -- We... Don't use this anywhere. Yet?
@@ -178,29 +187,181 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				msg = 'RangeFlow support not yet implemented for when self.symbols is not empty'
 				raise NotImplementedError(msg)
 
-			case ct.FlowKind.Range if not self.symbols:
+			case FK.Range if not self.symbols:
 				return sim_symbols.SimSymbol(
 					sym_name=self.output_name,
 					mathtype=self.mathtype,
 					physical_type=self.physical_type,
 					unit=self.unit,
-					rows=self.lazy_range.steps,
+					rows=self.steps,
 					cols=1,
-					exclude_zero=not self.lazy_range.is_always_nonzero,
+					domain=self.domain,
 				)
+
+	####################
+	# - Domain
+	####################
+	exclude_zero: bool = bl_cache.BLField(True)
+
+	abs_min_infinite: bool = bl_cache.BLField(True)
+	abs_max_infinite: bool = bl_cache.BLField(True)
+	abs_min_infinite_im: bool = bl_cache.BLField(True)
+	abs_max_infinite_im: bool = bl_cache.BLField(True)
+
+	abs_min_closed: bool = bl_cache.BLField(True)
+	abs_max_closed: bool = bl_cache.BLField(True)
+	abs_min_closed_im: bool = bl_cache.BLField(True)
+	abs_max_closed_im: bool = bl_cache.BLField(True)
+
+	abs_min_int: int = bl_cache.BLField(0)
+	abs_min_rat: Int2 = bl_cache.BLField((0, 1))
+	abs_min_float: float = bl_cache.BLField(0.0, float_prec=UI_FLOAT_PREC)
+	abs_min_complex: Float2 = bl_cache.BLField((0.0, 0.0), float_prec=UI_FLOAT_PREC)
+
+	abs_max_int: int = bl_cache.BLField(0)
+	abs_max_rat: Int2 = bl_cache.BLField((0, 1))
+	abs_max_float: float = bl_cache.BLField(0.0, float_prec=UI_FLOAT_PREC)
+	abs_max_complex: Float2 = bl_cache.BLField((0.0, 0.0), float_prec=UI_FLOAT_PREC)
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'mathtype',
+			'abs_min_infinite',
+			'abs_min_infinite_im',
+			'abs_min_int',
+			'abs_min_rat',
+			'abs_min_float',
+			'abs_min_complex',
+		}
+	)
+	def abs_inf(self) -> sp.Integer | sp.Rational | sp.Float | spux.ComplexNumber:
+		"""Deduce the infimum of values expressable by this socket."""
+		match self.mathtype:
+			case MT.Integer | MT.Rational | MT.Real if self.abs_min_infinite:
+				return -sp.oo
+			case MT.Integer:
+				abs_min = sp.Integer(self.abs_min_int)
+			case MT.Rational:
+				abs_min = sp.Rational(*self.abs_min_rat)
+			case MT.Real:
+				abs_min = sp.Float(self.abs_min_float, UI_FLOAT_PREC)
+			case MT.Complex:
+				cplx = self.abs_min_complex
+				abs_min_re = (
+					sp.Float(cplx[0], UI_FLOAT_PREC)
+					if not self.abs_min_infinite
+					else -sp.oo
+				)
+				abs_min_im = (
+					sp.Float(cplx[1], UI_FLOAT_PREC)
+					if not self.abs_min_infinite_im
+					else -sp.oo
+				)
+				abs_min = abs_min_re + sp.I * abs_min_im
+
+		return abs_min
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'mathtype',
+			'abs_max_infinite',
+			'abs_max_infinite_im',
+			'abs_max_int',
+			'abs_max_rat',
+			'abs_max_float',
+			'abs_max_complex',
+		}
+	)
+	def abs_sup(self) -> sp.Integer | sp.Rational | sp.Float | spux.ComplexNumber:
+		"""Deduce the infimum of values expressable by this socket."""
+		match self.mathtype:
+			case MT.Integer | MT.Rational | MT.Real if self.abs_max_infinite:
+				return sp.oo
+			case MT.Integer:
+				abs_max = sp.Integer(self.abs_max_int)
+			case MT.Rational:
+				abs_max = sp.Rational(*self.abs_max_rat)
+			case MT.Real:
+				abs_max = sp.Float(self.abs_max_float, UI_FLOAT_PREC)
+			case MT.Complex:
+				cplx = self.abs_max_complex
+				abs_max_re = (
+					sp.Float(cplx[0], UI_FLOAT_PREC)
+					if not self.abs_max_infinite
+					else sp.oo
+				)
+				abs_max_im = (
+					sp.Float(cplx[1], UI_FLOAT_PREC)
+					if not self.abs_max_infinite_im
+					else sp.oo
+				)
+				abs_max = abs_max_re + sp.I * abs_max_im
+
+		return abs_max
+
+	@bl_cache.cached_bl_property(
+		depends_on={
+			'abs_inf',
+			'abs_sup',
+			'exclude_zero',
+			'abs_min_closed',
+			'abs_max_closed',
+			'abs_min_closed_im',
+			'abs_max_closed_im',
+		}
+	)
+	def domain(self) -> spux.BlessedSet:
+		"""Deduce the domain of the socket's expression."""
+		match self.mathtype:
+			case MT.Integer:
+				domain = spux.BlessedSet(
+					sp.Range(
+						self.abs_inf if self.abs_min_closed else self.abs_inf + 1,
+						self.abs_sup + 1 if self.abs_max_closed else self.abs_sup,
+					)
+				)
+			case MT.Rational | MT.Real:
+				domain = spux.BlessedSet(
+					sp.Interval(
+						self.abs_inf,
+						self.abs_sup,
+						left_open=not self.abs_min_closed,
+						right_open=not self.abs_max_closed,
+					)
+				)
+			case MT.Complex:
+				domain = spux.BlessedSet.reals_to_complex(
+					sp.Interval(
+						sp.re(self.abs_inf),
+						sp.re(self.abs_sup),
+						left_open=not self.abs_min_closed,
+						right_open=not self.abs_max_closed,
+					),
+					sp.Interval(
+						sp.im(self.abs_inf),
+						sp.im(self.abs_sup),
+						left_open=not self.abs_min_closed_im,
+						right_open=not self.abs_max_closed_im,
+					),
+				)
+
+		if self.exclude_zero:
+			return domain - sp.FiniteSet(0)
+		return domain
 
 	####################
 	# - Value|Range Swapper
 	####################
 	use_value_range_swapper: bool = bl_cache.BLField(False)
-	selected_value_range: ct.FlowKind = bl_cache.BLField(
-		enum_cb=lambda self, _: self._value_or_range(),
+	selected_value_range: FK = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_value_or_range(),
 	)
 
-	def _value_or_range(self):
+	def search_value_or_range(self):
+		"""Either `FlowKind.Value` or `FlowKind.Range`."""
 		return [
 			flow_kind.bl_enum_element(i)
-			for i, flow_kind in enumerate([ct.FlowKind.Value, ct.FlowKind.Range])
+			for i, flow_kind in enumerate([FK.Value, FK.Range])
 		]
 
 	####################
@@ -369,7 +530,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	# - Event Callbacks
 	####################
-	def on_socket_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
+	def on_socket_data_changed(self, socket_kinds: set[FK]) -> None:
 		"""Alter the socket's color in response to flow.
 
 		- `FlowKind.Info`: Any change causes the socket color to be updated with the physical type of the output symbol.
@@ -381,8 +542,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		"""
 		## NOTE: Depends on suppressed on_prop_changed
 
-		if ct.FlowKind.Info in socket_kinds:
-			info = self.compute_data(kind=ct.FlowKind.Info)
+		if FK.Info in socket_kinds:
+			info = self.compute_data(kind=FK.Info)
 			has_info = not ct.FlowSignal.check(info)
 
 			# Alter Color
@@ -443,7 +604,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	####################
 	def _to_raw_value(self, expr: spux.SympyExpr, force_complex: bool = False):
 		"""Cast the given expression to the appropriate raw value, with scaling guided by `self.unit`."""
-		pyvalue = spux.scale_to_unit(expr, self.unit)
+		pyvalue = spux.scale_to_unit(expr, self.unit, cast_to_pytype=True)
 
 		# Cast complex -> tuple[float, float]
 		## -> We can't set complex to BLProps.
@@ -452,6 +613,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			isinstance(pyvalue, int | float) and force_complex
 		):
 			return (pyvalue.real, pyvalue.imag)
+
 		if isinstance(pyvalue, tuple) and all(
 			isinstance(v, complex)
 			or (isinstance(pyvalue, int | float) and force_complex)
@@ -557,6 +719,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			'unit',
 			'mathtype',
 			'size',
+			'domain',
 			'raw_value_sp',
 			'raw_value_int',
 			'raw_value_rat',
@@ -601,20 +764,21 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		if self.size is NS.Vec4:
 			return ct.FlowSignal.NoFlow
 
-		MT_Z = spux.MathType.Integer
-		MT_Q = spux.MathType.Rational
-		MT_R = spux.MathType.Real
-		MT_C = spux.MathType.Complex
+		MT_Z = MT.Integer
+		MT_Q = MT.Rational
+		MT_R = MT.Real
+		MT_C = MT.Complex
 		Z = sp.Integer
 		Q = sp.Rational
-		R = sp.RealNumber
-		return {
+		R = sp.Float
+		raw_value = {
 			NS.Scalar: {
 				MT_Z: lambda: Z(self.raw_value_int),
 				MT_Q: lambda: Q(self.raw_value_rat[0], self.raw_value_rat[1]),
-				MT_R: lambda: R(self.raw_value_float),
+				MT_R: lambda: R(self.raw_value_float, UI_FLOAT_PREC),
 				MT_C: lambda: (
-					self.raw_value_complex[0] + sp.I * self.raw_value_complex[1]
+					R(self.raw_value_complex[0], UI_FLOAT_PREC)
+					+ sp.I * R(self.raw_value_complex[1], UI_FLOAT_PREC)
 				),
 			},
 			NS.Vec2: {
@@ -622,9 +786,14 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				MT_Q: lambda: sp.ImmutableMatrix(
 					[Q(q[0], q[1]) for q in self.raw_value_rat2]
 				),
-				MT_R: lambda: sp.ImmutableMatrix([R(r) for r in self.raw_value_float2]),
+				MT_R: lambda: sp.ImmutableMatrix(
+					[R(r, UI_FLOAT_PREC) for r in self.raw_value_float2]
+				),
 				MT_C: lambda: sp.ImmutableMatrix(
-					[c[0] + sp.I * c[1] for c in self.raw_value_complex2]
+					[
+						R(c[0], UI_FLOAT_PREC) + sp.I * R(c[1], UI_FLOAT_PREC)
+						for c in self.raw_value_complex2
+					]
 				),
 			},
 			NS.Vec3: {
@@ -632,12 +801,21 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				MT_Q: lambda: sp.ImmutableMatrix(
 					[Q(q[0], q[1]) for q in self.raw_value_rat3]
 				),
-				MT_R: lambda: sp.ImmutableMatrix([R(r) for r in self.raw_value_float3]),
+				MT_R: lambda: sp.ImmutableMatrix(
+					[R(r, UI_FLOAT_PREC) for r in self.raw_value_float3]
+				),
 				MT_C: lambda: sp.ImmutableMatrix(
-					[c[0] + sp.I * c[1] for c in self.raw_value_complex3]
+					[
+						R(c[0], UI_FLOAT_PREC) + sp.I * R(c[1], UI_FLOAT_PREC)
+						for c in self.raw_value_complex3
+					]
 				),
 			},
-		}[self.size][self.mathtype]() * (self.unit if self.unit is not None else 1)
+		}[self.size][self.mathtype]()
+
+		if raw_value not in self.domain:
+			return ct.FlowSignal.FlowPending
+		return raw_value * self.unit_factor
 
 	@value.setter
 	def value(self, expr: spux.SympyExpr) -> None:
@@ -650,7 +828,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			self.raw_value_spstr = sp.sstr(expr)
 		else:
 			NS = spux.NumberSize1D
-			MT = spux.MathType
 			match (self.size, self.mathtype):
 				case (NS.Scalar, MT.Integer):
 					self.raw_value_int = self._to_raw_value(expr)
@@ -694,6 +871,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			'unit',
 			'mathtype',
 			'size',
+			'domain',
 			'steps',
 			'scaling',
 			'raw_min_sp',
@@ -723,10 +901,10 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				symbols=self.symbols,
 			)
 
-		MT_Z = spux.MathType.Integer
-		MT_Q = spux.MathType.Rational
-		MT_R = spux.MathType.Real
-		MT_C = spux.MathType.Complex
+		MT_Z = MT.Integer
+		MT_Q = MT.Rational
+		MT_R = MT.Real
+		MT_C = MT.Complex
 		Z = sp.Integer
 		Q = sp.Rational
 		R = sp.RealNumber
@@ -739,10 +917,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				bound[0] + sp.I * bound[1] for bound in self.raw_range_complex
 			],
 		}[self.mathtype]()
+		if min_bound not in self.domain or max_bound not in self.domain:
+			return ct.FlowSignal.FlowPending
 
 		return ct.RangeFlow(
-			start=min_bound,
-			stop=max_bound,
+			start=sp.Float(min_bound, 4),
+			stop=sp.Float(max_bound, 4),
 			steps=self.steps,
 			scaling=self.scaling,
 			unit=self.unit,
@@ -763,10 +943,10 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			self.raw_max_spstr = sp.sstr(lazy_range.stop)
 
 		else:
-			MT_Z = spux.MathType.Integer
-			MT_Q = spux.MathType.Rational
-			MT_R = spux.MathType.Real
-			MT_C = spux.MathType.Complex
+			MT_Z = MT.Integer
+			MT_Q = MT.Rational
+			MT_R = MT.Real
+			MT_C = MT.Complex
 
 			unit = lazy_range.unit if lazy_range.unit is not None else 1
 			if self.mathtype == MT_Z:
@@ -807,6 +987,12 @@ class ExprBLSocket(base.MaxwellSimSocket):
 				func_output=self.output_sym,
 				supports_jax=True,
 			)
+			return ct.FuncFlow(
+				func=lambda v: v,
+				func_args=[self.output_sym],
+				func_output=self.output_sym,
+				supports_jax=True,
+			)
 
 		return ct.FlowSignal.FlowPending
 
@@ -821,27 +1007,23 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		"""
 		if self.output_sym is not None:
 			match self.active_kind:
-				case ct.FlowKind.Value | ct.FlowKind.Func if (
-					not ct.FlowSignal.check(self.value)
-				):
+				case FK.Value | FK.Func if (not ct.FlowSignal.check(self.value)):
 					return ct.ParamsFlow(
-						arg_targets=[self.output_sym],
 						func_args=[self.value],
 						symbols=set(self.sorted_symbols),
 					)
 
-				case ct.FlowKind.Range if self.sorted_symbols:
+				case FK.Range if self.sorted_symbols:
 					msg = 'RangeFlow support not yet implemented for when self.sorted_symbols is not empty'
 					raise NotImplementedError(msg)
 
-				case ct.FlowKind.Range if (
+				case FK.Range if (
 					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
 				):
 					return ct.ParamsFlow(
-						arg_targets=[self.output_sym],
 						func_args=[self.output_sym.sp_symbol_matsym],
 						symbols={self.output_sym},
-					).realize_partial({self.output_sym: self.lazy_range})
+					).realize_partial(frozendict({self.output_sym: self.lazy_range}))
 
 		return ct.FlowSignal.FlowPending
 
@@ -861,17 +1043,17 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		"""
 		if self.output_sym is not None:
 			match self.active_kind:
-				case ct.FlowKind.Value | ct.FlowKind.Func:
+				case FK.Value | FK.Func:
 					return ct.InfoFlow(
 						dims={sym: None for sym in self.sorted_symbols},
 						output=self.output_sym,
 					)
 
-				case ct.FlowKind.Range if self.sorted_symbols:
+				case FK.Range if self.sorted_symbols:
 					msg = 'InfoFlow support not yet implemented for when self.sorted_symbols is not empty'
 					raise NotImplementedError(msg)
 
-				case ct.FlowKind.Range if (
+				case FK.Range if (
 					not self.sorted_symbols and not ct.FlowSignal.check(self.lazy_range)
 				):
 					return ct.InfoFlow(
@@ -893,11 +1075,11 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
 			allow_out_to_in={
-				ct.FlowKind.Func: ct.FlowKind.Value,
+				FK.Func: FK.Value,
 			},
 			allow_out_to_in_if_matches={
-				ct.FlowKind.Value: (
-					ct.FlowKind.Func,
+				FK.Value: (
+					FK.Func,
 					(
 						info.output.physical_type,
 						info.output.mathtype,
@@ -917,8 +1099,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		output_sym = self.output_sym
 		if output_sym is not None:
 			allow_out_to_in_if_matches = {
-				ct.FlowKind.Value: (
-					ct.FlowKind.Func,
+				FK.Value: (
+					FK.Func,
 					(
 						output_sym.physical_type,
 						output_sym.mathtype,
@@ -934,7 +1116,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
 			allow_out_to_in={
-				ct.FlowKind.Func: ct.FlowKind.Value,
+				FK.Func: FK.Value,
 			},
 			allow_out_to_in_if_matches=allow_out_to_in_if_matches,
 		)
@@ -964,8 +1146,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Whether information about the expression passing through a linked socket is shown is governed by `self.show_info_columns`.
 		"""
-		if self.active_kind is ct.FlowKind.Func:
-			info = self.compute_data(kind=ct.FlowKind.Info)
+		if self.active_kind is FK.Func:
+			info = self.compute_data(kind=FK.Info)
 			has_info = not ct.FlowSignal.check(info)
 
 			if has_info:
@@ -999,8 +1181,8 @@ class ExprBLSocket(base.MaxwellSimSocket):
 		Notes:
 			Whether information about the expression passing through a linked socket is shown is governed by `self.show_info_columns`.
 		"""
-		if self.active_kind is ct.FlowKind.Func:
-			info = self.compute_data(kind=ct.FlowKind.Info)
+		if self.active_kind is FK.Func:
+			info = self.compute_data(kind=FK.Info)
 			has_info = not ct.FlowSignal.check(info)
 
 			if has_info:
@@ -1054,7 +1236,6 @@ class ExprBLSocket(base.MaxwellSimSocket):
 
 		else:
 			NS = spux.NumberSize1D
-			MT = spux.MathType
 			match (self.size, self.mathtype):
 				case (NS.Scalar, MT.Integer):
 					col.prop(self, self.blfields['raw_value_int'], text='')
@@ -1115,10 +1296,10 @@ class ExprBLSocket(base.MaxwellSimSocket):
 			col.prop(self, self.blfields['raw_max_spstr'], text='')
 
 		else:
-			MT_Z = spux.MathType.Integer
-			MT_Q = spux.MathType.Rational
-			MT_R = spux.MathType.Real
-			MT_C = spux.MathType.Complex
+			MT_Z = MT.Integer
+			MT_Q = MT.Rational
+			MT_R = MT.Real
+			MT_C = MT.Complex
 			if self.mathtype == MT_Z:
 				col.prop(self, self.blfields['raw_range_int'], text='')
 			elif self.mathtype == MT_Q:
@@ -1173,7 +1354,7 @@ class ExprBLSocket(base.MaxwellSimSocket):
 	def draw_info(self, info: ct.InfoFlow, col: bpy.types.UILayout) -> None:
 		"""Visualize the `InfoFlow` information passing through the socket."""
 		if (
-			self.active_kind is ct.FlowKind.Func
+			self.active_kind is FK.Func
 			and self.show_info_columns
 			and (self.is_linked or self.is_output)
 		):
@@ -1219,7 +1400,7 @@ class ExprSocketDef(base.SocketDef):
 
 	# Socket Interface
 	size: spux.NumberSize1D = spux.NumberSize1D.Scalar
-	mathtype: spux.MathType = spux.MathType.Real
+	mathtype: MT = MT.Real
 	physical_type: spux.PhysicalType = spux.PhysicalType.NonPhysical
 
 	default_unit: spux.Unit | None = None
@@ -1227,14 +1408,21 @@ class ExprSocketDef(base.SocketDef):
 
 	# FlowKind: Value
 	default_value: spux.SympyExpr = 0
-	abs_min: spux.SympyExpr | None = None
-	abs_max: spux.SympyExpr | None = None
 
 	# FlowKind: Range
 	default_min: spux.SympyExpr = 0
 	default_max: spux.SympyExpr = 1
 	default_steps: int = 2
 	default_scaling: ct.ScalingMode = ct.ScalingMode.Lin
+
+	# Domain
+	abs_min: spux.SympyExpr | None = None
+	abs_max: spux.SympyExpr | None = None
+	abs_min_closed: bool = True
+	abs_max_closed: bool = True
+	abs_min_closed_im: bool = True
+	abs_max_closed_im: bool = True
+	exclude_zero: bool = False
 
 	# UI
 	show_name_selector: bool = False
@@ -1347,14 +1535,14 @@ class ExprSocketDef(base.SocketDef):
 			# Coerce Number -> Column 0-Vector
 			## -> TODO: We don't strictly know if default_value is a number.
 			if len(self.size.shape) == 1:
-				self.default_value = self.default_value * sp.Matrix.ones(
+				self.default_value = self.default_value * sp.ImmutableMatrix.ones(
 					self.size.shape[0], 1
 				)
 
 			# Coerce Number -> 0-Matrix
 			## -> TODO: We don't strictly know if default_value is a number.
 			if len(self.size.shape) > 1:
-				self.default_value = self.default_value * sp.Matrix.ones(
+				self.default_value = self.default_value * sp.ImmutableMatrix.ones(
 					*self.size.shape
 				)
 
@@ -1367,9 +1555,9 @@ class ExprSocketDef(base.SocketDef):
 		If `self.default_value` is a scalar Python type, it will be coerced into the corresponding Sympy type using `sp.S`, after coersion to the correct Python type using `self.mathtype.coerce_compatible_pyobj()`.
 
 		Raises:
-			ValueError: If `self.default_value` has no obvious, coerceable `spux.MathType` compatible with `self.mathtype`, as determined by `spux.MathType.has_mathtype`.
+			ValueError: If `self.default_value` has no obvious, coerceable `MT` compatible with `self.mathtype`, as determined by `MT.has_mathtype`.
 		"""
-		mathtype_guide = spux.MathType.has_mathtype(self.default_value)
+		mathtype_guide = MT.has_mathtype(self.default_value)
 
 		# None: No Obvious Mathtype
 		if mathtype_guide is None:
@@ -1378,7 +1566,7 @@ class ExprSocketDef(base.SocketDef):
 
 		# PyType: Coerce from PyType
 		if mathtype_guide == 'pytype':
-			dv_mathtype = spux.MathType.from_pytype(type(self.default_value))
+			dv_mathtype = MT.from_pytype(type(self.default_value))
 			if self.mathtype.is_compatible(dv_mathtype):
 				self.default_value = sp.S(
 					self.mathtype.coerce_compatible_pyobj(self.default_value)
@@ -1389,7 +1577,7 @@ class ExprSocketDef(base.SocketDef):
 
 		# Expr: Merely Check MathType Compatibility
 		if mathtype_guide == 'expr':
-			dv_mathtype = spux.MathType.from_expr(self.default_value)
+			dv_mathtype = MT.from_expr(self.default_value)
 			if not self.mathtype.is_compatible(dv_mathtype):
 				msg = f'ExprSocket: Mathtype {dv_mathtype} of default value expression {self.default_value} (type {type(self.default_value)}) is incompatible with socket MathType {self.mathtype}'
 				raise ValueError(msg)
@@ -1416,11 +1604,11 @@ class ExprSocketDef(base.SocketDef):
 		If `self.default_value` is a scalar Python type, it will be coerced into the corresponding Sympy type using `sp.S`.
 
 		Raises:
-			ValueError: If `self.default_value` has no obvious `spux.MathType`, as determined by `spux.MathType.has_mathtype`.
+			ValueError: If `self.default_value` has no obvious `MT`, as determined by `MT.has_mathtype`.
 		"""
 		new_bounds = [None, None]
 		for i, bound in enumerate([self.default_min, self.default_max]):
-			mathtype_guide = spux.MathType.has_mathtype(bound)
+			mathtype_guide = MT.has_mathtype(bound)
 
 			# None: No Obvious Mathtype
 			if mathtype_guide is None:
@@ -1429,7 +1617,7 @@ class ExprSocketDef(base.SocketDef):
 
 			# PyType: Coerce from PyType
 			if mathtype_guide == 'pytype':
-				dv_mathtype = spux.MathType.from_pytype(type(bound))
+				dv_mathtype = MT.from_pytype(type(bound))
 				if self.mathtype.is_compatible(dv_mathtype):
 					new_bounds[i] = sp.S(self.mathtype.coerce_compatible_pyobj(bound))
 				else:
@@ -1438,18 +1626,18 @@ class ExprSocketDef(base.SocketDef):
 
 			# Expr: Merely Check MathType Compatibility
 			if mathtype_guide == 'expr':
-				dv_mathtype = spux.MathType.from_expr(bound)
+				dv_mathtype = MT.from_expr(bound)
 				if not self.mathtype.is_compatible(dv_mathtype):
 					msg = f'ExprSocket: Mathtype {dv_mathtype} of a default Range min or max expression {bound} (type {type(self.default_value)}) is incompatible with socket MathType {self.mathtype}'
 					raise ValueError(msg)
 
 			# Coerce from Infinite
 			if isinstance(bound, spux.SympyType):
-				if bound.is_infinite and self.mathtype is spux.MathType.Integer:
+				if bound.is_infinite and self.mathtype is MT.Integer:
 					new_bounds[i] = sp.S(-1) if i == 0 else sp.S(1)
-				if bound.is_infinite and self.mathtype is spux.MathType.Rational:
+				if bound.is_infinite and self.mathtype is MT.Rational:
 					new_bounds[i] = sp.Rational(-1, 1) if i == 0 else sp.Rational(1, 1)
-				if bound.is_infinite and self.mathtype is spux.MathType.Real:
+				if bound.is_infinite and self.mathtype is MT.Real:
 					new_bounds[i] = sp.S(-1.0) if i == 0 else sp.S(1.0)
 
 		if new_bounds[0] is not None:
@@ -1468,10 +1656,7 @@ class ExprSocketDef(base.SocketDef):
 		"""
 		# Check ActiveKind and Size
 		## -> NOTE: This doesn't protect against dynamic changes to either.
-		if (
-			self.active_kind is ct.FlowKind.Range
-			and self.size is not spux.NumberSize1D.Scalar
-		):
+		if self.active_kind is FK.Range and self.size is not spux.NumberSize1D.Scalar:
 			msg = "Can't have a non-Scalar size when Range is set as the active kind."
 			raise ValueError(msg)
 
@@ -1524,7 +1709,60 @@ class ExprSocketDef(base.SocketDef):
 		bl_socket.size = self.size
 		bl_socket.mathtype = self.mathtype
 		bl_socket.physical_type = self.physical_type
+		bl_socket.active_unit = bl_cache.Signal.ResetEnumItems
+		bl_socket.unit = bl_cache.Signal.InvalidateCache
+		bl_socket.unit_factor = bl_cache.Signal.InvalidateCache
 		bl_socket.symbols = self.default_symbols
+
+		# Domain
+		bl_socket.exclude_zero = self.exclude_zero
+
+		if self.abs_min is None:
+			bl_socket.abs_min_infinite = True
+			bl_socket.abs_min_infinite_im = True
+		else:
+			bl_socket.abs_min_closed = self.abs_min_closed
+
+		if self.abs_max is None:
+			bl_socket.abs_max_infinite = True
+			bl_socket.abs_max_infinite_im = True
+		else:
+			bl_socket.abs_max_closed = self.abs_max_closed
+
+		match self.mathtype:
+			case MT.Integer if self.abs_min is not None:
+				bl_socket.abs_min_int = int(self.abs_min)
+			case MT.Integer if self.abs_max is not None:
+				bl_socket.abs_max_int = int(self.abs_max)
+
+			case MT.Rational if self.abs_min is not None:
+				bl_socket.abs_min_rat = (
+					self.abs_min.numerator,
+					self.abs_min.denominator,
+				)
+			case MT.Rational if self.abs_max is not None:
+				bl_socket.abs_max_rat = (
+					self.abs_max.numerator,
+					self.abs_max.denominator,
+				)
+
+			case MT.Real if self.abs_min is not None:
+				bl_socket.abs_min_float = float(self.abs_min)
+			case MT.Real if self.abs_max is not None:
+				bl_socket.abs_max_float = float(self.abs_max)
+
+			case MT.Complex if self.abs_min is not None:
+				bl_socket.abs_min_complex = (
+					float(sp.re(self.abs_min)),
+					float(sp.im(self.abs_min)),
+				)
+				bl_socket.abs_min_closed_im = self.abs_min_closed_im
+			case MT.Complex if self.abs_max is not None:
+				bl_socket.abs_max_complex = (
+					float(sp.re(self.abs_max)),
+					float(sp.im(self.abs_max)),
+				)
+				bl_socket.abs_max_closed_im = self.abs_max_closed_im
 
 		# FlowKind.Value
 		## -> We must take units into account when setting bl_socket.value
@@ -1570,7 +1808,9 @@ class ExprSocketDef(base.SocketDef):
 			and cmp('show_func_ui')
 			and cmp('show_info_columns')
 			and cmp('show_name_selector')
+			and cmp('show_name_selector')
 			and bl_socket.use_info_draw
+			## TODO: Include domain?
 		)
 
 

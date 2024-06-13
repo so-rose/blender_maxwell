@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `DataFileImporterNode`."""
+
 import enum
 import typing as typ
 from pathlib import Path
@@ -31,11 +33,15 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+
 
 ####################
 # - Node
 ####################
 class DataFileImporterNode(base.MaxwellSimNode):
+	"""Import expression data from a file."""
+
 	node_type = ct.NodeType.DataFileImporter
 	bl_label = 'Data File Importer'
 
@@ -43,7 +49,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		'File Path': sockets.FilePathSocketDef(),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 
 	####################
@@ -54,7 +60,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		socket_name={'File Path'},
 		# Loaded
 		input_sockets={'File Path'},
-		input_socket_kinds={'File Path': ct.FlowKind.Value},
+		input_socket_kinds={'File Path': FK.Value},
 		input_sockets_optional={'File Path': True},
 		# Flow
 		## -> See docs in TransformMathNode
@@ -69,9 +75,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	@bl_cache.cached_bl_property()
 	def file_path(self) -> Path:
 		"""Retrieve the input file path."""
-		file_path = self._compute_input(
-			'File Path', kind=ct.FlowKind.Value, optional=True
-		)
+		file_path = self._compute_input('File Path', kind=FK.Value, optional=True)
 		has_file_path = not ct.FlowSignal.check(file_path)
 		if has_file_path:
 			return file_path
@@ -99,7 +103,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	)
 	def expr_info(self) -> ct.InfoFlow | None:
 		"""Retrieve the output expression's `InfoFlow`."""
-		info = self.compute_output('Expr', kind=ct.FlowKind.Info)
+		info = self.compute_output('Expr', kind=FK.Info)
 		has_info = not ct.FlowSignal.check(info)
 		if has_info:
 			return info
@@ -120,6 +124,15 @@ class DataFileImporterNode(base.MaxwellSimNode):
 		cb_depends_on={'output_physical_type'},
 	)
 
+	def search_units(self, physical_type: spux.PhysicalType) -> list[ct.BLEnumElement]:
+		"""Determine valid units based on the given physical type."""
+		if physical_type is not spux.PhysicalType.NonPhysical:
+			return [
+				(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
+				for i, unit in enumerate(physical_type.valid_units)
+			]
+		return []
+
 	dim_0_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerA
 	)
@@ -138,14 +151,6 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	dim_5_name: sim_symbols.SimSymbolName = bl_cache.BLField(
 		sim_symbols.SimSymbolName.LowerF
 	)
-
-	def search_units(self, physical_type: spux.PhysicalType) -> list[ct.BLEnumElement]:
-		if physical_type is not spux.PhysicalType.NonPhysical:
-			return [
-				(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
-				for i, unit in enumerate(physical_type.valid_units)
-			]
-		return []
 
 	####################
 	# - UI
@@ -196,10 +201,15 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
-		props={'output_name', 'output_mathtype', 'output_physical_type', 'output_unit'},
-		input_sockets={'File Path'},
+		props={
+			'output_name',
+			'output_mathtype',
+			'output_physical_type',
+			'output_unit',
+		},
+		inscks_kinds={'File Path': FK.Func},
 	)
 	def compute_func(self, props, input_sockets) -> td.Simulation:
 		"""Declare a lazy, composable function that returns the loaded data.
@@ -244,7 +254,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 	)
 	def compute_params(self) -> ct.ParamsFlow:
 		"""Declare an empty `Data:Params`, to indicate the start of a function-composition pipeline.
@@ -256,12 +266,12 @@ class DataFileImporterNode(base.MaxwellSimNode):
 
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Info,
+		kind=FK.Info,
 		# Loaded
 		props={'output_name', 'output_mathtype', 'output_physical_type', 'output_unit'}
 		| {f'dim_{i}_name' for i in range(6)},
 		output_sockets={'Expr'},
-		output_socket_kinds={'Expr': ct.FlowKind.Func},
+		output_socket_kinds={'Expr': FK.Func},
 	)
 	def compute_info(self, props, output_sockets) -> ct.InfoFlow:
 		"""Declare an `InfoFlow` based on the data shape.
@@ -284,9 +294,7 @@ class DataFileImporterNode(base.MaxwellSimNode):
 			dims = {
 				sim_symbols.idx(None).update(
 					sym_name=props[f'dim_{i}_name'],
-					interval_finite_z=(0, elements),
-					interval_inf=(False, False),
-					interval_closed=(True, True),
+					domain=spux.BlessedSet(sp.Range(0, elements)),
 				): [str(j) for j in range(elements)]
 				for i, elements in enumerate(shape)
 			}

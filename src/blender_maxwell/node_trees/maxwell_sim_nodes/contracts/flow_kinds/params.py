@@ -23,8 +23,10 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger, sim_symbols
+from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.frozendict import FrozenDict, frozendict
+from blender_maxwell.utils.lru_method import method_lru
 
 from .array import ArrayFlow
 from .expr_info import ExprInfo
@@ -42,16 +44,16 @@ class ParamsFlow(pyd.BaseModel):
 
 	model_config = pyd.ConfigDict(frozen=True)
 
-	arg_targets: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
-	kwarg_targets: dict[str, sim_symbols.SimSymbol] = pyd.Field(default_factory=dict)
-
-	func_args: list[spux.SympyExpr] = pyd.Field(default_factory=list)
-	func_kwargs: dict[str, spux.SympyExpr] = pyd.Field(default_factory=dict)
+	func_args: tuple[spux.SympyExpr, ...] = pyd.Field(default_factory=tuple)
+	func_kwargs: FrozenDict[str, spux.SympyExpr] = pyd.Field(default_factory=frozendict)
 
 	symbols: frozenset[sim_symbols.SimSymbol] = frozenset()
-	realized_symbols: dict[
+	realized_symbols: FrozenDict[
 		sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
-	] = pyd.Field(default_factory=dict)
+	] = pyd.Field(default_factory=frozendict)
+	previewed_symbols: FrozenDict[sim_symbols.SimSymbol, spux.SympyExpr] = pyd.Field(
+		default_factory=frozendict
+	)
 
 	####################
 	# - Symbols
@@ -101,9 +103,10 @@ class ParamsFlow(pyd.BaseModel):
 	####################
 	# - JIT'ed Callables for Numerical Function Arguments
 	####################
-	@functools.cached_property
+	@method_lru()
 	def func_args_n(
 		self,
+		arg_targets: tuple[sim_symbols.SimSymbol, ...],
 	) -> list[
 		typ.Callable[
 			[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
@@ -112,7 +115,7 @@ class ParamsFlow(pyd.BaseModel):
 	]:
 		"""Callable functions for evaluating each `self.func_args` entry numerically.
 
-		Before simplification, each `self.func_args` entry will be conformed to the corresponding (by-index) `SimSymbol` in `self.target_syms`.
+		Before simplification, each `self.func_args` entry will be conformed to the corresponding (by-index) `SimSymbol` in the passed `arg_targets`.
 
 		Notes:
 			Before using any `sympy` expressions as arguments to the returned callablees, they **must** be fully conformed and scaled to the corresponding `self.symbols` entry using that entry's `SimSymbol.scale()` method.
@@ -125,14 +128,13 @@ class ParamsFlow(pyd.BaseModel):
 				target_sym.conform(func_arg, strip_unit=True),
 				'jax',
 			)
-			for func_arg, target_sym in zip(
-				self.func_args, self.arg_targets, strict=True
-			)
+			for func_arg, target_sym in zip(self.func_args, arg_targets, strict=True)
 		]
 
-	@functools.cached_property
+	@method_lru()
 	def func_kwargs_n(
 		self,
+		kwarg_targets: frozendict[str, sim_symbols.SimSymbol],
 	) -> dict[
 		str,
 		typ.Callable[
@@ -148,7 +150,7 @@ class ParamsFlow(pyd.BaseModel):
 		return {
 			key: sp.lambdify(
 				self.all_sorted_sp_symbols,
-				self.kwarg_targets[key].conform(func_arg, strip_unit=True),
+				kwarg_targets[key].conform(func_arg, strip_unit=True),
 				'jax',
 			)
 			for key, func_arg in self.func_kwargs.items()
@@ -157,9 +159,24 @@ class ParamsFlow(pyd.BaseModel):
 	####################
 	# - Realization
 	####################
+	@functools.cached_property
+	def symbol_preview_values(
+		self,
+	) -> frozendict[sim_symbols.SimSymbol, sp.Basic] | None:
+		"""Provide a dictionary for simplifying all unrealized symbols to their preview values.
+
+		Returns `None` if not all unrealized symbols have preview values.
+		"""
+		if all(sym.preview_value is not None for sym in self.all_sorted_symbols):
+			return frozendict(
+				{sym: sym.preview_value_phy for sym in self.all_sorted_symbols}
+			)
+		return None
+
+	@method_lru()
 	def realize_symbols(
 		self,
-		symbol_values: dict[
+		symbol_values: frozendict[
 			sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
 		] = MappingProxyType({}),
 		allow_partial: bool = False,
@@ -209,11 +226,11 @@ class ParamsFlow(pyd.BaseModel):
 	####################
 	# - Realize Arguments
 	####################
+	@method_lru(maxsize=8)
 	def scaled_func_args(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		arg_targets: tuple[sim_symbols.SimSymbol, ...],
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 	) -> list[
 		int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...']
 	]:
@@ -237,15 +254,20 @@ class ParamsFlow(pyd.BaseModel):
 		Parameters:
 			symbol_values: Particular values for all symbols in `self.symbols`, which will be conformed and used to compute the function arguments (before they are conformed to `self.target_syms`).
 		"""
-		realized_symbols = list(
+		realized_symbols = tuple(
 			self.realize_symbols(symbol_values | self.realized_symbols).values()
 		)
-		return [func_arg_n(*realized_symbols) for func_arg_n in self.func_args_n]
+		return [
+			func_arg_n(*realized_symbols)
+			for func_arg_n in self.func_args_n(arg_targets)
+		]
 
+	@method_lru(maxsize=8)
 	def scaled_func_kwargs(
 		self,
-		symbol_values: dict[spux.Symbol, spux.SympyExpr] = MappingProxyType({}),
-	) -> dict[
+		kwarg_targets: frozendict[str, sim_symbols.SimSymbol],
+		symbol_values: frozendict[spux.Symbol, spux.SympyExpr] = frozendict(),
+	) -> frozendict[
 		str, int | float | Fraction | float | complex | jtyp.Shaped[jtyp.Array, '...']
 	]:
 		"""Realize correctly conformed numerical arguments for `self.func_kwargs`.
@@ -254,14 +276,19 @@ class ParamsFlow(pyd.BaseModel):
 		"""
 		realized_symbols = self.realize_symbols(symbol_values | self.realized_symbols)
 
-		return {
-			func_arg_name: func_kwarg_n(**realized_symbols)
-			for func_arg_name, func_kwarg_n in self.func_kwargs_n.items()
-		}
+		return frozendict(
+			{
+				func_arg_name: func_kwarg_n(**realized_symbols)
+				for func_arg_name, func_kwarg_n in self.func_kwargs_n(
+					kwarg_targets
+				).items()
+			}
+		)
 
 	####################
 	# - Operations
 	####################
+	@method_lru(maxsize=8)
 	def __or__(
 		self,
 		other: typ.Self,
@@ -272,34 +299,30 @@ class ParamsFlow(pyd.BaseModel):
 		The next composed function will receive a tuple of two arrays, instead of just one, allowing binary operations to occur.
 		"""
 		return ParamsFlow(
-			arg_targets=self.arg_targets + other.arg_targets,
-			kwarg_targets=self.kwarg_targets | other.kwarg_targets,
 			func_args=self.func_args + other.func_args,
 			func_kwargs=self.func_kwargs | other.func_kwargs,
 			symbols=self.symbols | other.symbols,
 			realized_symbols=self.realized_symbols | other.realized_symbols,
 		)
 
+	@method_lru(maxsize=8)
 	def compose_within(
 		self,
-		enclosing_arg_targets: list[sim_symbols.SimSymbol] = (),
-		enclosing_kwarg_targets: list[sim_symbols.SimSymbol] = (),
-		enclosing_func_args: list[spux.SympyExpr] = (),
-		enclosing_func_kwargs: dict[str, spux.SympyExpr] = MappingProxyType({}),
+		enclosing_func_args: tuple[spux.SympyExpr, ...] = (),
+		enclosing_func_kwargs: frozendict[str, spux.SympyExpr] = frozendict(),
 		enclosing_symbols: frozenset[sim_symbols.SimSymbol] = frozenset(),
 	) -> typ.Self:
 		return ParamsFlow(
-			arg_targets=self.arg_targets + list(enclosing_arg_targets),
-			kwarg_targets=self.kwarg_targets | dict(enclosing_kwarg_targets),
-			func_args=self.func_args + list(enclosing_func_args),
+			func_args=self.func_args + tuple(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			symbols=self.symbols | enclosing_symbols,
 			realized_symbols=self.realized_symbols,
 		)
 
+	@method_lru(maxsize=8)
 	def realize_partial(
 		self,
-		symbol_values: dict[
+		symbol_values: frozendict[
 			sim_symbols.SimSymbol, spux.SympyExpr | RangeFlow | ArrayFlow
 		],
 	) -> typ.Self:
@@ -316,11 +339,9 @@ class ParamsFlow(pyd.BaseModel):
 		Raises:
 			ValueError: If any symbol in `symbol_values`
 		"""
-		syms = set(symbol_values.keys())
+		syms = frozenset(symbol_values.keys())
 		if syms.issubset(self.symbols) or not syms:
 			return ParamsFlow(
-				arg_targets=self.arg_targets,
-				kwarg_targets=self.kwarg_targets,
 				func_args=self.func_args,
 				func_kwargs=self.func_kwargs,
 				symbols=self.symbols - syms,
@@ -333,7 +354,7 @@ class ParamsFlow(pyd.BaseModel):
 	# - Generate ExprSocketDef
 	####################
 	@functools.cached_property
-	def sym_expr_infos(self) -> dict[str, ExprInfo]:
+	def sym_expr_infos(self) -> frozendict[str, ExprInfo]:
 		"""Generate keyword arguments for defining all `ExprSocket`s needed to realize all `self.symbols`.
 
 		Many nodes need actual data, and as such, they require that the user select actual values for any symbols in the `ParamsFlow`.

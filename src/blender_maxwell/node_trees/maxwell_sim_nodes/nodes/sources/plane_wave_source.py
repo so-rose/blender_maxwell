@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `PlaneWaveSourceNode`."""
+
 import typing as typ
 
 import bpy
@@ -29,6 +31,11 @@ from ... import managed_objs, sockets
 from .. import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+PT = spux.PhysicalType
 
 
 class PlaneWaveSourceNode(base.MaxwellSimNode):
@@ -52,26 +59,26 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	# - Sockets
 	####################
 	input_sockets: typ.ClassVar = {
-		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
+		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(active_kind=FK.Func),
 		'Center': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Length,
-			default_value=sp.Matrix([0, 0, 0]),
+			mathtype=MT.Real,
+			physical_type=PT.Length,
+			default_value=sp.ImmutableMatrix([0, 0, 0]),
 		),
 		'Spherical': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec2,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Angle,
-			default_value=sp.Matrix([0, 0]),
+			mathtype=MT.Real,
+			physical_type=PT.Angle,
+			default_value=sp.ImmutableMatrix([0, 0]),
 		),
 		'Pol ∡': sockets.ExprSocketDef(
-			physical_type=spux.PhysicalType.Angle,
+			physical_type=PT.Angle,
 			default_value=0,
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Angled Source': sockets.MaxwellSourceSocketDef(active_kind=ct.FlowKind.Func),
+		'Angled Source': sockets.MaxwellSourceSocketDef(active_kind=FK.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -88,6 +95,7 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
+		"""Draw choices of injection axis and direction."""
 		layout.prop(self, self.blfields['injection_axis'], expand=True)
 		layout.prop(self, self.blfields['injection_direction'], expand=True)
 
@@ -96,175 +104,145 @@ class PlaneWaveSourceNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
 		# Loaded
-		output_sockets={'Angled Source'},
-		output_socket_kinds={'Angled Source': {ct.FlowKind.Func, ct.FlowKind.Params}},
+		outscks_kinds={'Angled Source': {FK.Func, FK.Params}},
 	)
-	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | FS:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
-		output_func = output_sockets['Angled Source'][ct.FlowKind.Func]
-		output_params = output_sockets['Angled Source'][ct.FlowKind.Params]
-
-		has_output_func = not ct.FlowSignal.check(output_func)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_func and has_output_params and not output_params.symbols:
-			return output_func.realize(output_params, disallow_jax=True)
-		return ct.FlowSignal.FlowPending
+		value = events.realize_known(output_sockets['Angled Source'])
+		if value is not None:
+			return value
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'sim_node_name', 'injection_axis', 'injection_direction'},
-		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
-		input_socket_kinds={
-			'Temporal Shape': ct.FlowKind.Func,
-			'Center': ct.FlowKind.Func,
-			'Spherical': ct.FlowKind.Func,
-			'Pol ∡': ct.FlowKind.Func,
+		inscks_kinds={
+			'Temporal Shape': FK.Func,
+			'Center': FK.Func,
+			'Spherical': FK.Func,
+			'Pol ∡': FK.Func,
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_TIDY3D,
+			'Spherical': ct.UNITS_TIDY3D,
+			'Pol ∡': ct.UNITS_TIDY3D,
 		},
 	)
 	def compute_func(self, props, input_sockets) -> None:
+		"""Compute a lazy function for the plane wave source."""
 		center = input_sockets['Center']
 		temporal_shape = input_sockets['Temporal Shape']
 		spherical = input_sockets['Spherical']
 		pol_ang = input_sockets['Pol ∡']
 
-		has_center = not ct.FlowSignal.check(center)
-		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
-		has_spherical = not ct.FlowSignal.check(spherical)
-		has_pol_ang = not ct.FlowSignal.check(pol_ang)
+		name = props['sim_node_name']
+		inj_dir = props['injection_direction'].plus_or_minus
+		size = {
+			ct.SimSpaceAxis.X: (0, td.inf, td.inf),
+			ct.SimSpaceAxis.Y: (td.inf, 0, td.inf),
+			ct.SimSpaceAxis.Z: (td.inf, td.inf, 0),
+		}[props['injection_axis']]
 
-		if has_center and has_temporal_shape and has_spherical and has_pol_ang:
-			name = props['sim_node_name']
-			inj_dir = props['injection_direction'].plus_or_minus
-			size = {
-				ct.SimSpaceAxis.X: (0, td.inf, td.inf),
-				ct.SimSpaceAxis.Y: (td.inf, 0, td.inf),
-				ct.SimSpaceAxis.Z: (td.inf, td.inf, 0),
-			}[props['injection_axis']]
-
-			return (
-				center.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| temporal_shape
-				| spherical.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| pol_ang.scale_to_unit_system(ct.UNITS_TIDY3D)
-			).compose_within(
-				lambda els: td.PlaneWave(
-					name=name,
-					center=els[0].flatten().tolist(),
-					size=size,
-					source_time=els[1],
-					direction=inj_dir,
-					angle_theta=els[2][0].item(0),
-					angle_phi=els[2][1].item(0),
-					pol_angle=els[3],
-				)
+		return (center | temporal_shape | spherical | pol_ang).compose_within(
+			lambda els: td.PlaneWave(
+				name=name,
+				center=els[0].flatten().tolist(),
+				size=size,
+				source_time=els[1],
+				direction=inj_dir,
+				angle_theta=els[2].item(0),
+				angle_phi=els[2].item(1),
+				pol_angle=els[3],
 			)
-		return ct.FlowSignal.FlowPending
+		)
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
-		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
-		input_socket_kinds={
-			'Temporal Shape': ct.FlowKind.Params,
-			'Center': ct.FlowKind.Params,
-			'Spherical': ct.FlowKind.Params,
-			'Pol ∡': ct.FlowKind.Params,
+		inscks_kinds={
+			'Temporal Shape': FK.Params,
+			'Center': FK.Params,
+			'Spherical': FK.Params,
+			'Pol ∡': FK.Params,
 		},
 	)
 	def compute_params(self, input_sockets) -> None:
+		"""Compute the function parameters of the lazy function."""
 		center = input_sockets['Center']
 		temporal_shape = input_sockets['Temporal Shape']
 		spherical = input_sockets['Spherical']
 		pol_ang = input_sockets['Pol ∡']
 
-		has_center = not ct.FlowSignal.check(center)
-		has_temporal_shape = not ct.FlowSignal.check(temporal_shape)
-		has_spherical = not ct.FlowSignal.check(spherical)
-		has_pol_ang = not ct.FlowSignal.check(pol_ang)
-
-		if has_center and has_temporal_shape and has_spherical and has_pol_ang:
-			return center | temporal_shape | spherical | pol_ang
-		return ct.FlowSignal.FlowPending
+		return center | temporal_shape | spherical | pol_ang
 
 	####################
 	# - Preview - Changes to Input Sockets
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
 		props={'sim_node_name'},
-		output_sockets={'Angled Source'},
-		output_socket_kinds={'Angled Source': ct.FlowKind.Params},
 	)
-	def compute_previews(self, props, output_sockets):
-		output_params = output_sockets['Angled Source']
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_params and not output_params.symbols:
-			return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
-		return ct.PreviewsFlow()
+	def compute_previews(self, props):
+		"""Mark the plane wave as participating in the 3D preview."""
+		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'Spherical', 'Pol ∡'},
+		socket_name={
+			'Center': {FK.Func, FK.Params},
+			'Spherical': {FK.Func, FK.Params},
+			'Pol ∡': {FK.Func, FK.Params},
+		},
 		prop_name={'injection_axis', 'injection_direction'},
 		run_on_init=True,
 		# Loaded
 		managed_objs={'modifier'},
 		props={'injection_axis', 'injection_direction'},
-		input_sockets={'Temporal Shape', 'Center', 'Spherical', 'Pol ∡'},
-		output_sockets={'Angled Source'},
-		output_socket_kinds={'Angled Source': ct.FlowKind.Params},
+		inscks_kinds={
+			'Center': {FK.Func, FK.Params},
+			'Spherical': {FK.Func, FK.Params},
+			'Pol ∡': {FK.Func, FK.Params},
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_BLENDER,
+			'Spherical': ct.UNITS_BLENDER,
+			'Pol ∡': ct.UNITS_BLENDER,
+		},
 	)
-	def on_previewable_changed(
-		self, managed_objs, props, input_sockets, output_sockets
-	):
-		center = input_sockets['Center']
-		spherical = input_sockets['Spherical']
-		pol_ang = input_sockets['Pol ∡']
-		output_params = output_sockets['Angled Source']
+	def on_previewable_changed(self, managed_objs, props, input_sockets):
+		"""Push changes in the inputs to the pol/center."""
+		center = events.realize_preview(input_sockets['Center'])
+		spherical = events.realize_preview(input_sockets['Spherical'])
+		pol_ang = events.realize_preview(input_sockets['Pol ∡'])
 
-		has_center = not ct.FlowSignal.check(center)
-		has_spherical = not ct.FlowSignal.check(spherical)
-		has_pol_ang = not ct.FlowSignal.check(pol_ang)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if (
-			has_center
-			and has_spherical
-			and has_pol_ang
-			and has_output_params
-			and not output_params.symbols
-		):
-			# Push Input Values to GeoNodes Modifier
-			managed_objs['modifier'].bl_modifier(
-				'NODES',
-				{
-					'node_group': import_geonodes(GeoNodes.SourcePlaneWave),
-					'unit_system': ct.UNITS_BLENDER,
-					'inputs': {
-						'Inj Axis': props['injection_axis'].axis,
-						'Direction': props['injection_direction'].true_or_false,
-						'theta': spherical[0],
-						'phi': spherical[1],
-						'Pol Angle': pol_ang,
-					},
+		# Push Input Values to GeoNodes Modifier
+		managed_objs['modifier'].bl_modifier(
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.SourcePlaneWave),
+				'inputs': {
+					'Inj Axis': props['injection_axis'].axis,
+					'Direction': props['injection_direction'].true_or_false,
+					'theta': spherical.item(0),
+					'phi': spherical.item(1),
+					'Pol Angle': pol_ang,
 				},
-				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
-			)
+			},
+			location=center,
+		)
 
 
 ####################

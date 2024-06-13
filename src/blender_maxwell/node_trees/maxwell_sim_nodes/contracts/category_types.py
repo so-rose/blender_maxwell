@@ -27,12 +27,18 @@ class NodeCategory(blender_type_enum.BlenderTypeEnum):
 	MAXWELLSIM_ANALYSIS = enum.auto()
 	MAXWELLSIM_ANALYSIS_MATH = enum.auto()
 
+	# Utilities/
+	MAXWELLSIM_UTILITIES = enum.auto()
+
 	# Inputs/
 	MAXWELLSIM_INPUTS = enum.auto()
 	MAXWELLSIM_INPUTS_SCENE = enum.auto()
 	MAXWELLSIM_INPUTS_CONSTANTS = enum.auto()
 	MAXWELLSIM_INPUTS_FILEIMPORTERS = enum.auto()
 	MAXWELLSIM_INPUTS_WEBIMPORTERS = enum.auto()
+
+	# Solvers/
+	MAXWELLSIM_SOLVERS = enum.auto()
 
 	# Outputs/
 	MAXWELLSIM_OUTPUTS = enum.auto()
@@ -51,20 +57,14 @@ class NodeCategory(blender_type_enum.BlenderTypeEnum):
 	MAXWELLSIM_STRUCTURES = enum.auto()
 	MAXWELLSIM_STRUCTURES_PRIMITIVES = enum.auto()
 
-	# Bounds/
-	MAXWELLSIM_BOUNDS = enum.auto()
-	MAXWELLSIM_BOUNDS_BOUNDCONDS = enum.auto()
-
 	# Monitors/
 	MAXWELLSIM_MONITORS = enum.auto()
 	MAXWELLSIM_MONITORS_PROJECTED = enum.auto()
 
 	# Simulations/
 	MAXWELLSIM_SIMS = enum.auto()
+	MAXWELLSIM_SIMS_BOUNDCONDFACES = enum.auto()
 	MAXWELLSIM_SIMS_SIMGRIDAXES = enum.auto()
-
-	# Utilities/
-	MAXWELLSIM_UTILITIES = enum.auto()
 
 	@classmethod
 	def get_tree(cls):

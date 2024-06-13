@@ -26,6 +26,9 @@ from .. import contracts as ct
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+
 
 ####################
 # - SocketDef
@@ -171,6 +174,7 @@ class SocketDef(pyd.BaseModel, abc.ABC):
 ####################
 # - Socket
 ####################
+FLOW_ERROR_COLOR: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 1.0)
 MANDATORY_PROPS: set[str] = {'socket_type', 'bl_label'}
 
 
@@ -210,6 +214,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 	socket_color: tuple[float, float, float, float] = bl_cache.BLField(
 		(0, 0, 0, 0), use_prop_update=False
 	)
+
+	flow_error: bool = bl_cache.BLField(False, use_prop_update=False)
 
 	####################
 	# - Initialization
@@ -352,7 +358,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		## -> The tradeoff: No link if there is no InfoFlow.
 		if self.use_linked_capabilities:
 			info = self.compute_data(kind=ct.FlowKind.Info)
-			has_info = not ct.FlowSignal.check(info)
+			has_info = not FS.check(info)
 			if has_info:
 				incoming_capabilities = link.from_socket.linked_capabilities(info)
 			else:
@@ -477,30 +483,10 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		# Run Socket Callbacks
 		self.on_socket_data_changed(socket_kinds)
 
-		# Mark Active FlowKind Links as Invalid
-		## -> Mark link as invalid (very red) if a FlowSignal is traveling.
-		## -> This helps explain why whatever isn't working isn't working.
-		## -> TODO: We need a different approach.
-		# log.debug(
-		# '[%s] Checking FlowKind Validity (socket_kinds=%s)',
-		# self.name,
-		# str(socket_kinds),
-		# )
-		# if self.is_linked and not self.is_output:
-		# link = self.links[0]
-		# linked_flow = self.compute_data(kind=self.active_kind)
-
-		# if (
-		# link.is_valid
-		# and self.active_kind in socket_kinds
-		# and ct.FlowSignal.check_single(linked_flow, ct.FlowSignal.FlowPending)
-		# ):
-		# node_tree = self.id_data
-		# node_tree.report_link_validity(link, False)
-
-		# elif not link.is_valid:
-		# node_tree = self.id_data
-		# node_tree.report_link_validity(link, True)
+		# Clear FlowErrors
+		## -> We should presume by default that the updated value is OK.
+		if self.flow_error:
+			bpy.app.timers.register(self.clear_flow_error)
 
 	def on_socket_data_changed(self, socket_kinds: set[ct.FlowKind]) -> None:
 		"""Called when `ct.FlowEvent.DataChanged` flows through this socket.
@@ -646,7 +632,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Returns:
 			An empty `ct.InfoFlow`.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	# Param
 	@property
@@ -659,7 +645,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Returns:
 			An empty `ct.ParamsFlow`.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	####################
 	# - FlowKind: Auxiliary
@@ -675,7 +661,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	@value.setter
 	def value(self, value: ct.ValueFlow) -> None:
@@ -701,7 +687,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	@array.setter
 	def array(self, value: ct.ArrayFlow) -> None:
@@ -727,7 +713,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	@lazy_func.setter
 	def lazy_func(self, lazy_func: ct.FuncFlow) -> None:
@@ -753,7 +739,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Raises:
 			NotImplementedError: When used without being overridden.
 		"""
-		return ct.FlowSignal.NoFlow
+		return FS.NoFlow
 
 	@lazy_range.setter
 	def lazy_range(self, value: ct.RangeFlow) -> None:
@@ -818,29 +804,42 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		"""
 		# Compute Output Socket
 		if self.is_output:
-			return self.node.compute_output(self.name, kind=kind)
+			flow = self.node.compute_output(self.name, kind=kind)
 
 		# Compute Input Socket
 		## -> Unlinked: Retrieve Socket Value
-		if not self.is_linked:
-			return self._compute_data(kind)
+		elif not self.is_linked:
+			flow = self._compute_data(kind)
 
-		## Linked: Compute Data on Linked Socket
-		## -> Capabilities are guaranteed compatible by 'allow_link_add'.
-		## -> There is no point in rechecking every time data flows.
-		linked_values = [link.from_socket.compute_data(kind) for link in self.links]
+		else:
+			# Linked: Compute Data on Linked Socket
+			## -> Capabilities are guaranteed compatible by 'allow_link_add'.
+			## -> There is no point in rechecking every time data flows.
+			linked_values = [link.from_socket.compute_data(kind) for link in self.links]
 
-		# Return Single Value / List of Values
-		## -> Multi-input sockets are not (yet) supported.
-		if linked_values:
-			return linked_values[0]
+			# Return Single Value / List of Values
+			## -> Multi-input sockets are not (yet) supported.
+			if linked_values:  # noqa: SIM108
+				flow = linked_values[0]
 
-		# Edge Case: While Dragging Link (but not yet removed)
-		## While the user is dragging a link:
-		## - self.is_linked = True, since the user hasn't confirmed anything.
-		## - self.links will be empty, since the link object was freed.
-		## When this particular condition is met, pretend that we're not linked.
-		return self._compute_data(kind)
+			# Edge Case: While Dragging Link (but not yet removed)
+			## While the user is dragging a link:
+			## - self.is_linked = True, since the user hasn't confirmed anything.
+			## - self.links will be empty, since the link object was freed.
+			## When this particular condition is met, pretend that we're not linked.
+			else:
+				flow = self._compute_data(kind)
+
+		if FS.check_single(flow, FS.FlowPending) and not self.flow_error:
+			bpy.app.timers.register(self.declare_flow_error)
+
+		return flow
+
+	def declare_flow_error(self):
+		self.flow_error = True
+
+	def clear_flow_error(self):
+		self.flow_error = False
 
 	####################
 	# - UI - Color
@@ -858,6 +857,8 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		Notes:
 			Called by Blender to call the socket color.
 		"""
+		if self.flow_error:
+			return FLOW_ERROR_COLOR
 		if self.use_socket_color:
 			return self.socket_color
 		return ct.SOCKET_COLORS[self.socket_type]
@@ -978,7 +979,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		# Info Drawing
 		if self.use_info_draw:
 			info = self.compute_data(kind=ct.FlowKind.Info)
-			if not ct.FlowSignal.check(info):
+			if not FS.check(info):
 				self.draw_info(info, col)
 
 	def draw_output(
@@ -1009,7 +1010,7 @@ class MaxwellSimSocket(bpy.types.NodeSocket, bl_instance.BLInstance):
 		# Draw FlowKind.Info related Information
 		if self.use_info_draw:
 			info = self.compute_data(kind=ct.FlowKind.Info)
-			if not ct.FlowSignal.check(info):
+			if not FS.check(info):
 				self.draw_info(info, col)
 
 	####################

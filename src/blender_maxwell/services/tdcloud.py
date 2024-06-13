@@ -28,6 +28,7 @@ import urllib
 from dataclasses import dataclass
 from pathlib import Path
 
+import bpy
 import tidy3d as td
 import tidy3d.web as td_web
 
@@ -495,3 +496,28 @@ class TidyCloudTasks:
 			raise RuntimeError(msg) from ex
 
 		return cls.update_task(cloud_task)
+
+
+####################
+# - Blender UI Integration
+####################
+def draw_cloud_status(layout: bpy.types.UILayout) -> None:
+	"""Draw up-to-date information about the connection to the Tidy3D cloud to a Blender UI."""
+	# Connection Info
+	auth_icon = 'CHECKBOX_HLT' if IS_AUTHENTICATED else 'CHECKBOX_DEHLT'
+	conn_icon = 'CHECKBOX_HLT' if IS_ONLINE else 'CHECKBOX_DEHLT'
+
+	row = layout.row()
+	row.alignment = 'CENTER'
+	row.label(text='Cloud Status')
+
+	box = layout.box()
+	split = box.split(factor=0.85)
+
+	col = split.column(align=False)
+	col.label(text='Authed')
+	col.label(text='Connected')
+
+	col = split.column(align=False)
+	col.label(icon=auth_icon)
+	col.label(icon=conn_icon)

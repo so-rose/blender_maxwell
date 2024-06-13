@@ -14,7 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `LibraryMediumNode`."""
+
 import enum
+import functools
 import typing as typ
 
 import bpy
@@ -36,8 +39,14 @@ log = logger.get(__name__)
 _mat_lib_iter = iter(td.material_library)
 _mat_key = ''
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+
 
 class VendoredMedium(enum.StrEnum):
+	"""Static enum of all mediums vendored with the Tidy3D client library."""
+
 	# Declare StrEnum of All Tidy3D Mediums
 	## -> This is a 'for ... in ...', which uses globals as loop variables.
 	## -> It's a bit of a hack, but very effective.
@@ -53,16 +62,23 @@ class VendoredMedium(enum.StrEnum):
 
 	@staticmethod
 	def to_name(v: typ.Self) -> str:
+		"""UI method to get the name of a vendored medium."""
 		return td.material_library[v].name
+
+	@functools.cached_property
+	def name(self) -> str:
+		"""Name of the vendored medium."""
+		return VendoredMedium.to_name(self)
 
 	@staticmethod
 	def to_icon(_: typ.Self) -> str:
+		"""No icon."""
 		return ''
 
 	####################
 	# - Medium Properties
 	####################
-	@property
+	@functools.cached_property
 	def tidy3d_medium_item(self) -> Tidy3DMediumItem:
 		"""Extracts the Tidy3D "Medium Item", which encapsulates all the provided experimental variants."""
 		return td.material_library[self]
@@ -70,12 +86,12 @@ class VendoredMedium(enum.StrEnum):
 	####################
 	# - Medium Variant Properties
 	####################
-	@property
+	@functools.cached_property
 	def medium_variants(self) -> set[Tidy3DMediumVariant]:
 		"""Extracts the list of medium variants, each corresponding to a particular experiment in the literature."""
 		return self.tidy3d_medium_item.variants
 
-	@property
+	@functools.cached_property
 	def default_medium_variant(self) -> Tidy3DMediumVariant:
 		"""Extracts the "default" medium variant, as selected by Tidy3D."""
 		return self.medium_variants[self.tidy3d_medium_item.default]
@@ -83,7 +99,7 @@ class VendoredMedium(enum.StrEnum):
 	####################
 	# - Enum Helper
 	####################
-	@property
+	@functools.cached_property
 	def variants_as_bl_enum_elements(self) -> list[ct.BLEnumElement]:
 		"""Computes a list of variants in a format suitable for use in a dynamic `EnumProperty`.
 
@@ -105,6 +121,8 @@ class VendoredMedium(enum.StrEnum):
 
 
 class LibraryMediumNode(base.MaxwellSimNode):
+	"""A pre-defined medium sourced from a particular experiment in the literature."""
+
 	node_type = ct.NodeType.LibraryMedium
 	bl_label = 'Library Medium'
 
@@ -113,7 +131,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {}
 	output_sockets: typ.ClassVar = {
-		'Medium': sockets.MaxwellMediumSocketDef(),
+		'Medium': sockets.MaxwellMediumSocketDef(active_kind=FK.Func),
 		'Valid Freqs': sockets.ExprSocketDef(
 			active_kind=ct.FlowKind.Range,
 			physical_type=spux.PhysicalType.Freq,
@@ -172,7 +190,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 
 		"""
 		return spu.convert_to(
-			sp.Matrix([sp.nsimplify(el) for el in self.medium.frequency_range])
+			sp.ImmutableMatrix([sp.nsimplify(el) for el in self.medium.frequency_range])
 			* spu.hertz,
 			spux.terahertz,
 		)
@@ -180,7 +198,7 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	@bl_cache.cached_bl_property(depends_on={'freq_range'})
 	def wl_range(self) -> sp.Expr:
 		"""Deduce the vacuum wavelength range as a unit-aware (nanometer, for convenience) column vector."""
-		return sp.Matrix(
+		return sp.ImmutableMatrix(
 			self.freq_range.applyfunc(
 				lambda el: spu.convert_to(
 					sci_constants.vac_speed_of_light / el, spu.nanometer
@@ -216,13 +234,16 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_label(self) -> str:
+		"""Show the active medium in the node label."""
 		return f'Medium: {self.vendored_medium}'
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Dropdowns for a medium, and a particular experimental variant."""
 		layout.prop(self, self.blfields['vendored_medium'], text='')
 		layout.prop(self, self.blfields['variant_name'], text='')
 
 	def draw_info(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		"""Draw information about a perticular variant of a particular medium."""
 		box = col.box()
 
 		row = box.row(align=True)
@@ -243,48 +264,81 @@ class LibraryMediumNode(base.MaxwellSimNode):
 			box.operator('wm.url_open', text='Link to Data').url = self.data_url
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Medium',
+		kind=FK.Value,
+		# Loaded
 		props={'medium'},
 	)
-	def compute_medium(self, props) -> sp.Expr:
-		return props['medium']
+	def compute_medium_value(self, props) -> td.Medium | FS:
+		"""Directly produce the medium."""
+		medium = props['medium']
+		if medium is not None:
+			return medium
+		return FS.FlowSignal
 
+	####################
+	# - FlowKind.Func
+	####################
 	@events.computes_output_socket(
-		'Valid Freqs',
-		kind=ct.FlowKind.Range,
-		props={'freq_range'},
+		'Medium',
+		kind=FK.Func,
+		# Loaded
+		outscks_kinds={'Medium': FK.Value},
 	)
-	def compute_valid_freqs_lazy(self, props) -> sp.Expr:
-		return ct.RangeFlow(
-			start=spu.scale_to_unit(['freq_range'][0], spux.THz),
-			stop=spu.scale_to_unit(props['freq_range'][1], spux.THz),
-			scaling=ct.ScalingMode.Lin,
-			unit=spux.THz,
-		)
+	def compute_medium_func(self, output_sockets) -> ct.FuncFlow:
+		"""Simply bake `Value` into a function."""
+		return ct.FuncFlow(func=lambda: output_sockets['Medium'])
 
+	####################
+	# - FlowKind.Params
+	####################
 	@events.computes_output_socket(
-		'Valid WLs',
-		kind=ct.FlowKind.Range,
-		props={'wl_range'},
+		'Medium',
+		kind=FK.Params,
 	)
-	def compute_valid_wls_lazy(self, props) -> sp.Expr:
-		return ct.RangeFlow(
-			start=spu.scale_to_unit(['wl_range'][0], spu.nm),
-			stop=spu.scale_to_unit(['wl_range'][0], spu.nm),
-			scaling=ct.ScalingMode.Lin,
-			unit=spu.nm,
-		)
+	def compute_medium_params(self) -> ct.ParamsFlow:
+		"""Return empty parameters for completeness."""
+		return ct.ParamsFlow()
+
+	####################
+	# - FlowKind.Range
+	####################
+	# @events.computes_output_socket(
+	# 'Valid Freqs',
+	# kind=ct.FlowKind.Range,
+	# props={'freq_range'},
+	# )
+	# def compute_valid_freqs_lazy(self, props) -> sp.Expr:
+	# return ct.RangeFlow(
+	# start=spu.scale_to_unit(['freq_range'][0], spux.THz),
+	# stop=spu.scale_to_unit(props['freq_range'][1], spux.THz),
+	# scaling=ct.ScalingMode.Lin,
+	# unit=spux.THz,
+	# )
+
+	# @events.computes_output_socket(
+	# 'Valid WLs',
+	# kind=ct.FlowKind.Range,
+	# props={'wl_range'},
+	# )
+	# def compute_valid_wls_lazy(self, props) -> sp.Expr:
+	# return ct.RangeFlow(
+	# start=spu.scale_to_unit(['wl_range'][0], spu.nm),
+	# stop=spu.scale_to_unit(['wl_range'][0], spu.nm),
+	# scaling=ct.ScalingMode.Lin,
+	# unit=spu.nm,
+	# )
 
 	####################
 	# - Preview
 	####################
+	## TODO: Move medium preview to a viz node of some kind
 	@events.on_show_plot(
 		managed_objs={'plot'},
 		props={'medium'},
-		stop_propagation=True,
 	)
 	def on_show_plot(
 		self,
@@ -293,7 +347,9 @@ class LibraryMediumNode(base.MaxwellSimNode):
 	):
 		managed_objs['plot'].mpl_plot_to_image(
 			lambda ax: props['medium'].plot(props['medium'].frequency_range, ax=ax),
-			bl_select=True,
+			width_inches=6.0,
+			height_inches=3.0,
+			dpi=150,
 		)
 		## TODO: Plot based on Wl, not freq.
 

@@ -17,19 +17,23 @@
 """Functions for characterizaiton, conversion and casting of `sympy` objects that use units."""
 
 import functools
+import typing as typ
 
+import jax
 import sympy as sp
 import sympy.physics.units as spu
 
+from .. import logger
 from . import units as spux
 from .parse_cast import sympy_to_python
 from .sympy_type import SympyType
+
+log = logger.get(__name__)
 
 
 ####################
 # - Unit Characterization
 ####################
-## TODO: Caching w/srepr'ed expression.
 ## TODO: An LFU cache could do better than an LRU.
 def uses_units(sp_obj: SympyType) -> bool:
 	"""Determines if an expression uses any units.
@@ -43,7 +47,6 @@ def uses_units(sp_obj: SympyType) -> bool:
 	return sp_obj.has(spu.Quantity)
 
 
-## TODO: Caching w/srepr'ed expression.
 ## TODO: An LFU cache could do better than an LRU.
 def get_units(expr: sp.Expr) -> set[spu.Quantity]:
 	"""Finds all units used by the expression, and returns them as a set.
@@ -73,6 +76,7 @@ def get_units(expr: sp.Expr) -> set[spu.Quantity]:
 ####################
 # - Dimensional Characterization
 ####################
+@functools.lru_cache(maxsize=8192)
 def unit_dim_to_unit_dim_deps(
 	unit_dims: SympyType,
 ) -> dict[spu.dimensions.Dimension, int] | None:
@@ -106,6 +110,7 @@ def unit_dim_to_unit_dim_deps(
 		return None
 
 
+@functools.lru_cache(maxsize=8192)
 def unit_to_unit_dim_deps(
 	unit: SympyType,
 ) -> dict[spu.dimensions.Dimension, int] | None:
@@ -130,6 +135,7 @@ def unit_to_unit_dim_deps(
 	)
 
 
+@functools.lru_cache(maxsize=8192)
 def compare_unit_dims(unit_dim_l: SympyType, unit_dim_r: SympyType) -> bool:
 	"""Compare the dimensional dependencies of two unit dimensions.
 
@@ -140,6 +146,7 @@ def compare_unit_dims(unit_dim_l: SympyType, unit_dim_r: SympyType) -> bool:
 	)
 
 
+@functools.lru_cache(maxsize=8192)
 def compare_units_by_unit_dims(unit_l: SympyType, unit_r: SympyType) -> bool:
 	"""Compare two units by their unit dimensions."""
 	return unit_to_unit_dim_deps(unit_l) == unit_to_unit_dim_deps(unit_r)
@@ -155,6 +162,7 @@ def compare_unit_dim_to_unit_dim_deps(
 ####################
 # - Unit Casting
 ####################
+@functools.lru_cache(maxsize=8192)
 def strip_units(sp_obj: SympyType) -> SympyType:
 	"""Strip all units by replacing them to `1`.
 
@@ -180,6 +188,7 @@ def strip_units(sp_obj: SympyType) -> SympyType:
 	return sp_obj.subs(spux.UNIT_TO_1)
 
 
+@functools.lru_cache(maxsize=8192)
 def convert_to_unit(sp_obj: SympyType, unit: SympyType | None) -> SympyType:
 	"""Convert a sympy object to the given unit.
 
@@ -193,8 +202,7 @@ def convert_to_unit(sp_obj: SympyType, unit: SympyType | None) -> SympyType:
 	# raise ValueError(msg)
 
 
-## TODO: Include sympy_to_python in 'scale_to' to match semantics of 'scale_to_unit_system'
-## -- Introduce a 'strip_unit
+@functools.lru_cache(maxsize=8192)
 def scale_to_unit(
 	sp_obj: SympyType,
 	unit: spu.Quantity | None,
@@ -230,8 +238,10 @@ def scale_to_unit(
 	return sp_obj_stripped
 
 
+@functools.lru_cache(maxsize=8192)
 def scaling_factor(
-	unit_from: SympyType, unit_to: SympyType
+	unit_from: SympyType | None,
+	unit_to: SympyType | None,
 ) -> int | float | complex | tuple | None:
 	"""Compute the numerical scaling factor imposed on the unitless part of the expression when converting from one unit to another.
 
@@ -247,12 +257,35 @@ def scaling_factor(
 	Raises:
 		ValueError: If the two units don't share a common dimension.
 	"""
+	if unit_from is None or unit_to is None:
+		return 1
+
 	if compare_units_by_unit_dims(unit_from, unit_to):
-		return scale_to_unit(unit_from, unit_to)
+		res = strip_units(spu.convert_to(unit_from, unit_to))
+
+		# Ensure Integer w/Length > 10 Doesn't Cause Overflow
+		## 'jax' insists on float32, and I guess fair enough.
+		## Problem is, it overflows with integers larger than 10 digits.
+		## Easy fix. But we want the full precision for easier cases.
+		if isinstance(res, sp.Rational):
+			max_order = sp.ceiling(sp.log(max([res.numerator, res.denominator]), 10))
+			if max_order > 10:  # noqa: PLR2004
+				return float(max_order)
+			return res
 	return None
 
 
-@functools.cache
+@functools.lru_cache(maxsize=64)
+def unit_scaling_func_n(
+	unit_from: SympyType | None,
+	unit_to: SympyType | None,
+) -> typ.Callable[[jax.Array], jax.Array]:
+	"""Produce a `jax` function that computes the conversion between the two givne units."""
+	a = sp.Symbol('a')
+	return sp.lambdify(a, a * scaling_factor(unit_from, unit_to), 'jax')
+
+
+@functools.lru_cache(maxsize=8192)
 def unit_str_to_unit(unit_str: str, optional: bool = False) -> SympyType | None:
 	"""Determine the `sympy` unit expression that matches the given unit string.
 

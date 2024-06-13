@@ -14,14 +14,17 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `GeoNodesStructureNode`."""
+
+import functools
 import typing as typ
 
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from ... import bl_socket_map, managed_objs, sockets
 from ... import contracts as ct
@@ -29,8 +32,14 @@ from .. import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+
 
 class GeoNodesStructureNode(base.MaxwellSimNode):
+	"""A generic mesh structure defined by an arbitrary Geometry Nodes tree."""
+
 	node_type = ct.NodeType.GeoNodesStructure
 	bl_label = 'GeoNodes Structure'
 	use_sim_node_name = True
@@ -40,44 +49,106 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'GeoNodes': sockets.BlenderGeoNodesSocketDef(),
-		'Medium': sockets.MaxwellMediumSocketDef(),
+		'Medium': sockets.MaxwellMediumSocketDef(active_kind=FK.Func),
 		'Center': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
 			default_unit=spu.micrometer,
-			default_value=sp.Matrix([0, 0, 0]),
+			default_value=sp.ImmutableMatrix([0, 0, 0]),
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Structure': sockets.MaxwellStructureSocketDef(),
+		'Structure': sockets.MaxwellStructureSocketDef(active_kind=FK.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
-		'modifier': managed_objs.ManagedBLModifier,
+		'preview_mesh': managed_objs.ManagedBLModifier,
+		'mesh': managed_objs.ManagedBLModifier,
 	}
 
 	####################
-	# - Outputs
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		input_sockets={'Medium'},
-		managed_objs={'modifier'},
+		kind=FK.Value,
+		# Loaded
+		outscks_kinds={
+			'Structure': {FK.Func, FK.Params},
+		},
 	)
-	def compute_structure(
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | FS:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		value = events.realize_known(output_sockets['Structure'])
+		if value is not None:
+			return value
+		return FS.FlowPending
+
+	####################
+	# - FlowKind.Func
+	####################
+	@events.computes_output_socket(
+		'Structure',
+		kind=FK.Func,
+		# Loaded
+		props={'sim_node_name'},
+		managed_objs={'mesh'},
+		inscks_kinds={
+			'GeoNodes': FK.Value,
+			'Medium': FK.Func,
+			'Center': FK.Func,
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_TIDY3D,
+		},
+		all_loose_input_sockets=True,
+		loose_input_sockets_kind=FK.Func,
+		scale_loose_input_sockets=ct.UNITS_BLENDER,
+	)
+	def compute_func(
 		self,
-		input_sockets,
 		managed_objs,
+		props,
+		input_sockets,
+		loose_input_sockets,
 	) -> td.Structure:
-		"""Computes a triangle-mesh based Tidy3D structure, by manually copying mesh data from Blender to a `td.TriangleMesh`."""
+		"""Lazily computes a triangle-mesh based Tidy3D structure, by manually copying mesh data from Blender to a `td.TriangleMesh`."""
 		## TODO: mesh_as_arrays might not take the Center into account.
 		## - Alternatively, Tidy3D might have a way to transform?
-		mesh_as_arrays = managed_objs['modifier'].mesh_as_arrays
-		return td.Structure(
-			geometry=td.TriangleMesh.from_vertices_faces(
-				mesh_as_arrays['verts'],
-				mesh_as_arrays['faces'],
-			),
-			medium=input_sockets['Medium'],
+
+		mesh = managed_objs['mesh']
+		geonodes = input_sockets['GeoNodes']
+		medium = input_sockets['Medium']
+		center = input_sockets['Center']
+
+		sim_node_name = props['sim_node_name']
+		gn_inputs = list(loose_input_sockets.keys())
+
+		def verts_faces(els: tuple[typ.Any]) -> dict[str, typ.Any]:
+			# Push Realized Values to Managed Mesh
+			mesh.bl_modifier(
+				'NODES',
+				{
+					'node_group': geonodes,
+					'inputs': dict(zip(gn_inputs, els[2:], strict=True)),
+				},
+				location=els[1],
+			)
+
+			# Extract Vert/Face Data
+			mesh_as_arrays = mesh.mesh_as_arrays
+			return (mesh_as_arrays['verts'], mesh_as_arrays['faces'])
+
+		loose_sck_values = functools.reduce(
+			lambda a, b: a | b, loose_input_sockets.values()
+		)
+		return (medium | center | loose_sck_values).compose_within(
+			lambda els: td.Structure(
+				name=sim_node_name,
+				geometry=td.TriangleMesh.from_vertices_faces(
+					*verts_faces(els),
+				),
+				medium=els[0],
+			)
 		)
 
 	####################
@@ -99,61 +170,73 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 	# - Events: Swapped GN Node Tree
 	####################
 	@events.on_value_changed(
-		socket_name={'GeoNodes'},
+		socket_name={
+			'GeoNodes': FK.Value,
+		},
 		# Loaded
-		managed_objs={'modifier'},
-		input_sockets={'GeoNodes'},
+		inscks_kinds={
+			'GeoNodes': FK.Value,
+		},
 	)
 	def on_input_changed(
 		self,
-		managed_objs,
 		input_sockets,
 	) -> None:
-		"""Declares new loose input sockets in response to a new GeoNodes tree (if any)."""
-		geonodes = input_sockets['GeoNodes']
-		has_geonodes = not ct.FlowSignal.check(geonodes) and geonodes is not None
+		"""Synchronizes the GeoNodes tree input sockets to the loose input sockets of this node.
 
-		if has_geonodes:
+		Utilizes `bl_socket_map.sockets_from_geonodes` to generate, primarily, `ExprSocketDef`s for use with `self.loose_input_sockets.
+		"""
+		geonodes = input_sockets['GeoNodes']
+		if geonodes is not None:
 			# Fill the Loose Input Sockets
 			## -> The SocketDefs contain the default values from the interface.
-			log.info(
+			log.debug(
 				'Initializing GeoNodes Structure Node "%s" from GeoNodes Group "%s"',
 				self.bl_label,
 				str(geonodes),
 			)
 			self.loose_input_sockets = bl_socket_map.sockets_from_geonodes(geonodes)
 
-			## -> The loose socket creation triggers 'on_input_socket_changed'
-
 		elif self.loose_input_sockets:
 			self.loose_input_sockets = {}
-			managed_objs['modifier'].free()
 
 	####################
 	# - Events: Preview
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
 		props={'sim_node_name'},
 	)
 	def compute_previews(self, props):
-		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+		"""Mark the box structure as participating in the preview."""
+		sim_node_name = props['sim_node_name']
+		return ct.PreviewsFlow(bl_object_names={sim_node_name + '_1'})
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'GeoNodes'},  ## MUST run after on_input_changed
+		socket_name={
+			'GeoNodes': FK.Value,
+			'Center': {FK.Func, FK.Params},
+		},
 		any_loose_input_socket=True,
+		run_on_init=True,
 		# Loaded
-		managed_objs={'modifier'},
-		input_sockets={'Center', 'GeoNodes'},
+		managed_objs={'preview_mesh'},
+		inscks_kinds={
+			'GeoNodes': FK.Value,
+			'Center': {FK.Func, FK.Params},
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_BLENDER,
+		},
 		all_loose_input_sockets=True,
-		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
-		scale_input_sockets={'Center': 'BlenderUnits'},
+		loose_input_sockets_kind={FK.Func, FK.Params},
+		scale_loose_input_sockets=ct.UNITS_BLENDER,
 	)
 	def on_input_socket_changed(
-		self, managed_objs, input_sockets, loose_input_sockets, unit_systems
+		self, managed_objs, input_sockets, loose_input_sockets
 	) -> None:
 		"""Pushes any change in GeoNodes-bound input sockets to the GeoNodes modifier.
 
@@ -163,19 +246,16 @@ class GeoNodesStructureNode(base.MaxwellSimNode):
 		Also pushes the `Center:Value` socket to govern the object's center in 3D space.
 		"""
 		geonodes = input_sockets['GeoNodes']
-		has_geonodes = not ct.FlowSignal.check(geonodes) and geonodes is not None
+		center = events.realize_preview(input_sockets['Center'])
 
-		if has_geonodes:
-			# Push Loose Input Values to GeoNodes Modifier
-			managed_objs['modifier'].bl_modifier(
-				'NODES',
-				{
-					'node_group': geonodes,
-					'inputs': loose_input_sockets,
-					'unit_system': unit_systems['BlenderUnits'],
-				},
-				location=input_sockets['Center'],
-			)
+		managed_objs['modifier'].bl_modifier(
+			'NODES',
+			{
+				'node_group': geonodes,
+				'inputs': loose_input_sockets,
+			},
+			location=center,
+		)
 
 
 ####################

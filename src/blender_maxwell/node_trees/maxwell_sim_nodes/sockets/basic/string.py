@@ -38,7 +38,7 @@ class StringBLSocket(base.MaxwellSimSocket):
 	# - Socket UI
 	####################
 	def draw_label_row(self, label_col_row: bpy.types.UILayout, text: str) -> None:
-		label_col_row.prop(self, 'raw_value', text=text)
+		label_col_row.prop(self, self.blfields['raw_value'], text=text)
 
 	####################
 	# - Computation of Default Value

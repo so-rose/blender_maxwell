@@ -48,16 +48,20 @@ def strip_unit_system(
 
 
 def convert_to_unit_system(
-	sp_obj: SympyType, unit_system: UnitSystem | None
+	sp_obj: SympyType, unit_system: UnitSystem | None, strip_units: bool = False
 ) -> SympyType:
 	"""Convert an expression to the units of a given unit system."""
-	if unit_system is None:
-		return sp_obj
+	if unit_system is not None:
+		converted_sp_obj = spu.convert_to(
+			sp_obj,
+			{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
+		)
+	else:
+		converted_sp_obj = sp_obj
 
-	return spu.convert_to(
-		sp_obj,
-		{unit_system[PhysicalType.from_unit(unit)] for unit in get_units(sp_obj)},
-	)
+	if strip_units:
+		return strip_unit_system(converted_sp_obj, unit_system)
+	return converted_sp_obj
 
 
 ####################

@@ -26,6 +26,8 @@ import sympy as sp
 
 from blender_maxwell.utils import logger, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.frozendict import frozendict
+from blender_maxwell.utils.lru_method import method_lru
 
 from .array import ArrayFlow
 
@@ -47,6 +49,10 @@ class ScalingMode(enum.StrEnum):
 
 	@staticmethod
 	def to_name(v: typ.Self) -> str:
+		"""Friendly, single-letter, human-readable column names.
+
+		Must be concise, as there is not a lot of header space to contain these.
+		"""
 		SM = ScalingMode
 		return {
 			SM.Lin: 'Linear',
@@ -56,6 +62,7 @@ class ScalingMode(enum.StrEnum):
 
 	@staticmethod
 	def to_icon(_: typ.Self) -> str:
+		"""No icons."""
 		return ''
 
 
@@ -135,6 +142,7 @@ class RangeFlow(pyd.BaseModel):
 		msg = f'RangeFlow is incompatible with SimSymbol {sym}'
 		raise ValueError(msg)
 
+	@method_lru()
 	def to_sym(
 		self,
 		sym_name: sim_symbols.SimSymbolName,
@@ -153,6 +161,16 @@ class RangeFlow(pyd.BaseModel):
 			rows=1,
 			cols=1,
 		).set_domain(start=self.realize_start(), end=self.realize_end())
+
+	@functools.cached_property
+	def symbolic_set(self) -> spux.BlessedSet:
+		if not self.symbols:
+			if self.steps == 0:
+				return spux.BlessedSet(sp.Interval(self.start, self.stop))
+			return spux.BlessedSet(sp.Range(self.start, self.stop + 1))
+
+		msg = 'Cant deduce symbolic set from symbolic RangeFlow'
+		raise ValueError(msg)
 
 	####################
 	# - Symbols
@@ -250,6 +268,7 @@ class RangeFlow(pyd.BaseModel):
 	####################
 	# - Methods
 	####################
+	@functools.lru_cache(maxsize=16)
 	@staticmethod
 	def try_from_array(
 		array: ArrayFlow, uniformity_tolerance: float = 1e-9
@@ -269,8 +288,8 @@ class RangeFlow(pyd.BaseModel):
 		diffs = jnp.diff(array.values)
 
 		if (
-			jnp.all(jnp.abs(diffs - diffs[0]) < uniformity_tolerance)
-			and len(array.values) > 2  # noqa: PLR2004
+			len(array.values) > 2  # noqa: PLR2004
+			and jnp.all(jnp.abs(diffs - diffs[0]) < uniformity_tolerance)
 			and array.values[0] < array.values[-1]
 			and array.is_sorted
 		):
@@ -317,6 +336,7 @@ class RangeFlow(pyd.BaseModel):
 			symbols=self.symbols,
 		)
 
+	@method_lru(maxsize=16)
 	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
 		raise NotImplementedError
 
@@ -468,12 +488,11 @@ class RangeFlow(pyd.BaseModel):
 	####################
 	# - Realization
 	####################
+	@method_lru(maxsize=16)
 	def realize_symbols(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
-	) -> dict[sp.Symbol, spux.ScalarUnitlessRealExpr]:
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
+	) -> frozendict[sp.Symbol, spux.ScalarUnitlessRealExpr]:
 		"""Realize **all** input symbols to the `RangeFlow`.
 
 		Parameters:
@@ -501,35 +520,32 @@ class RangeFlow(pyd.BaseModel):
 					raise NotImplementedError(msg)
 
 				realized_syms |= {sym: v}
-			return realized_syms
+			return frozendict(realized_syms)
 		msg = f'RangeFlow: Not all symbols were given a value during realization (symbols={self.symbols}, symbol_values={symbol_values})'
 		raise ValueError(msg)
 
+	@method_lru(maxsize=16)
 	def realize_start(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 	) -> int | float | complex:
 		"""Realize the start-bound by inserting particular values for each symbol."""
 		realized_symbols = self.realize_symbols(symbol_values)
 		return spux.sympy_to_python(self.start.subs(realized_symbols))
 
+	@method_lru(maxsize=16)
 	def realize_stop(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 	) -> int | float | complex:
 		"""Realize the stop-bound by inserting particular values for each symbol."""
 		realized_symbols = self.realize_symbols(symbol_values)
 		return spux.sympy_to_python(self.stop.subs(realized_symbols))
 
+	@method_lru(maxsize=16)
 	def realize_step_size(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 	) -> int | float | complex:
 		"""Realize the stop-bound by inserting particular values for each symbol."""
 		if self.scaling is not ScalingMode.Lin:
@@ -544,11 +560,10 @@ class RangeFlow(pyd.BaseModel):
 			return int(raw_step_size)
 		return raw_step_size
 
+	@method_lru(maxsize=16)
 	def realize(
 		self,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 	) -> ArrayFlow:
 		"""Realize the array represented by this `RangeFlow` by realizing each bound, then generating all intermediate values as an array.
 
@@ -561,7 +576,7 @@ class RangeFlow(pyd.BaseModel):
 		## TODO: Check symbol values for coverage.
 
 		return ArrayFlow(
-			values=self.as_func(
+			jax_bytes=self.as_func(
 				*[
 					spux.scale_to_unit_system(symbol_values[sym])
 					for sym in self.sorted_symbols
@@ -584,7 +599,7 @@ class RangeFlow(pyd.BaseModel):
 		msg = f'RangeFlow: Cannot use ".realize_array" when symbols are defined (symbols={self.symbols}, RangeFlow={self}'
 		raise ValueError(msg)
 
-	@property
+	@functools.cached_property
 	def values(self) -> jtyp.Inexact[jtyp.Array, '...']:
 		"""Alias for `realize_array.values`."""
 		return self.realize_array.values
@@ -622,6 +637,7 @@ class RangeFlow(pyd.BaseModel):
 	####################
 	# - Units
 	####################
+	@method_lru(maxsize=32)
 	def correct_unit(self, corrected_unit: spux.Unit) -> typ.Self:
 		"""Replaces the unit without rescaling the unitless bounds.
 
@@ -643,6 +659,7 @@ class RangeFlow(pyd.BaseModel):
 			symbols=self.symbols,
 		)
 
+	@method_lru(maxsize=32)
 	def rescale_to_unit(self, unit: spux.Unit) -> typ.Self:
 		"""Replaces the unit, **with** rescaling of the bounds.
 
@@ -673,6 +690,7 @@ class RangeFlow(pyd.BaseModel):
 			symbols=self.symbols,
 		)
 
+	@method_lru(maxsize=32)
 	def rescale_to_unit_system(
 		self, unit_system: spux.UnitSystem | None = None
 	) -> typ.Self:

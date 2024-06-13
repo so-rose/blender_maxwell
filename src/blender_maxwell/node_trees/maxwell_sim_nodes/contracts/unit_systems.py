@@ -27,6 +27,7 @@ Attributes:
 import typing as typ
 
 import sympy.physics.units as spu
+from frozendict import frozendict
 
 from blender_maxwell.utils import sympy_extra as spux
 
@@ -34,48 +35,52 @@ from blender_maxwell.utils import sympy_extra as spux
 # - Unit Systems
 ####################
 _PT: typ.TypeAlias = spux.PhysicalType
-UNITS_BLENDER: spux.UnitSystem = spux.UNITS_SI | {
-	# Global
-	_PT.Time: spu.picosecond,
-	_PT.Freq: spux.terahertz,
-	_PT.AngFreq: spu.radian * spux.terahertz,
-	# Cartesian
-	_PT.Length: spu.micrometer,
-	_PT.Area: spu.micrometer**2,
-	_PT.Volume: spu.micrometer**3,
-	# Energy
-	_PT.PowerFlux: spu.watt / spu.um**2,
-	# Electrodynamics
-	_PT.CurrentDensity: spu.ampere / spu.um**2,
-	_PT.Conductivity: spu.siemens / spu.um,
-	_PT.EField: spu.volt / spu.um,
-	_PT.HField: spu.ampere / spu.um,
-	# Mechanical
-	_PT.Vel: spu.um / spu.second,
-	_PT.Accel: spu.um / spu.second,
-	_PT.Mass: spu.microgram,
-	_PT.Force: spux.micronewton,
-	# Luminal
-	# Optics
-}  ## TODO: Load (dynamically?) from addon preferences
+UNITS_BLENDER: spux.UnitSystem = spux.UNITS_SI | frozendict(
+	{
+		# Global
+		_PT.Time: spu.picosecond,
+		_PT.Freq: spux.terahertz,
+		_PT.AngFreq: spu.radian * spux.terahertz,
+		# Cartesian
+		_PT.Length: spu.micrometer,
+		_PT.Area: spu.micrometer**2,
+		_PT.Volume: spu.micrometer**3,
+		# Energy
+		_PT.PowerFlux: spu.watt / spu.um**2,
+		# Electrodynamics
+		_PT.CurrentDensity: spu.ampere / spu.um**2,
+		_PT.Conductivity: spu.siemens / spu.um,
+		_PT.EField: spu.volt / spu.um,
+		_PT.HField: spu.ampere / spu.um,
+		# Mechanical
+		_PT.Vel: spu.um / spu.second,
+		_PT.Accel: spu.um / spu.second,
+		_PT.Mass: spu.microgram,
+		_PT.Force: spux.micronewton,
+		# Luminal
+		# Optics
+	}
+)  ## TODO: Load (dynamically?) from addon preferences
 
-UNITS_TIDY3D: spux.UnitSystem = spux.UNITS_SI | {
-	# Global
-	# Cartesian
-	_PT.Length: spu.um,
-	_PT.Area: spu.um**2,
-	_PT.Volume: spu.um**3,
-	# Mechanical
-	_PT.Vel: spu.um / spu.second,
-	_PT.Accel: spu.um / spu.second,
-	# Energy
-	_PT.PowerFlux: spu.watt / spu.um**2,
-	# Electrodynamics
-	_PT.CurrentDensity: spu.ampere / spu.um**2,
-	_PT.Conductivity: spu.siemens / spu.um,
-	_PT.EField: spu.volt / spu.um,
-	_PT.HField: spu.ampere / spu.um,
-	# Luminal
-	# Optics
-	## NOTE: w/o source normalization, EField/HField/Modal amps are * 1/Hz
-}
+UNITS_TIDY3D: spux.UnitSystem = spux.UNITS_SI | frozendict(
+	{
+		# Global
+		# Cartesian
+		_PT.Length: spu.um,
+		_PT.Area: spu.um**2,
+		_PT.Volume: spu.um**3,
+		# Mechanical
+		_PT.Vel: spu.um / spu.second,
+		_PT.Accel: spu.um / spu.second,
+		# Energy
+		_PT.PowerFlux: spu.watt / spu.um**2,
+		# Electrodynamics
+		_PT.CurrentDensity: spu.ampere / spu.um**2,
+		_PT.Conductivity: spu.siemens / spu.um,
+		_PT.EField: spu.volt / spu.um,
+		_PT.HField: spu.ampere / spu.um,
+		# Luminal
+		# Optics
+		## NOTE: w/o source normalization, EField/HField/Modal amps are * 1/Hz
+	}
+)

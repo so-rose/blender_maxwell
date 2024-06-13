@@ -242,7 +242,9 @@ class PhysicalType(enum.StrEnum):
 	# - Creation
 	####################
 	@staticmethod
-	def from_unit(unit: Unit | None, optional: bool = False) -> typ.Self | None:
+	def from_unit(
+		unit: Unit | None, optional: bool = False, optional_nonphy: bool = False
+	) -> typ.Self | None:
 		"""Attempt to determine a matching `PhysicalType` from a unit.
 
 		NOTE: It is not guaranteed that `unit` is within `valid_units`, only that it can be converted to any unit in `valid_units`.
@@ -258,7 +260,7 @@ class PhysicalType(enum.StrEnum):
 		if unit is None:
 			return PhysicalType.NonPhysical
 
-		## TODO_ This enough?
+		## TODO: This enough?
 		if unit in [spu.radian, spu.degree]:
 			return PhysicalType.Angle
 
@@ -269,6 +271,8 @@ class PhysicalType(enum.StrEnum):
 					return physical_type
 
 		if optional:
+			if optional_nonphy:
+				return PhysicalType.NonPhysical
 			return None
 		msg = f'Could not determine PhysicalType for {unit}'
 		raise ValueError(msg)
@@ -303,8 +307,10 @@ class PhysicalType(enum.StrEnum):
 	# - Valid Properties
 	####################
 	@functools.cached_property
-	def valid_units(self) -> list[Unit]:
+	def valid_units(self) -> list[Unit | None]:
 		"""Retrieve an ordered (by subjective usefulness) list of units for this physical type.
+
+		`None` denotes "no units are valid".
 
 		Warnings:
 			**Altering the order of units hard-breaks backwards compatibility**, since enums based on it only keep an integer index.
@@ -463,29 +469,32 @@ class PhysicalType(enum.StrEnum):
 		}[self]
 
 	@functools.cached_property
-	def valid_shapes(self) -> list[typ.Literal[(3,), (2,)] | None]:
-		"""All shapes with physical meaning in the context of a particular unit dimension."""
+	def valid_shapes(self) -> list[typ.Literal[(3,), (2,), ()] | None]:
+		"""All shapes with physical meaning in the context of a particular unit dimension.
+
+		Don't use with `NonPhysical`.
+		"""
 		PT = PhysicalType
 		overrides = {
 			# Cartesian
-			PT.Length: [None, (2,), (3,)],
+			PT.Length: [(), (2,), (3,)],
 			# Mechanical
-			PT.Vel: [None, (2,), (3,)],
-			PT.Accel: [None, (2,), (3,)],
-			PT.Force: [None, (2,), (3,)],
+			PT.Vel: [(), (2,), (3,)],
+			PT.Accel: [(), (2,), (3,)],
+			PT.Force: [(), (2,), (3,)],
 			# Energy
-			PT.Work: [None, (2,), (3,)],
-			PT.PowerFlux: [None, (2,), (3,)],
+			PT.Work: [(), (2,), (3,)],
+			PT.PowerFlux: [(), (2,), (3,)],
 			# Electrodynamics
-			PT.CurrentDensity: [None, (2,), (3,)],
-			PT.MFluxDensity: [None, (2,), (3,)],
-			PT.EField: [None, (2,), (3,)],
-			PT.HField: [None, (2,), (3,)],
+			PT.CurrentDensity: [(), (2,), (3,)],
+			PT.MFluxDensity: [(), (2,), (3,)],
+			PT.EField: [(), (2,), (3,)],
+			PT.HField: [(), (2,), (3,)],
 			# Luminal
-			PT.LumFlux: [None, (2,), (3,)],
+			PT.LumFlux: [(), (2,), (3,)],
 		}
 
-		return overrides.get(self, [None])
+		return overrides.get(self, [()])
 
 	@functools.cached_property
 	def valid_mathtypes(self) -> list[MathType]:

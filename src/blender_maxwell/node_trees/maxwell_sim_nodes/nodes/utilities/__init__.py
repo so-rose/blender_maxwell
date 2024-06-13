@@ -14,18 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# from . import math
-from . import combine
-
-# from . import separate
+from . import combine, view_text, wave_constant
 
 BL_REGISTER = [
-	# *math.BL_REGISTER,
+	*wave_constant.BL_REGISTER,
 	*combine.BL_REGISTER,
-	# *separate.BL_REGISTER,
+	*view_text.BL_REGISTER,
 ]
 BL_NODES = {
-	# **math.BL_NODES,
+	**wave_constant.BL_NODES,
 	**combine.BL_NODES,
-	# **separate.BL_NODES,
+	**view_text.BL_NODES,
 }

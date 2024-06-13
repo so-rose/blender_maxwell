@@ -19,8 +19,9 @@
 import typing as typ
 
 import bpy
+import jax
+import numpy as np
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
 
 from .. import bl_socket_map
@@ -41,13 +42,10 @@ class ModifierAttrsNODES(typ.TypedDict):
 
 	Attributes:
 		node_group: The GeoNodes group to use in the modifier.
-		unit_system: The unit system used by the GeoNodes output.
-			Generally, `ct.UNITS_BLENDER` is a good choice.
 		inputs: Values to associate with each GeoNodes interface socket name.
 	"""
 
 	node_group: bpy.types.GeometryNodeTree
-	unit_system: UnitSystem
 	inputs: dict[ct.SocketName, typ.Any]
 
 
@@ -122,7 +120,6 @@ def write_modifier_geonodes(
 		## -> TODO: A special case isn't clean enough.
 		bl_modifier[iface_id] = socket_infos[socket_name].encode(
 			raw_value=modifier_attrs['inputs'][socket_name],
-			unit_system=modifier_attrs['unit_system'],
 		)
 		modifier_altered = True
 		## TODO: More fine-grained alterations?
@@ -230,7 +227,7 @@ class ManagedBLModifier(base.ManagedObj):
 		self,
 		modifier_type: ct.BLModifierType,
 		modifier_attrs: ModifierAttrs,
-		location: tuple[float, float, float] = (0, 0, 0),
+		location: np.ndarray | jax.Array | tuple[float, float, float] = (0, 0, 0),
 	):
 		"""Creates a new modifier for the current `bl_object`.
 

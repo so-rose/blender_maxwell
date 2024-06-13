@@ -14,11 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `ScientificConstantNode`."""
+
 import typing as typ
 
 import bpy
 import sympy as sp
-import sympy.physics.units as spu
+from frozendict import frozendict
 
 from blender_maxwell.utils import bl_cache, sci_constants, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
@@ -55,6 +57,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 		self,
 		edit_text: str,
 	):
+		"""Search for all valid scientific constants."""
 		return [
 			name
 			for name in sci_constants.SCI_CONSTANTS
@@ -82,7 +85,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 				self.sci_constant_name,
 				self.sci_constant,
 				unit,
-				is_constant=True,
+				new_domain=spux.BlessedSet(sp.FiniteSet(self.sci_constant)),
 			)
 
 		return None
@@ -91,11 +94,13 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_label(self):
+		"""Match the node's header label to the active scientific constant."""
 		if self.sci_constant_str:
 			return f'Const: {self.sci_constant_str}'
 		return self.bl_label
 
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout) -> None:
+		"""Provide a node user-interface allowing the user to specify a scientific constant."""
 		col.prop(self, self.blfields['sci_constant_str'], text='')
 
 		row = col.row(align=True)
@@ -139,7 +144,7 @@ class ScientificConstantNode(base.MaxwellSimNode):
 			row.label(text=f'{self.sci_constant_info["uncertainty"]}')
 
 	####################
-	# - Output
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Expr',
@@ -148,8 +153,9 @@ class ScientificConstantNode(base.MaxwellSimNode):
 	def compute_value(self, props) -> typ.Any:
 		sci_constant = props['sci_constant']
 		sci_constant_sym = props['sci_constant_sym']
+		use_symbol = props['use_symbol']
 
-		if props['use_symbol'] and sci_constant_sym is not None:
+		if use_symbol and sci_constant_sym is not None:
 			return sci_constant_sym.sp_symbol
 
 		if sci_constant is not None:
@@ -157,6 +163,9 @@ class ScientificConstantNode(base.MaxwellSimNode):
 
 		return ct.FlowSignal.FlowPending
 
+	####################
+	# - FlowKind.Func
+	####################
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Func,
@@ -178,19 +187,9 @@ class ScientificConstantNode(base.MaxwellSimNode):
 			)
 		return ct.FlowSignal.FlowPending
 
-	@events.computes_output_socket(
-		'Expr',
-		kind=ct.FlowKind.Info,
-		props={'sci_constant_sym'},
-	)
-	def compute_info(self, props: dict) -> typ.Any:
-		"""Simple `FuncFlow` that computes the symbol value, with output units tracked correctly."""
-		sci_constant_sym = props['sci_constant_sym']
-
-		if sci_constant_sym is not None:
-			return ct.InfoFlow(output=sci_constant_sym)
-		return ct.FlowSignal.FlowPending
-
+	####################
+	# - FlowKind.Params
+	####################
 	@events.computes_output_socket(
 		'Expr',
 		kind=ct.FlowKind.Params,
@@ -206,10 +205,28 @@ class ScientificConstantNode(base.MaxwellSimNode):
 				func_args=[sci_constant_sym.sp_symbol],
 				symbols={sci_constant_sym},
 			).realize_partial(
-				{
-					sci_constant_sym: sci_constant,
-				}
+				frozendict(
+					{
+						sci_constant_sym: sci_constant,
+					}
+				)
 			)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Info
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=ct.FlowKind.Info,
+		props={'sci_constant_sym'},
+	)
+	def compute_info(self, props: dict) -> typ.Any:
+		"""Simple `FuncFlow` that computes the symbol value, with output units tracked correctly."""
+		sci_constant_sym = props['sci_constant_sym']
+
+		if sci_constant_sym is not None:
+			return ct.InfoFlow(output=sci_constant_sym)
 		return ct.FlowSignal.FlowPending
 
 

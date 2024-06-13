@@ -226,8 +226,10 @@ import jaxtyping as jtyp
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger, sim_symbols
+from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.frozendict import FrozenDict, frozendict
+from blender_maxwell.utils.lru_method import method_lru
 
 from .array import ArrayFlow
 from .info import InfoFlow
@@ -256,8 +258,10 @@ class FuncFlow(pyd.BaseModel):
 	model_config = pyd.ConfigDict(frozen=True)
 
 	func: LazyFunction
-	func_args: list[sim_symbols.SimSymbol] = pyd.Field(default_factory=list)
-	func_kwargs: dict[str, sim_symbols.SimSymbol] = pyd.Field(default_factory=dict)
+	func_args: tuple[sim_symbols.SimSymbol, ...] = ()
+	func_kwargs: FrozenDict[str, sim_symbols.SimSymbol] = pyd.Field(
+		default_factory=frozendict
+	)
 	func_output: sim_symbols.SimSymbol | None = None
 
 	supports_jax: bool = False
@@ -319,12 +323,11 @@ class FuncFlow(pyd.BaseModel):
 	####################
 	# - Realization
 	####################
+	@method_lru(maxsize=64)
 	def realize(
 		self,
 		params: ParamsFlow,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
 		disallow_jax: bool = True,
 	) -> typ.Self:
 		"""Run the represented function with the best optimization available, given particular choices for all function arguments and for all unrealized symbols.
@@ -337,22 +340,21 @@ class FuncFlow(pyd.BaseModel):
 		"""
 		if self.supports_jax and not disallow_jax:
 			return self.func_jax(
-				*params.scaled_func_args(symbol_values),
-				**params.scaled_func_kwargs(symbol_values),
+				*params.scaled_func_args(self.func_args, symbol_values),
+				**params.scaled_func_kwargs(self.func_kwargs, symbol_values),
 			)
 		return self.func(
-			*params.scaled_func_args(symbol_values),
-			**params.scaled_func_kwargs(symbol_values),
+			*params.scaled_func_args(self.func_args, symbol_values),
+			**params.scaled_func_kwargs(self.func_kwargs, symbol_values),
 		)
 
+	@method_lru(maxsize=64)
 	def realize_as_data(
 		self,
 		info: InfoFlow,
 		params: ParamsFlow,
-		symbol_values: dict[sim_symbols.SimSymbol, spux.SympyExpr] = MappingProxyType(
-			{}
-		),
-	) -> dict[sim_symbols.SimSymbol, jtyp.Inexact[jtyp.Array, '...']]:
+		symbol_values: frozendict[sim_symbols.SimSymbol, spux.SympyExpr] = frozendict(),
+	) -> frozendict[sim_symbols.SimSymbol, jtyp.Inexact[jtyp.Array, '...']]:
 		"""Realize as an ordered dictionary mapping each realized `self.dims` entry, with the last entry containing all output data as mapped from the `self.output`."""
 		data = {}
 		for dim, dim_idx in info.dims.items():
@@ -386,9 +388,14 @@ class FuncFlow(pyd.BaseModel):
 			if info.has_idx_labels(dim):
 				data |= {dim: dim_idx}
 
-		return data | {info.output: self.realize(params, symbol_values=symbol_values)}
+		return frozendict(
+			data
+			| {info.output: self.realize(params, symbol_values=symbol_values)}
+			| {'pinned': info.pinned_values}
+		)
 
-	def realize_partial(
+	@method_lru(maxsize=64)
+	def generate_realizer(
 		self, params: ParamsFlow
 	) -> typ.Callable[
 		[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
@@ -399,7 +406,7 @@ class FuncFlow(pyd.BaseModel):
 		The units/types/shape/etc. of the returned numerical type conforms to the `SimSymbol` specification of relevant `self.func_args` entries and `self.func_output`.
 
 		This function should be used whenever the unrealized result of a `FuncFlow` needs to be used as the argument to another `FuncFlow`.
-		By using `realize_partial()`, two things are ensured:
+		By using `generate_realizer()`, two things are ensured:
 
 		- Since the function defined in `.compose_within()` must be purely numerical, the usual `.realize()` mechanism can't be used to sweep away the pre-realized symbol values.
 		- Since this `FuncFlow` is completely consumed, with no symbols / arguments / etc. explicitly surviving, its impact on the data flow can be considered to have been effectively terminated after using this function.
@@ -418,15 +425,27 @@ class FuncFlow(pyd.BaseModel):
 			return self.func(
 				*[
 					func_arg_n(*sym_args, *pre_realized_syms)
-					for func_arg_n in params.func_args_n
+					for func_arg_n in params.func_args_n(self.func_args)
 				],
 				**{
 					func_arg_name: func_kwarg_n(*sym_args, *pre_realized_syms)
-					for func_arg_name, func_kwarg_n in params.func_kwargs_n.items()
+					for func_arg_name, func_kwarg_n in params.func_kwargs_n(
+						self.func_kwargs
+					).items()
 				},
 			)
 
 		return realizer
+
+	@method_lru(maxsize=8)
+	def realize_preview(
+		self, params: ParamsFlow
+	) -> typ.Callable[
+		[int | float | complex | jtyp.Inexact[jtyp.Array, '...'], ...],
+		jtyp.Inexact[jtyp.Array, '...'],
+	]:
+		"""Realize the function value, by replacing unknown symbols with their declared preview values."""
+		return self.realize(params, symbol_values=params.symbol_preview_values)
 
 	####################
 	# - Operations
@@ -434,8 +453,8 @@ class FuncFlow(pyd.BaseModel):
 	def compose_within(
 		self,
 		enclosing_func: LazyFunction,
-		enclosing_func_args: list[sim_symbols.SimSymbol] = (),
-		enclosing_func_kwargs: dict[str, sim_symbols.SimSymbol] = MappingProxyType({}),
+		enclosing_func_args: tuple[sim_symbols.SimSymbol, ...] = (),
+		enclosing_func_kwargs: frozendict[str, sim_symbols.SimSymbol] = frozendict(),
 		enclosing_func_output: sim_symbols.SimSymbol | None = None,
 		supports_jax: bool = False,
 	) -> typ.Self:
@@ -480,18 +499,19 @@ class FuncFlow(pyd.BaseModel):
 		return FuncFlow(
 			func=lambda *args, **kwargs: enclosing_func(
 				self.func(
-					*list(args[: len(self.func_args)]),
+					*args[: len(self.func_args)],
 					**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
 				),
 				*args[len(self.func_args) :],
 				**{k: v for k, v in kwargs.items() if k not in self.func_kwargs},
 			),
-			func_args=self.func_args + list(enclosing_func_args),
+			func_args=self.func_args + tuple(enclosing_func_args),
 			func_kwargs=self.func_kwargs | dict(enclosing_func_kwargs),
 			func_output=enclosing_func_output,
 			supports_jax=self.supports_jax and supports_jax,
 		)
 
+	@method_lru(maxsize=8)
 	def __or__(
 		self,
 		other: typ.Self,
@@ -532,7 +552,7 @@ class FuncFlow(pyd.BaseModel):
 
 		def self_func(args, kwargs):
 			ret = self.func(
-				*list(args[: len(self.func_args)]),
+				*args[: len(self.func_args)],
 				**{k: v for k, v in kwargs.items() if k in self.func_kwargs},
 			)
 			if not self.is_concatenated:
@@ -543,7 +563,7 @@ class FuncFlow(pyd.BaseModel):
 			func=lambda *args, **kwargs: (
 				*self_func(args, kwargs),
 				other.func(
-					*list(args[len(self.func_args) :]),
+					*args[len(self.func_args) :],
 					**{k: v for k, v in kwargs.items() if k in other.func_kwargs},
 				),
 			),
@@ -553,27 +573,15 @@ class FuncFlow(pyd.BaseModel):
 			is_concatenated=True,
 		)
 
+	@method_lru(maxsize=16)
 	def scale_to_unit(self, unit: spux.Unit | None = None) -> typ.Self:
 		"""Encloses this function in a unit-converting function, whose output is a converted, unitless scalar.
 
 		`unit` must be manually guaranteed to be compatible with `self.unit`.
 		"""
 		if self.func_output is not None:
-			# Retrieve Output Unit
-			output_unit = self.func_output.unit
-
-			# Compile Efficient Unit-Conversion Function
-			a = self.func_output.mathtype.sp_symbol_a
-			unit_convert_expr = (
-				spux.scale_to_unit(a * output_unit, unit)
-				if self.func_output.unit is not None
-				else a
-			)
-			unit_convert_func = sp.lambdify(a, unit_convert_expr.n(), 'jax')
-
-			# Compose Unit-Converted FuncFlow
 			return self.compose_within(
-				enclosing_func=unit_convert_func,
+				enclosing_func=spux.unit_scaling_func_n(self.func_output.unit, unit),
 				supports_jax=True,
 				enclosing_func_output=self.func_output.update(unit=unit),
 			)
@@ -581,6 +589,7 @@ class FuncFlow(pyd.BaseModel):
 		msg = f'Tried to scale a FuncFlow to a unit system, but it has no tracked output SimSymbol. ({self})'
 		raise ValueError(msg)
 
+	@method_lru(maxsize=16)
 	def scale_to_unit_system(
 		self, unit_system: spux.UnitSystem | None = None
 	) -> typ.Self:

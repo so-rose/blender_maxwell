@@ -14,13 +14,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from . import bound_cond_nodes, bound_conds
+from . import (
+	eme_solver,
+	fdtd_solver,
+	mode_solver,
+)
 
 BL_REGISTER = [
-	*bound_conds.BL_REGISTER,
-	*bound_cond_nodes.BL_REGISTER,
+	*fdtd_solver.BL_REGISTER,
+	*mode_solver.BL_REGISTER,
+	*eme_solver.BL_REGISTER,
 ]
 BL_NODES = {
-	**bound_conds.BL_NODES,
-	**bound_cond_nodes.BL_NODES,
+	**fdtd_solver.BL_NODES,
+	**mode_solver.BL_NODES,
+	**eme_solver.BL_NODES,
 }

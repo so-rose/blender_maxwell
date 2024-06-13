@@ -21,12 +21,18 @@ import typing as typ
 import bpy
 
 from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
 from .... import math_system, sockets
 from ... import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MO = math_system.MapOperation
+MT = spux.MathType
 
 
 class MapMathNode(base.MaxwellSimNode):
@@ -102,7 +108,7 @@ class MapMathNode(base.MaxwellSimNode):
 	The name and type of the available symbol is clearly shown, and most valid `sympy` expressions that you would expect to work, should work.
 
 	Use of expressions generally imposes no performance penalty: Just like the baked-in operations, it is compiled to a high-performance `jax` function.
-	Thus, it participates in the `ct.FlowKind.Func` composition chain.
+	Thus, it participates in the `FK.Func` composition chain.
 
 
 	Attributes:
@@ -113,69 +119,76 @@ class MapMathNode(base.MaxwellSimNode):
 	bl_label = 'Map Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 
 	####################
-	# - Properties
+	# - Properties: Incoming InfoFlow
 	####################
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Expr'},
+		socket_name={'Expr': FK.Info},
 		# Loaded
-		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Info},
-		input_sockets_optional={'Expr': True},
+		inscks_kinds={'Expr': FK.Info},
+		input_sockets_optional={'Expr'},
 		# Flow
 		## -> See docs in TransformMathNode
 		stop_propagation=True,
 	)
-	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
-		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
-
-		info_pending = ct.FlowSignal.check_single(
-			input_sockets['Expr'], ct.FlowSignal.FlowPending
-		)
+	def on_input_expr_changed(self, input_sockets) -> None:  # noqa: D102
+		info = input_sockets['Expr']
+		has_info = not FS.check(info)
+		info_pending = FS.check_single(info, FS.FlowPending)
 
 		if has_info and not info_pending:
 			self.expr_info = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
 	def expr_info(self) -> ct.InfoFlow | None:
-		info = self._compute_input('Expr', kind=ct.FlowKind.Info, optional=True)
-		has_info = not ct.FlowSignal.check(info)
+		"""Retrieve the input expression's `InfoFlow`."""
+		info = self._compute_input('Expr', kind=FK.Info)
+		has_info = not FS.check(info)
 		if has_info:
 			return info
 		return None
 
-	operation: math_system.MapOperation = bl_cache.BLField(
+	####################
+	# - Property: Operation
+	####################
+	operation: MO = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_operations(),
 		cb_depends_on={'expr_info'},
 	)
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
+		"""Retrieve valid operations based on the input `InfoFlow`."""
 		if self.expr_info is not None:
-			return [
-				operation.bl_enum_element(i)
-				for i, operation in enumerate(
-					math_system.MapOperation.by_expr_info(self.expr_info)
-				)
-			]
+			return MO.bl_enum_elements(self.expr_info)
 		return []
 
 	####################
 	# - UI
 	####################
 	def draw_label(self):
+		"""Show the current operation (if any) in the node's header label.
+
+		Notes:
+			Called by Blender to determine the text to place in the node's header.
+		"""
 		if self.operation is not None:
-			return 'Map: ' + math_system.MapOperation.to_name(self.operation)
+			return 'Map: ' + MO.to_name(self.operation)
 
 		return self.bl_label
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Draw the user interfaces of the node's properties inside of the node itself.
+
+		Parameters:
+			layout: UI target for drawing.
+		"""
 		layout.prop(self, self.blfields['operation'], text='')
 
 	####################
@@ -183,91 +196,81 @@ class MapMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
+		# Loaded
 		props={'operation'},
-		input_sockets={'Expr'},
+		inscks_kinds={'Expr': FK.Value},
 	)
-	def compute_value(self, props, input_sockets) -> ct.ValueFlow | ct.FlowSignal:
-		operation = props['operation']
+	def compute_value(self, props, input_sockets) -> ct.ValueFlow | FS:
+		"""Mapping operation on symbolic input expression."""
 		expr = input_sockets['Expr']
 
-		has_expr_value = not ct.FlowSignal.check(expr)
-
-		# Compute Sympy Function
-		## -> The operation enum directly provides the appropriate function.
-		if has_expr_value and operation is not None:
+		operation = props['operation']
+		if operation is not None:
 			return operation.sp_func(expr)
-
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
+		kind=FK.Func,
 		# Loaded
-		kind=ct.FlowKind.Func,
 		props={'operation'},
-		input_sockets={'Expr'},
-		input_socket_kinds={
-			'Expr': ct.FlowKind.Func,
+		inscks_kinds={
+			'Expr': FK.Func,
 		},
-		output_sockets={'Expr'},
-		output_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_func(
-		self, props, input_sockets, output_sockets
-	) -> ct.FuncFlow | ct.FlowSignal:
-		expr = input_sockets['Expr']
-		output_info = output_sockets['Expr']
-
-		has_expr = not ct.FlowSignal.check(expr)
-		has_output_info = not ct.FlowSignal.check(output_info)
+	def compute_func(self, props, input_sockets) -> ct.FuncFlow | FS:
+		"""Mapping operation on lazy-defined input expression."""
+		func = input_sockets['Expr']
 
 		operation = props['operation']
-		if has_expr and operation is not None:
-			return expr.compose_within(
-				operation.jax_func,
-				enclosing_func_output=output_info.output,
-				supports_jax=True,
-			)
-		return ct.FlowSignal.FlowPending
+		if operation is not None:
+			return operation.transform_func(func)
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Info
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Info,
+		kind=FK.Info,
+		# Loaded
 		props={'operation'},
-		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		inscks_kinds={
+			'Expr': FK.Info,
+		},
 	)
-	def compute_info(self, props: dict, input_sockets: dict) -> ct.InfoFlow:
-		operation = props['operation']
+	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
+		"""Transform the info chracterization of the input."""
 		info = input_sockets['Expr']
 
-		has_info = not ct.FlowSignal.check(info)
-
-		if has_info and operation is not None:
+		operation = props['operation']
+		if operation is not None:
 			return operation.transform_info(info)
-
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
+		# Loaded
+		props={'operation'},
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Params},
+		input_socket_kinds={'Expr': FK.Params},
 	)
-	def compute_params(self, input_sockets: dict) -> ct.ParamsFlow | ct.FlowSignal:
-		has_params = not ct.FlowSignal.check(input_sockets['Expr'])
-		if has_params:
-			return input_sockets['Expr']
-		return ct.FlowSignal.FlowPending
+	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | FS:
+		"""Transform the parameters of the input."""
+		params = input_sockets['Expr']
+
+		operation = props['operation']
+		if operation is not None:
+			return operation.transform_params(params)
+		return FS.FlowPending
 
 
 ####################

@@ -14,63 +14,101 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import dataclasses
 import enum
+import functools
 import typing as typ
+from fractions import Fraction
 
 import bpy
+import jax
+import numpy as np
+import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from .socket_types import SocketType
+from .unit_systems import UNITS_BLENDER
 
 log = logger.get(__name__)
 
 BL_SOCKET_DESCR_ANNOT_STRING = ':: '
 
 
-@dataclasses.dataclass(kw_only=True, frozen=True)
-class BLSocketInfo:
+class BLSocketInfo(pyd.BaseModel):
+	"""Parsed information fully representing a Blender interface socket, enabling translation of values to a format accepted by the Blender socket.
+
+	Notes:
+		All Blender socket values are considered to implicitly be in the unit system `ct.UNITS_BLENDER`.
+		For this reason, we do not declare or handle units / unit systems at the interface.
+
+		This design also prevents spurious (slow) unit conversions in the value-encoding hot path.
+
+	Attributes:
+		has_support: Whether our system explicitly supports mapping to/from this Blender socket.
+		is_preview: Whether this Blender socket is only relevant for driving a preview, not for functionality.
+		socket_type: The corresponding socket type in our system, which the Blender socket can have data pushed from.
+		size: Identifier for the scalar/1D shape of the Blender socket, impacting if/how values can be pushed.
+		mathtype: The mathematical type of the Blender socket value.
+		physical_type: The unit dimension of the Blender socket value.
+		default_value: The Blender socket's own default value, used as the initial socket value in our system.
+		bl_isocket_identifier: The internal identifier of the Blender interface socket in the node tree.
+			This is the **only way** to read/write a particular instance of the socket value through eg. a GeoNodes modifier.
+	"""
+
+	model_config = pyd.ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+	default_value: typ.Any | None
+
 	has_support: bool
 	is_preview: bool
+
 	socket_type: SocketType | None
 	size: spux.NumberSize1D | None
 	mathtype: spux.MathType | None
 	physical_type: spux.PhysicalType | None
-	default_value: spux.ScalarUnitlessRealExpr
 
-	bl_isocket_identifier: spux.ScalarUnitlessRealExpr
+	bl_isocket_identifier: str
+
+	@functools.cached_property
+	def unit(self) -> spux.Unit | None:
+		"""Deduce the unit of the Blender socket value, by retrieving the Blender units of `self.physical_type`.
+
+		If the socket has no unit dimension, this will also be `None`.
+		"""
+		if self.physical_type is not None:
+			return UNITS_BLENDER[self.physical_type]
+		return None
 
 	def encode(
-		self, raw_value: typ.Any, unit_system: spux.UnitSystem | None
+		self, raw_value: int | Fraction | float | tuple[int | Fraction | float, ...]
 	) -> typ.Any:
-		"""Encode a raw value, given a unit system, to be directly writable to a node socket.
+		"""Conform a mostly-prepared value, so as to be guaranteed-writable to a node socket.
 
 		This encoded form is also guaranteed to support writing to a node socket via a modifier interface.
 		"""
-		# Non-Numerical: Passthrough
-		if unit_system is None or self.physical_type is None:
+		MT = spux.MathType
+		# Numerical: Conform to Pure Python Type
+		if self.mathtype is not None:
+			# Coerce jax/np Array -> lists
+			if isinstance(raw_value, np.ndarray | jax.Array):
+				if self.mathtype is MT.Real and isinstance(raw_value.item(0), int):
+					return raw_value.astype(float).flatten().tolist()
+				return raw_value.flatten().tolist()
+			# Coerce int -> float w/Target is Real
+			## -> The value - modifier - GN path is more strict than properties.
+			if self.mathtype is MT.Real and isinstance(raw_value, int):
+				return float(raw_value)
+
+			# Coerce Fraction -> tuple[int, int] w/Target is Rational
+			if self.mathtype is MT.Rational and isinstance(raw_value, Fraction):
+				return (raw_value.numerator, raw_value.denominator)
+
 			return raw_value
 
-		# Numerical: Convert to Pure Python Type
-		if (
-			unit_system is not None
-			and self.physical_type is not spux.PhysicalType.NonPhysical
-		):
-			unitless_value = spux.scale_to_unit_system(raw_value, unit_system)
-		elif isinstance(raw_value, spux.SympyType):
-			unitless_value = spux.sympy_to_python(raw_value)
-		else:
-			unitless_value = raw_value
-
-		# Coerce int -> float w/Target is Real
-		## -> The value - modifier - GN path is more strict than properties.
-		if self.mathtype is spux.MathType.Real and isinstance(unitless_value, int):
-			return float(unitless_value)
-
-		return unitless_value
+		# Non-Numerical: Passthrough
+		return raw_value
 
 
 class BLSocketType(enum.StrEnum):
@@ -403,12 +441,12 @@ class BLSocketType(enum.StrEnum):
 			## -> The description hint "2D" is the trigger for this.
 			## -> Ignore the last component to get the effect of "2D".
 			elif description.startswith('2D'):
-				default_value = sp.ImmutableMatrix(tuple(bl_default_value)[:2])
+				default_value = tuple(bl_default_value)[:2]
 
 			# 3D/4D: Simple Parse to Sympy Matrix
 			## -> We don't explicitly check the size.
 			else:
-				default_value = sp.ImmutableMatrix(tuple(bl_default_value))
+				default_value = tuple(bl_default_value)
 
 		else:
 			# Non-Mathematical: Passthrough

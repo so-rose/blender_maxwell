@@ -36,11 +36,15 @@ from .. import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+PT = spux.PhysicalType
+
 
 # Select Default Time Unit for Envelope
 ## -> Chosen to align with the default envelope_time_unit.
 ## -> This causes it to be correct from the start.
-t_def = sim_symbols.t(spux.PhysicalType.Time.valid_units[0])
+t_def = sim_symbols.t(PT.Time.valid_units[0])
 
 
 class TemporalShapeNode(base.MaxwellSimNode):
@@ -54,19 +58,19 @@ class TemporalShapeNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'μ Freq': sockets.ExprSocketDef(
-			physical_type=spux.PhysicalType.Freq,
+			physical_type=PT.Freq,
 			default_unit=spux.THz,
 			default_value=500,
 		),
 		'σ Freq': sockets.ExprSocketDef(
-			physical_type=spux.PhysicalType.Freq,
+			physical_type=PT.Freq,
 			default_unit=spux.THz,
 			default_value=200,
 		),
 		'max E': sockets.ExprSocketDef(
 			mathtype=spux.MathType.Complex,
-			physical_type=spux.PhysicalType.EField,
-			default_value=1 + 0j,
+			physical_type=PT.EField,
+			default_value=1,
 		),
 		'Offset Time': sockets.ExprSocketDef(default_value=5, abs_min=2.5),
 	}
@@ -77,8 +81,8 @@ class TemporalShapeNode(base.MaxwellSimNode):
 		'Constant': {},
 		'Symbolic': {
 			't Range': sockets.ExprSocketDef(
-				active_kind=ct.FlowKind.Range,
-				physical_type=spux.PhysicalType.Time,
+				active_kind=FK.Range,
+				physical_type=PT.Time,
 				default_unit=spu.picosecond,
 				default_min=0,
 				default_max=10,
@@ -92,11 +96,7 @@ class TemporalShapeNode(base.MaxwellSimNode):
 	}
 
 	output_sockets: typ.ClassVar = {
-		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(),
-	}
-
-	managed_obj_types: typ.ClassVar = {
-		'plot': managed_objs.ManagedBLImage,
+		'Temporal Shape': sockets.MaxwellTemporalShapeSocketDef(active_kind=FK.Func),
 	}
 
 	####################
@@ -110,7 +110,7 @@ class TemporalShapeNode(base.MaxwellSimNode):
 		"""Compute all valid time units."""
 		return [
 			(sp.sstr(unit), spux.sp_to_str(unit), sp.sstr(unit), '', i)
-			for i, unit in enumerate(spux.PhysicalType.Time.valid_units)
+			for i, unit in enumerate(PT.Time.valid_units)
 		]
 
 	@bl_cache.cached_bl_property(depends_on={'active_envelope_time_unit'})
@@ -178,8 +178,9 @@ class TemporalShapeNode(base.MaxwellSimNode):
 	)
 	def on_envelope_time_unit_changed(self, props) -> None:
 		"""Ensure the envelope expression's time symbol has the time unit defined by the node."""
-		active_socket_set = props['active_socket_set']
 		envelope_time_unit = props['envelope_time_unit']
+
+		active_socket_set = props['active_socket_set']
 		if active_socket_set == 'Symbolic':
 			bl_socket = self.inputs['Envelope']
 			wanted_t_sym = sim_symbols.t(envelope_time_unit)
@@ -192,48 +193,40 @@ class TemporalShapeNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Temporal Shape',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
 		# Loaded
-		output_sockets={'Temporal Shape'},
-		output_socket_kinds={'Temporal Shape': {ct.FlowKind.Func, ct.FlowKind.Params}},
+		outscks_kinds={'Temporal Shape': {FK.Func, FK.Params}},
 	)
-	def compute_domain_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | FS:
 		"""Compute a single temporal shape."""
-		output_func = output_sockets['Temporal Shape'][ct.FlowKind.Func]
-		output_params = output_sockets['Temporal Shape'][ct.FlowKind.Params]
-
-		has_output_func = not ct.FlowSignal.check(output_func)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_func and has_output_params and not output_params.symbols:
-			return output_func.realize(output_params)
-		return ct.FlowSignal.FlowPending
+		value = events.realize_known(output_sockets['Temporal Shape'])
+		if value is not None:
+			return value
+		return FS.FlowPending
 
 	####################
 	# - FlowKind: Func
 	####################
 	@events.computes_output_socket(
 		'Temporal Shape',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'active_socket_set'},
-		input_sockets={
-			'max E',
-			'μ Freq',
-			'σ Freq',
-			'Offset Time',
-			'Remove DC',
-			't Range',
-			'Envelope',
+		inscks_kinds={
+			'μ Freq': FK.Func,
+			'σ Freq': FK.Func,
+			'max E': FK.Func,
+			'Offset Time': FK.Func,
+			'Remove DC': FK.Value,
+			't Range': FK.Func,
+			'Envelope': {FK.Func, FK.Params},
 		},
-		input_socket_kinds={
-			'max E': ct.FlowKind.Func,
-			'μ Freq': ct.FlowKind.Func,
-			'σ Freq': ct.FlowKind.Func,
-			'Offset Time': ct.FlowKind.Func,
-			'Remove DC': ct.FlowKind.Value,
-			't Range': ct.FlowKind.Func,
-			'Envelope': {ct.FlowKind.Func, ct.FlowKind.Params},
+		input_sockets_optional={'Remove DC', 't Range', 'Envelope'},
+		scale_input_sockets={
+			'μ Freq': ct.UNITS_TIDY3D,
+			'σ Freq': ct.UNITS_TIDY3D,
+			'max E': ct.UNITS_TIDY3D,
+			't Range': ct.UNITS_TIDY3D,
 		},
 	)
 	def compute_temporal_shape_func(
@@ -247,158 +240,114 @@ class TemporalShapeNode(base.MaxwellSimNode):
 		max_e = input_sockets['max E']
 		offset = input_sockets['Offset Time']
 
-		has_mean_freq = not ct.FlowSignal.check(mean_freq)
-		has_std_freq = not ct.FlowSignal.check(std_freq)
-		has_max_e = not ct.FlowSignal.check(max_e)
-		has_offset = not ct.FlowSignal.check(offset)
+		remove_dc = input_sockets['Remove DC']
+		t_range = input_sockets['t Range']
+		envelope = input_sockets['Envelope'][FK.Func]
+		envelope_params = input_sockets['Envelope'][FK.Params]
 
-		if has_mean_freq and has_std_freq and has_max_e and has_offset:
-			common_func = (
-				max_e.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| mean_freq.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| std_freq.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| offset  ## Already unitless
-			)
-			match props['active_socket_set']:
-				case 'Pulse':
-					remove_dc = input_sockets['Remove DC']
+		common_func = max_e | mean_freq | std_freq | offset
+		active_socket_set = props['active_socket_set']
+		match active_socket_set:
+			case 'Pulse' if not FS.check(remove_dc):
+				return common_func.compose_within(
+					lambda els: td.GaussianPulse(
+						amplitude=complex(els[0]).real,
+						phase=complex(els[0]).imag,
+						freq0=els[1],
+						fwidth=els[2],
+						offset=els[3],
+						remove_dc_component=remove_dc,
+					),
+				)
 
-					has_remove_dc = not ct.FlowSignal.check(remove_dc)
+			case 'Constant':
+				return common_func.compose_within(
+					lambda els: td.ContinuousWave(
+						amplitude=complex(els[0]).real,
+						phase=complex(els[0]).imag,
+						freq0=els[1],
+						fwidth=els[2],
+						offset=els[3],
+					),
+				)
 
-					if has_remove_dc:
-						return common_func.compose_within(
-							lambda els: td.GaussianPulse(
-								amplitude=complex(els[0]).real,
-								phase=complex(els[0]).imag,
-								freq0=els[1],
-								fwidth=els[2],
-								offset=els[3],
-								remove_dc_component=remove_dc,
-							),
-						)
+			case 'Symbolic' if (
+				not FS.check(t_range)
+				and not FS.check(envelope)
+				and not FS.check(envelope_params)
+				and len(envelope_params.symbols) == 1
+				and next(iter(envelope_params.symbols)).physical_type is PT.Time
+				and any(sym.physical_type is PT.Time for sym in envelope_params.symbols)
+			):
+				envelope_time_unit = next(iter(envelope_params.symbols)).unit
 
-				case 'Constant':
-					return common_func.compose_within(
-						lambda els: td.GaussianPulse(
-							amplitude=complex(els[0]).real,
-							phase=complex(els[0]).imag,
-							freq0=els[1],
-							fwidth=els[2],
-							offset=els[3],
+				# Deduce Partially Realized Envelope Function
+				## -> We need a pure-numerical function w/pre-realized stuff baked in.
+				## -> 'generate_realizer' does this for us.
+				envelope_realizer = envelope.generate_realizer(envelope_params)
+
+				# Compose w/Envelope Function
+				## -> First, the numerical time values must be converted.
+				## -> This ensures that the raw array is compatible w/the envelope.
+				## -> Then, we can compose w/the purely numerical 'envelope_realizer'.
+				## -> Because of the checks, we've guaranteed that all this is correct.
+				return (
+					common_func
+					| t_range
+					| t_range.scale_to_unit(envelope_time_unit).compose_within(
+						lambda t: envelope_realizer(t)
+					)
+				).compose_within(
+					lambda els: td.CustomSourceTime(
+						amplitude=complex(els[0]).real,
+						phase=complex(els[0]).imag,
+						freq0=els[1],
+						fwidth=els[2],
+						offset=els[3],
+						source_time_dataset=td_TimeDataset(
+							values=td_TimeDataArray(
+								els[5], coords={'t': np.array(els[4])}
+							)
 						),
 					)
+				)
 
-				case 'Symbolic':
-					t_range = input_sockets['t Range']
-					envelope = input_sockets['Envelope'][ct.FlowKind.Func]
-					envelope_params = input_sockets['Envelope'][ct.FlowKind.Params]
-
-					has_t_range = not ct.FlowSignal.check(t_range)
-					has_envelope = not ct.FlowSignal.check(envelope)
-					has_envelope_params = not ct.FlowSignal.check(envelope_params)
-
-					if (
-						has_t_range
-						and has_envelope
-						and has_envelope_params
-						and len(envelope_params.symbols) == 1
-						## TODO: Allow unrealized envelope symbols
-						and any(
-							sym.physical_type is spux.PhysicalType.Time
-							for sym in envelope_params.symbols
-						)
-					):
-						envelope_time_unit = next(
-							sym.unit
-							for sym in envelope_params.symbols
-							if sym.physical_type is spux.PhysicalType.Time
-						)
-
-						# Deduce Partially Realized Envelope Function
-						## -> We need a pure-numerical function w/pre-realized stuff baked in.
-						## -> 'realize_partial' does this for us.
-						envelope_realizer = envelope.realize_partial(envelope_params)
-
-						# Compose w/Envelope Function
-						## -> First, the numerical time values must be converted.
-						## -> This ensures that the raw array is compatible w/the envelope.
-						## -> Then, we can compose w/the purely numerical 'envelope_realizer'.
-						## -> Because of the checks, we've guaranteed that all this is correct.
-						return (
-							common_func  ## 1 | freq0, 2 | fwidth, 3 | offset
-							| t_range.scale_to_unit_system(ct.UNITS_TIDY3D)  ## 4
-							| t_range.scale_to_unit(envelope_time_unit).compose_within(
-								lambda t: envelope_realizer(t)
-							)  ## 5
-						).compose_within(
-							lambda els: td.CustomSourceTime(
-								amplitude=complex(els[0]).real,
-								phase=complex(els[0]).imag,
-								freq0=els[1],
-								fwidth=els[2],
-								offset=els[3],
-								source_time_dataset=td_TimeDataset(
-									values=td_TimeDataArray(
-										els[5], coords={'t': np.array(els[4])}
-									)
-								),
-							)
-						)
-
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind: Params
 	####################
 	@events.computes_output_socket(
 		'Temporal Shape',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
-		props={'active_socket_set', 'envelope_time_unit'},
-		input_sockets={
-			'max E',
-			'μ Freq',
-			'σ Freq',
-			'Offset Time',
-			't Range',
+		props={'active_socket_set'},
+		inscks_kinds={
+			'μ Freq': FK.Params,
+			'σ Freq': FK.Params,
+			'max E': FK.Params,
+			'Offset Time': FK.Params,
+			't Range': FK.Params,
 		},
-		input_socket_kinds={
-			'max E': ct.FlowKind.Params,
-			'μ Freq': ct.FlowKind.Params,
-			'σ Freq': ct.FlowKind.Params,
-			'Offset Time': ct.FlowKind.Params,
-			't Range': ct.FlowKind.Params,
-		},
+		input_sockets_optional={'t Range'},
 	)
-	def compute_temporal_shape_params(
-		self,
-		props,
-		input_sockets,
-	) -> td.GaussianPulse:
+	def compute_temporal_shape_params(self, props, input_sockets) -> td.GaussianPulse:
 		"""Compute a single temporal shape from non-parameterized inputs."""
 		mean_freq = input_sockets['μ Freq']
 		std_freq = input_sockets['σ Freq']
 		max_e = input_sockets['max E']
 		offset = input_sockets['Offset Time']
 
-		has_mean_freq = not ct.FlowSignal.check(mean_freq)
-		has_std_freq = not ct.FlowSignal.check(std_freq)
-		has_max_e = not ct.FlowSignal.check(max_e)
-		has_offset = not ct.FlowSignal.check(offset)
+		t_range = input_sockets['t Range']
 
-		if has_mean_freq and has_std_freq and has_max_e and has_offset:
-			common_params = max_e | mean_freq | std_freq | offset
-			match props['active_socket_set']:
-				case 'Pulse' | 'Constant':
-					return common_params
+		common_params = max_e | mean_freq | std_freq | offset
+		match props['active_socket_set']:
+			case 'Pulse' | 'Constant':
+				return common_params
 
-				case 'Symbolic':
-					t_range = input_sockets['t Range']
-					has_t_range = not ct.FlowSignal.check(t_range)
-
-					if has_t_range:
-						return common_params | t_range | t_range
-		return ct.FlowSignal.FlowPending
+			case 'Symbolic' if not FS.check(t_range):
+				return common_params | t_range | t_range
+		return FS.FlowPending
 
 
 ####################

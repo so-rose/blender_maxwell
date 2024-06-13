@@ -24,12 +24,18 @@ import typing as typ
 import bpy
 
 from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
 from .... import math_system, sockets
 from ... import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
+BO = math_system.BinaryOperation
+MT = spux.MathType
 
 
 class OperateMathNode(base.MaxwellSimNode):
@@ -46,13 +52,11 @@ class OperateMathNode(base.MaxwellSimNode):
 	bl_label = 'Operate Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr L': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
-		'Expr R': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr L': sockets.ExprSocketDef(active_kind=FK.Func),
+		'Expr R': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.Func, show_info_columns=True
-		),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func, show_info_columns=True),
 	}
 
 	####################
@@ -60,25 +64,21 @@ class OperateMathNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Expr L', 'Expr R'},
+		socket_name={'Expr L': FK.Info, 'Expr R': FK.Info},
 		# Loaded
-		input_sockets={'Expr L', 'Expr R'},
-		input_socket_kinds={'Expr L': ct.FlowKind.Info, 'Expr R': ct.FlowKind.Info},
-		input_sockets_optional={'Expr L': True, 'Expr R': True},
+		inscks_kinds={'Expr L': FK.Info, 'Expr R': FK.Info},
+		input_sockets_optional={'Expr L', 'Expr R'},
 		# Flow
 		## -> See docs in TransformMathNode
 		stop_propagation=True,
 	)
-	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
-		has_info_l = not ct.FlowSignal.check(input_sockets['Expr L'])
-		has_info_r = not ct.FlowSignal.check(input_sockets['Expr R'])
+	def on_input_exprs_changed(self, input_sockets) -> None:
+		"""Queue an update of the cached expression infos whenever data changed."""
+		has_info_l = not FS.check(input_sockets['Expr L'])
+		has_info_r = not FS.check(input_sockets['Expr R'])
 
-		info_l_pending = ct.FlowSignal.check_single(
-			input_sockets['Expr L'], ct.FlowSignal.FlowPending
-		)
-		info_r_pending = ct.FlowSignal.check_single(
-			input_sockets['Expr R'], ct.FlowSignal.FlowPending
-		)
+		info_l_pending = FS.check_single(input_sockets['Expr L'], FS.FlowPending)
+		info_r_pending = FS.check_single(input_sockets['Expr R'], FS.FlowPending)
 
 		if has_info_l and has_info_r and not info_l_pending and not info_r_pending:
 			self.expr_infos = bl_cache.Signal.InvalidateCache
@@ -86,21 +86,20 @@ class OperateMathNode(base.MaxwellSimNode):
 	@bl_cache.cached_bl_property()
 	def expr_infos(self) -> tuple[ct.InfoFlow, ct.InfoFlow] | None:
 		"""Computed `InfoFlow`s of both expressions."""
-		info_l = self._compute_input('Expr L', kind=ct.FlowKind.Info)
-		info_r = self._compute_input('Expr R', kind=ct.FlowKind.Info)
+		info_l = self._compute_input('Expr L', kind=FK.Info)
+		info_r = self._compute_input('Expr R', kind=FK.Info)
 
-		has_info_l = not ct.FlowSignal.check(info_l)
-		has_info_r = not ct.FlowSignal.check(info_r)
+		has_info_l = not FS.check(info_l)
+		has_info_r = not FS.check(info_r)
 
 		if has_info_l and has_info_r:
 			return (info_l, info_r)
-
 		return None
 
 	####################
 	# - Property: Operation
 	####################
-	operation: math_system.BinaryOperation = bl_cache.BLField(
+	operation: BO = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_operations(),
 		cb_depends_on={'expr_infos'},
 	)
@@ -108,7 +107,7 @@ class OperateMathNode(base.MaxwellSimNode):
 	def search_operations(self) -> list[ct.BLEnumElement]:
 		"""Retrieve valid operations based on the input `InfoFlow`s."""
 		if self.expr_infos is not None:
-			return math_system.BinaryOperation.bl_enum_elements(*self.expr_infos)
+			return BO.bl_enum_elements(*self.expr_infos)
 		return []
 
 	####################
@@ -121,12 +120,12 @@ class OperateMathNode(base.MaxwellSimNode):
 			Called by Blender to determine the text to place in the node's header.
 		"""
 		if self.operation is not None:
-			return 'Op: ' + math_system.BinaryOperation.to_name(self.operation)
+			return 'Op: ' + BO.to_name(self.operation)
 
 		return self.bl_label
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		"""Draw node properties in the node.
+		"""Draw properties in the node.
 
 		Parameters:
 			col: UI target for drawing.
@@ -138,70 +137,59 @@ class OperateMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
+		# Loaded
 		props={'operation'},
-		input_sockets={'Expr L', 'Expr R'},
-		input_socket_kinds={
-			'Expr L': ct.FlowKind.Value,
-			'Expr R': ct.FlowKind.Value,
+		inscks_kinds={
+			'Expr L': FK.Value,
+			'Expr R': FK.Value,
 		},
 	)
-	def compute_value(self, props: dict, input_sockets: dict):
+	def compute_value(self, props, input_sockets) -> ct.InfoFlow | FS:
 		"""Binary operation on two symbolic input expressions."""
 		expr_l = input_sockets['Expr L']
 		expr_r = input_sockets['Expr R']
 
-		has_expr_l_value = not ct.FlowSignal.check(expr_l)
-		has_expr_r_value = not ct.FlowSignal.check(expr_r)
-
 		operation = props['operation']
-		if has_expr_l_value and has_expr_r_value and operation is not None:
+		if operation is not None:
 			return operation.sp_func([expr_l, expr_r])
-
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'operation'},
-		input_sockets={'Expr L', 'Expr R'},
-		input_socket_kinds={
-			'Expr L': ct.FlowKind.Func,
-			'Expr R': ct.FlowKind.Func,
+		inscks_kinds={
+			'Expr L': FK.Func,
+			'Expr R': FK.Func,
 		},
-		output_sockets={'Expr'},
-		output_socket_kinds={'Expr': ct.FlowKind.Info},
 	)
-	def compute_func(self, props, input_sockets, output_sockets):
+	def compute_func(self, props, input_sockets) -> ct.InfoFlow | FS:
 		"""Binary operation on two lazy-defined input expressions."""
 		expr_l = input_sockets['Expr L']
 		expr_r = input_sockets['Expr R']
-		output_info = output_sockets['Expr']
-
-		has_expr_l = not ct.FlowSignal.check(expr_l)
-		has_expr_r = not ct.FlowSignal.check(expr_r)
-		has_output_info = not ct.FlowSignal.check(output_info)
 
 		operation = props['operation']
-		if operation is not None and has_expr_l and has_expr_r and has_output_info:
+		if operation is not None:
 			return self.operation.transform_funcs(expr_l, expr_r)
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Info
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Info,
+		kind=FK.Info,
+		# Loaded
 		props={'operation'},
 		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
-			'Expr L': ct.FlowKind.Info,
-			'Expr R': ct.FlowKind.Info,
+			'Expr L': FK.Info,
+			'Expr R': FK.Info,
 		},
 	)
 	def compute_info(self, props, input_sockets) -> ct.InfoFlow:
@@ -209,44 +197,43 @@ class OperateMathNode(base.MaxwellSimNode):
 		info_l = input_sockets['Expr L']
 		info_r = input_sockets['Expr R']
 
-		has_info_l = not ct.FlowSignal.check(info_l)
-		has_info_r = not ct.FlowSignal.check(info_r)
+		has_info_l = not FS.check(info_l)
+		has_info_r = not FS.check(info_r)
 
 		operation = props['operation']
 		if (
-			has_info_l and has_info_r and operation is not None
-			# and operation in BO.by_infos(info_l, info_r)
+			has_info_l
+			and has_info_r
+			and operation is not None
+			and operation in BO.from_infos(info_l, info_r)
 		):
 			return operation.transform_infos(info_l, info_r)
 
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
+		# Loaded
 		props={'operation'},
 		input_sockets={'Expr L', 'Expr R'},
 		input_socket_kinds={
-			'Expr L': ct.FlowKind.Params,
-			'Expr R': ct.FlowKind.Params,
+			'Expr L': FK.Params,
+			'Expr R': FK.Params,
 		},
 	)
-	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | FS:
 		"""Merge the lazy input parameters."""
 		params_l = input_sockets['Expr L']
 		params_r = input_sockets['Expr R']
 
-		has_params_l = not ct.FlowSignal.check(params_l)
-		has_params_r = not ct.FlowSignal.check(params_r)
-
 		operation = props['operation']
-		if has_params_l and has_params_r and operation is not None:
-			return params_l | params_r
-
-		return ct.FlowSignal.FlowPending
+		if operation is not None:
+			return operation.transform_params(params_l, params_r)
+		return FS.FlowPending
 
 
 ####################

@@ -14,14 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import enum
+import functools
 import typing as typ
 from pathlib import Path
 
 import bpy
 import tidy3d as td
-import tidy3d.plugins.dispersion as td_dispersion
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import bl_cache, logger
 
 from .... import contracts as ct
 from .... import managed_objs, sockets
@@ -29,35 +30,94 @@ from ... import base, events
 
 log = logger.get(__name__)
 
-VALID_FILE_EXTS = {
-	'SIMULATION_DATA': {
-		'.hdf5.gz',
-		'.hdf5',
-	},
-	'SIMULATION': {
-		'.hdf5.gz',
-		'.hdf5',
-		'.json',
-		'.yaml',
-	},
-	'MEDIUM': {
-		'.hdf5.gz',
-		'.hdf5',
-		'.json',
-		'.yaml',
-	},
-	'EXPERIM_DISP_MEDIUM': {
-		'.txt',
-	},
-}
+FK = ct.FlowKind
+FS = ct.FlowSignal
 
-CACHE = {}
+
+class ValidTDFileExts(enum.StrEnum):
+	"""Valid importable Tidy3D file extensions."""
+
+	SimData = enum.auto()
+	Sim = enum.auto()
+	Medium = enum.auto()
+
+	@staticmethod
+	def to_name(value: typ.Self) -> str:
+		VFE = ValidTDFileExts
+		return {
+			VFE.SimData: 'Sim Data',
+			VFE.Sim: 'Sim',
+			VFE.Medium: 'Medium',
+		}[value]
+
+	@staticmethod
+	def to_icon(_: typ.Self) -> str:
+		return ''
+
+	def bl_enum_element(self, i: int) -> ct.BLEnumElement:
+		return (
+			str(self),
+			ValidTDFileExts.to_name(self),
+			ValidTDFileExts.to_name(self),
+			ValidTDFileExts.to_icon(self),
+			i,
+		)
+
+	####################
+	# - Properties
+	####################
+	@functools.cached_property
+	def valid_exts(self) -> set[str]:
+		VFE = ValidTDFileExts
+		match self:
+			case VFE.SimData:
+				return {
+					'.hdf5.gz',
+					'.hdf5',
+				}
+
+			case VFE.Sim | VFE.Medium:
+				return {
+					'.hdf5.gz',
+					'.hdf5',
+					'.json',
+					'.yaml',
+				}
+
+		raise TypeError
+
+	@functools.cached_property
+	def td_type(self) -> set[str]:
+		"""The corresponding Tidy3D type."""
+		VFE = ValidTDFileExts
+		return {
+			VFE.SimData: td.SimulationData,
+			VFE.Sim: td.Simulation,
+			VFE.Medium: td.Medium,
+		}[self]
+
+	####################
+	# - Methods
+	####################
+	def is_path_compatible(self, path: Path) -> bool:
+		ext_matches = ''.join(path.suffixes) in self.valid_exts
+		return ext_matches and path.is_file()
+
+	def load(self, file_path: Path) -> typ.Any:
+		VFE = ValidTDFileExts
+		match self:
+			case VFE.SimData | VFE.Sim | VFE.Medium:
+				return self.td_type.from_file(str(file_path))
+
+		raise TypeError
 
 
 ####################
 # - Node
 ####################
 class Tidy3DFileImporterNode(base.MaxwellSimNode):
+	"""Import a simulation design or analysis element from a Tidy3D object."""
+
 	node_type = ct.NodeType.Tidy3DFileImporter
 	bl_label = 'Tidy3D File Importer'
 
@@ -71,185 +131,74 @@ class Tidy3DFileImporterNode(base.MaxwellSimNode):
 	####################
 	# - Properties
 	####################
-	## TODO: More automatic determination of which file type is in use :)
-	tidy3d_type: bpy.props.EnumProperty(
-		name='Tidy3D Type',
-		description='Type of Tidy3D object to load',
-		items=[
-			(
-				'SIMULATION_DATA',
-				'Sim Data',
-				'Data from Completed Tidy3D Simulation',
-			),
-			('SIMULATION', 'Sim', 'Tidy3D Simulation'),
-			('MEDIUM', 'Medium', 'A Tidy3D Medium'),
-			(
-				'EXPERIM_DISP_MEDIUM',
-				'Experim Disp Medium',
-				'A pole-residue fit of experimental dispersive medium data, described by a .txt file specifying wl, n, k',
-			),
-		],
-		default='SIMULATION_DATA',
-		update=lambda self, context: self.on_prop_changed('tidy3d_type', context),
-	)
+	tidy3d_type: ValidTDFileExts = bl_cache.BLField(ValidTDFileExts.SimData)
 
-	disp_fit__min_poles: bpy.props.IntProperty(
-		name='min Poles',
-		description='Min. # poles to fit to the experimental dispersive medium data',
-		default=1,
-	)
-	disp_fit__max_poles: bpy.props.IntProperty(
-		name='max Poles',
-		description='Max. # poles to fit to the experimental dispersive medium data',
-		default=5,
-	)
-	## TODO: Bool of whether to fit eps_inf, with conditional choice of eps_inf as socket
-	disp_fit__tolerance_rms: bpy.props.FloatProperty(
-		name='Max RMS',
-		description='The RMS error threshold, below which the fit should be considered converged',
-		default=0.001,
-		precision=5,
-	)
-	## TODO: "AdvanceFastFitterParam" options incl. loss_bounds, weights, show_progress, show_unweighted_rms, relaxed, smooth, logspacing, numiters, passivity_num_iters, and slsqp_constraint_scale
-
+	####################
+	# - UI
+	####################
 	def draw_props(self, _: bpy.types.Context, col: bpy.types.UILayout):
 		col.prop(self, 'tidy3d_type', text='')
-		if self.tidy3d_type == 'EXPERIM_DISP_MEDIUM':
-			row = col.row(align=True)
-			row.alignment = 'CENTER'
-			row.label(text='Pole-Residue Fit')
-
-			col.prop(self, 'disp_fit__min_poles')
-			col.prop(self, 'disp_fit__max_poles')
-			col.prop(self, 'disp_fit__tolerance_rms')
-
-	####################
-	# - Event Methods: Output Data
-	####################
-	def _compute_sim_data_for(
-		self, output_socket_name: str, file_path: Path
-	) -> td.components.base.Tidy3dBaseModel:
-		return {
-			'Sim': td.Simulation,
-			'Sim Data': td.SimulationData,
-			'Medium': td.Medium,
-		}[output_socket_name].from_file(str(file_path))
-
-	@events.computes_output_socket(
-		'Sim',
-		input_sockets={'File Path'},
-	)
-	def compute_sim(self, input_sockets: dict) -> td.Simulation:
-		return self._compute_sim_data_for('Sim', input_sockets['File Path'])
-
-	@events.computes_output_socket(
-		'Sim Data',
-		input_sockets={'File Path'},
-	)
-	def compute_sim_data(self, input_sockets: dict) -> td.SimulationData:
-		return self._compute_sim_data_for('Sim Data', input_sockets['File Path'])
-
-	@events.computes_output_socket(
-		'Medium',
-		input_sockets={'File Path'},
-	)
-	def compute_medium(self, input_sockets: dict) -> td.Medium:
-		return self._compute_sim_data_for('Medium', input_sockets['File Path'])
-
-	####################
-	# - Event Methods: Output Data | Dispersive Media
-	####################
-	@events.computes_output_socket(
-		'Experim Disp Medium',
-		input_sockets={'File Path'},
-	)
-	def compute_experim_disp_medium(self, input_sockets: dict) -> td.Medium:
-		if CACHE.get(self.bl_label) is not None:
-			log.debug('Reusing Cached Dispersive Medium')
-			return CACHE[self.bl_label]['model']
-
-		log.info('Loading Experimental Data')
-		dispersion_fitter = td_dispersion.FastDispersionFitter.from_file(
-			str(input_sockets['File Path'])
-		)
-
-		log.info('Computing Fast Dispersive Fit of Experimental Data...')
-		pole_residue_medium, rms_error = dispersion_fitter.fit(
-			min_num_poles=self.disp_fit__min_poles,
-			max_num_poles=self.disp_fit__max_poles,
-			tolerance_rms=self.disp_fit__tolerance_rms,
-		)
-		log.info('Fit Succeeded w/RMS "%s"!', f'{rms_error:.5f}')
-
-		# Populate Cache
-		CACHE[self.bl_label] = {}
-		CACHE[self.bl_label]['model'] = pole_residue_medium
-		CACHE[self.bl_label]['fitter'] = dispersion_fitter
-		CACHE[self.bl_label]['rms_error'] = rms_error
-
-		return pole_residue_medium
 
 	####################
 	# - Event Methods: Setup Output Socket
 	####################
 	@events.on_value_changed(
-		socket_name='File Path',
 		prop_name='tidy3d_type',
-		input_sockets={'File Path'},
+		run_on_init=True,
+		# Loaded
 		props={'tidy3d_type'},
 	)
-	def on_file_changed(self, input_sockets: dict, props: dict):
-		if CACHE.get(self.bl_label) is not None:
-			del CACHE[self.bl_label]
-
-		file_ext = ''.join(input_sockets['File Path'].suffixes)
-		if not (
-			input_sockets['File Path'].is_file()
-			and file_ext in VALID_FILE_EXTS[props['tidy3d_type']]
-		):
-			self.loose_output_sockets = {}
-		else:
-			self.loose_output_sockets = {
-				'SIMULATION_DATA': {
-					'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
-				},
-				'SIMULATION': {'Sim': sockets.MaxwellFDTDSimSocketDef()},
-				'MEDIUM': {'Medium': sockets.MaxwellMediumSocketDef()},
-				'EXPERIM_DISP_MEDIUM': {
-					'Experim Disp Medium': sockets.MaxwellMediumSocketDef()
-				},
-			}[props['tidy3d_type']]
+	def on_file_changed(self, props) -> None:
+		self.loose_output_sockets = {
+			ValidTDFileExts.SimData: {
+				'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
+			},
+			ValidTDFileExts.Sim: {'Sim': sockets.MaxwellFDTDSimSocketDef()},
+			ValidTDFileExts.Medium: {'Medium': sockets.MaxwellMediumSocketDef()},
+		}[props['tidy3d_type']]
 
 	####################
-	# - Event Methods: Plot
+	# - FlowKind.Value
 	####################
-	@events.on_show_plot(
-		managed_objs={'plot'},
+	def _compute_td_obj(
+		self, props, input_sockets
+	) -> td.components.base.Tidy3dBaseModel:
+		tidy3d_type = props['tidy3d_type']
+		file_path = input_sockets['File Path']
+
+		if tidy3d_type.is_path_compatible(file_path):
+			return tidy3d_type.load(file_path)
+		return FS.FlowPending
+
+	@events.computes_output_socket(
+		'Sim',
+		kind=FK.Value,
+		# Loaded
 		props={'tidy3d_type'},
+		inscks_kinds={'File Path': FK.Value},
 	)
-	def on_show_plot(
-		self,
-		props: dict,
-		managed_objs: dict,
-	):
-		"""When the filetype is 'Experimental Dispersive Medium', plot the computed model against the input data."""
-		if props['tidy3d_type'] == 'EXPERIM_DISP_MEDIUM':
-			# Populate Cache
-			if CACHE.get(self.bl_label) is None:
-				model_medium = self.compute_experim_disp_medium()
-				disp_fitter = CACHE[self.bl_label]['fitter']
-			else:
-				model_medium = CACHE[self.bl_label]['model']
-				disp_fitter = CACHE[self.bl_label]['fitter']
+	def compute_sim(self, props, input_sockets) -> td.Simulation:
+		return self._compute_td_obj(props, input_sockets)
 
-			# Plot
-			managed_objs['plot'].mpl_plot_to_image(
-				lambda ax: disp_fitter.plot(
-					medium=model_medium,
-					ax=ax,
-				),
-				bl_select=True,
-			)
+	@events.computes_output_socket(
+		'Sim Data',
+		kind=FK.Value,
+		# Loaded
+		props={'tidy3d_type'},
+		inscks_kinds={'File Path': FK.Value},
+	)
+	def compute_sim_data(self, props, input_sockets) -> td.SimulationData:
+		return self._compute_td_obj(props, input_sockets)
+
+	@events.computes_output_socket(
+		'Medium',
+		kind=FK.Value,
+		# Loaded
+		props={'tidy3d_type'},
+		inscks_kinds={'File Path': FK.Value},
+	)
+	def compute_medium(self, props, input_sockets: dict) -> td.Medium:
+		return self._compute_td_obj(props, input_sockets)
 
 
 ####################

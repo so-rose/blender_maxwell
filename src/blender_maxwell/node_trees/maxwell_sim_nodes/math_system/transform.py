@@ -19,6 +19,7 @@ import typing as typ
 
 import jax.numpy as jnp
 import jaxtyping as jtyp
+import sympy as sp
 
 from blender_maxwell.utils import logger, sci_constants, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
@@ -66,14 +67,12 @@ class TransformOperation(enum.StrEnum):
 	FT1D = enum.auto()
 	InvFT1D = enum.auto()
 
-	# TODO: Affine
-	## TODO
-
 	####################
 	# - UI
 	####################
 	@staticmethod
 	def to_name(value: typ.Self) -> str:
+		"""A human-readable UI-oriented name."""
 		TO = TransformOperation
 		return {
 			# Covariant Transform
@@ -99,9 +98,11 @@ class TransformOperation(enum.StrEnum):
 
 	@staticmethod
 	def to_icon(_: typ.Self) -> str:
+		"""No icons."""
 		return ''
 
 	def bl_enum_element(self, i: int) -> ct.BLEnumElement:
+		"""Given an integer index, generate an element that conforms to the requirements of `bpy.props.EnumProperty.items`."""
 		TO = TransformOperation
 		return (
 			str(self),
@@ -110,6 +111,17 @@ class TransformOperation(enum.StrEnum):
 			TO.to_icon(self),
 			i,
 		)
+
+	@staticmethod
+	def bl_enum_elements(info: ct.InfoFlow) -> list[ct.BLEnumElement]:
+		"""Generate a list of guaranteed-valid operations based on the passed `InfoFlow`s.
+
+		Returns a `bpy.props.EnumProperty.items`-compatible list.
+		"""
+		return [
+			operation.bl_enum_element(i)
+			for i, operation in enumerate(TransformOperation.by_info(info))
+		]
 
 	####################
 	# - Methods
@@ -300,14 +312,16 @@ class TransformOperation(enum.StrEnum):
 					physical_type=physical_type,
 					unit=unit,
 				),
-				ct.RangeFlow.try_from_array(ct.ArrayFlow(values=data_col, unit=unit)),
+				ct.RangeFlow.try_from_array(
+					ct.ArrayFlow(jax_bytes=data_col, unit=unit)
+				),
 			).slice_dim(info.last_dim, (1, len(info.dims[info.last_dim]), 1)),
 			# Fold
 			TO.IntDimToComplex: lambda: info.delete_dim(info.last_dim).update_output(
 				mathtype=spux.MathType.Complex
 			),
-			TO.DimToVec: lambda: info.fold_last_input(),
-			TO.DimsToMat: lambda: info.fold_last_input().fold_last_input(),
+			TO.DimToVec: lambda: info.fold_last_input,
+			TO.DimsToMat: lambda: info.fold_last_input.fold_last_input,
 			# Fourier
 			TO.FT1D: lambda: info.replace_dim(
 				dim,
@@ -333,4 +347,38 @@ class TransformOperation(enum.StrEnum):
 					info.dims[dim].bound_inv_fourier_transform,
 				],
 			),
-		}[self]()
+		}[self]().update_output(
+			domain=self.transform_output_domain(info.output.domain, info, dim)
+		)
+
+	def transform_output_domain(
+		self, dom: spux.BlessedSet, info: ct.InfoFlow, dim: sim_symbols.SimSymbol | None
+	) -> sp.Set:
+		"""Transform the domain of the output symbol.
+
+		Parameters:
+			dom: Symbolic set representing the original output symbol's domain.
+			info: Characterization of the original expression.
+			dim: Dimension symbol being reduced away.
+
+		"""
+		TO = TransformOperation
+		match self:
+			# Summary
+			case (
+				TO.FreqToVacWL
+				| TO.VacWLToFreq
+				| TO.ConvertIdxUnit
+				| TO.SetIdxUnit
+				| TO.FirstColToFirstIdx
+				| TO.DimToVec
+				| TO.DimsToMat
+				| TO.IntDimToComplex
+			):
+				return dom
+
+			case TO.FT1D if dim is not None:
+				return info[dim].bound_fourier_transform.symbolic_set
+
+			case TO.InvFT1D if dim is not None:
+				return info[dim].bound_inv_fourier_transform.symbolic_set

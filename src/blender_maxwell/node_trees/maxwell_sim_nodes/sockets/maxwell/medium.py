@@ -14,16 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import math
-
 import bpy
-import jax.numpy as jnp
 import scipy as sc
+import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
-import tidy3d.plugins.adjoint as tdadj
 
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import bl_cache, logger, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
@@ -51,49 +48,44 @@ class MaxwellMediumBLSocket(base.MaxwellSimSocket):
 	####################
 	eps_rel: tuple[float, float] = bl_cache.BLField((1.0, 0.0), float_prec=2)
 
-	differentiable: bool = bl_cache.BLField(False)
-
 	####################
 	# - FlowKinds
 	####################
-	@bl_cache.cached_bl_property(depends_on={'eps_rel', 'differentiable'})
+	@bl_cache.cached_bl_property(depends_on={'eps_rel'})
 	def value(self) -> td.Medium:
 		eps_r_re = self.eps_rel[0]
-		conductivity = FIXED_FREQ * self.eps_rel[1]  ## TODO: Um?
+		# conductivity = FIXED_FREQ * self.eps_rel[1]  ## TODO: Um?
 
-		if self.differentiable:
-			return tdadj.JaxMedium(
-				permittivity_jax=jnp.array(eps_r_re, dtype=float),
-				conductivity_jax=jnp.array(conductivity, dtype=float),
-			)
 		return td.Medium(
 			permittivity=eps_r_re,
-			conductivity=conductivity,
+			# conductivity=conductivity,
 		)
 
 	@value.setter
 	def value(self, eps_rel: tuple[float, float]) -> None:
 		self.eps_rel = eps_rel
 
-	@bl_cache.cached_bl_property(depends_on={'value'})
+	@bl_cache.cached_bl_property()
 	def lazy_func(self) -> ct.FuncFlow:
 		return ct.FuncFlow(
-			func=lambda: self.value,
-			supports_jax=self.differentiable,
+			func=lambda eps_r_re, eps_r_im: td.Medium(
+				permittivity=eps_r_re,
+				# conductivity=FIXED_FREQ * eps_r_im,
+			),
+			func_args=[sim_symbols.rel_eps_re(None), sim_symbols.rel_eps_im(None)],
 		)
 
-	@bl_cache.cached_bl_property(depends_on={'differentiable'})
+	@bl_cache.cached_bl_property(depends_on={'eps_rel'})
 	def params(self) -> ct.FuncFlow:
+		return ct.ParamsFlow(
+			func_args=[sp.S(self.eps_rel[0]), sp.S(self.eps_rel[1])],
+		)
 		return ct.ParamsFlow()
 
 	####################
 	# - UI
 	####################
 	def draw_value(self, col: bpy.types.UILayout) -> None:
-		col.prop(
-			self, self.blfields['differentiable'], text='Differentiable', toggle=True
-		)
-		col.separator()
 		split = col.split(factor=0.25, align=False)
 
 		_col = split.column(align=True)

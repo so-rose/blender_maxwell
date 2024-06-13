@@ -31,9 +31,10 @@ class FlowSignal(enum.StrEnum):
 
 	"""
 
+	NoFlow = enum.auto()
 	FlowInitializing = enum.auto()
 	FlowPending = enum.auto()
-	NoFlow = enum.auto()
+	# FlowError = enum.auto()
 
 	@classmethod
 	def all(cls) -> set[typ.Self]:

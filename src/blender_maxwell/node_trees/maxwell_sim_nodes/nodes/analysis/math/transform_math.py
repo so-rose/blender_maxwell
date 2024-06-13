@@ -31,6 +31,9 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+
 
 class TransformMathNode(base.MaxwellSimNode):
 	r"""Applies a function to the array as a whole, with arbitrary results.
@@ -49,10 +52,10 @@ class TransformMathNode(base.MaxwellSimNode):
 	bl_label = 'Transform Math'
 
 	input_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 	output_sockets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 
 	####################
@@ -62,9 +65,8 @@ class TransformMathNode(base.MaxwellSimNode):
 		# Trigger
 		socket_name={'Expr'},
 		# Loaded
-		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Info},
-		input_sockets_optional={'Expr': True},
+		inscks_kinds={'Expr': FK.Info},
+		input_sockets_optional={'Expr'},
 		# Flow
 		## -> Expr wants to emit DataChanged, which is usually fine.
 		## -> However, this node sets `expr_info`, which causes DC to emit.
@@ -73,18 +75,16 @@ class TransformMathNode(base.MaxwellSimNode):
 		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
-		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
-		info_pending = ct.FlowSignal.check_single(
-			input_sockets['Expr'], ct.FlowSignal.FlowPending
-		)
+		has_info = not FS.check(input_sockets['Expr'])
+		info_pending = FS.check_single(input_sockets['Expr'], FS.FlowPending)
 
 		if has_info and not info_pending:
 			self.expr_info = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
 	def expr_info(self) -> ct.InfoFlow | None:
-		info = self._compute_input('Expr', kind=ct.FlowKind.Info, optional=True)
-		has_info = not ct.FlowSignal.check(info)
+		info = self._compute_input('Expr', kind=FK.Info)
+		has_info = not FS.check(info)
 		if has_info:
 			return info
 
@@ -100,12 +100,7 @@ class TransformMathNode(base.MaxwellSimNode):
 
 	def search_operations(self) -> list[ct.BLEnumElement]:
 		if self.expr_info is not None:
-			return [
-				operation.bl_enum_element(i)
-				for i, operation in enumerate(
-					math_system.TransformOperation.by_info(self.expr_info)
-				)
-			]
+			return math_system.TransformOperation.bl_enum_elements(self.expr_info)
 		return []
 
 	####################
@@ -283,29 +278,27 @@ class TransformMathNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'operation', 'dim'},
 		input_sockets={'Expr'},
 		input_socket_kinds={
-			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info},
+			'Expr': {FK.Func, FK.Info},
 		},
 		output_sockets={'Expr'},
-		output_socket_kinds={'Expr': ct.FlowKind.Info},
+		output_socket_kinds={'Expr': FK.Info},
 	)
-	def compute_func(
-		self, props, input_sockets, output_sockets
-	) -> ct.FuncFlow | ct.FlowSignal:
+	def compute_func(self, props, input_sockets, output_sockets) -> ct.FuncFlow | FS:
 		"""Transform the input `InfoFlow` depending on the transform operation."""
 		TO = math_system.TransformOperation
 
-		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
-		info = input_sockets['Expr'][ct.FlowKind.Info]
+		lazy_func = input_sockets['Expr'][FK.Func]
+		info = input_sockets['Expr'][FK.Info]
 		output_info = output_sockets['Expr']
 
-		has_info = not ct.FlowSignal.check(info)
-		has_lazy_func = not ct.FlowSignal.check(lazy_func)
-		has_output_info = not ct.FlowSignal.check(output_info)
+		has_info = not FS.check(info)
+		has_lazy_func = not FS.check(lazy_func)
+		has_output_info = not FS.check(output_info)
 
 		operation = props['operation']
 		if operation is not None and has_lazy_func and has_info and has_output_info:
@@ -318,7 +311,7 @@ class TransformMathNode(base.MaxwellSimNode):
 							enclosing_func_output=output_info.output,
 							supports_jax=True,
 						)
-					return ct.FlowSignal.FlowPending
+					return FS.FlowPending
 
 				case _:
 					return lazy_func.compose_within(
@@ -327,30 +320,28 @@ class TransformMathNode(base.MaxwellSimNode):
 						supports_jax=True,
 					)
 
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Info
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Info,
+		kind=FK.Info,
 		# Loaded
 		props={'operation', 'dim', 'new_name', 'new_unit', 'new_physical_type'},
 		input_sockets={'Expr'},
-		input_socket_kinds={
-			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
-		},
+		input_socket_kinds={'Expr': {FK.Func, FK.Info, FK.Params}},
 	)
 	def compute_info(  # noqa: PLR0911
 		self, props: dict, input_sockets: dict
-	) -> ct.InfoFlow | typ.Literal[ct.FlowSignal.FlowPending]:
+	) -> ct.InfoFlow | typ.Literal[FS.FlowPending]:
 		"""Transform the input `InfoFlow` depending on the transform operation."""
 		TO = math_system.TransformOperation
 		operation = props['operation']
-		info = input_sockets['Expr'][ct.FlowKind.Info]
+		info = input_sockets['Expr'][FK.Info]
 
-		has_info = not ct.FlowSignal.check(info)
+		has_info = not FS.check(info)
 		if has_info and operation is not None:
 			# Retrieve Properties
 			dim = props['dim']
@@ -359,11 +350,11 @@ class TransformMathNode(base.MaxwellSimNode):
 			new_physical_type = props['new_physical_type']
 
 			# Retrieve Expression Data
-			lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
-			params = input_sockets['Expr'][ct.FlowKind.Params]
+			lazy_func = input_sockets['Expr'][FK.Func]
+			params = input_sockets['Expr'][FK.Params]
 
-			has_lazy_func = not ct.FlowSignal.check(lazy_func)
-			has_params = not ct.FlowSignal.check(lazy_func)
+			has_lazy_func = not FS.check(lazy_func)
+			has_params = not FS.check(lazy_func)
 
 			# Match Pattern by Operation
 			match operation:
@@ -376,7 +367,7 @@ class TransformMathNode(base.MaxwellSimNode):
 						and new_unit in physical_type.valid_units
 					):
 						return operation.transform_info(info, dim=dim, unit=new_unit)
-					return ct.FlowSignal.FlowPending
+					return FS.FlowPending
 
 				case TO.FreqToVacWL if dim is not None and new_unit is not None and new_unit in spux.PhysicalType.Length.valid_units:
 					return operation.transform_info(info, dim=dim, unit=new_unit)
@@ -430,28 +421,28 @@ class TransformMathNode(base.MaxwellSimNode):
 				case TO.FT1D | TO.InvFT1D if dim is not None:
 					return operation.transform_info(info, dim=dim)
 
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
 		props={'operation'},
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Params},
+		input_socket_kinds={'Expr': FK.Params},
 	)
-	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | FS:
 		operation = props['operation']
 		params = input_sockets['Expr']
 
-		has_params = not ct.FlowSignal.check(params)
+		has_params = not FS.check(params)
 		if has_params and operation is not None:
 			return params
 
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 
 ####################

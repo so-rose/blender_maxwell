@@ -14,18 +14,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .category_types import NodeCategory as NC
+from .category_types import NodeCategory as NC  # noqa: N817
 
 NODE_CAT_LABELS = {
 	# Analysis/
 	NC.MAXWELLSIM_ANALYSIS: 'Analysis',
 	NC.MAXWELLSIM_ANALYSIS_MATH: 'Math',
+	# Utilities/
+	NC.MAXWELLSIM_UTILITIES: 'Utilities',
 	# Inputs/
 	NC.MAXWELLSIM_INPUTS: 'Inputs',
 	NC.MAXWELLSIM_INPUTS_SCENE: 'Scene',
 	NC.MAXWELLSIM_INPUTS_CONSTANTS: 'Constants',
 	NC.MAXWELLSIM_INPUTS_FILEIMPORTERS: 'File Importers',
 	NC.MAXWELLSIM_INPUTS_WEBIMPORTERS: 'Web Importers',
+	# Solvers/
+	NC.MAXWELLSIM_SOLVERS: 'Solvers',
 	# Outputs/
 	NC.MAXWELLSIM_OUTPUTS: 'Outputs',
 	NC.MAXWELLSIM_OUTPUTS_FILEEXPORTERS: 'File Exporters',
@@ -39,15 +43,11 @@ NODE_CAT_LABELS = {
 	# Structures/
 	NC.MAXWELLSIM_STRUCTURES: 'Structures',
 	NC.MAXWELLSIM_STRUCTURES_PRIMITIVES: 'Primitives',
-	# Bounds/
-	NC.MAXWELLSIM_BOUNDS: 'Bounds',
-	NC.MAXWELLSIM_BOUNDS_BOUNDCONDS: 'Conds',
 	# Monitors/
 	NC.MAXWELLSIM_MONITORS: 'Monitors',
 	NC.MAXWELLSIM_MONITORS_PROJECTED: 'Projected',
 	# Simulations/
 	NC.MAXWELLSIM_SIMS: 'Simulations',
-	NC.MAXWELLSIM_SIMS_SIMGRIDAXES: 'Sim Grid Axes',
-	# Utilities/
-	NC.MAXWELLSIM_UTILITIES: 'Utilities',
+	NC.MAXWELLSIM_SIMS_BOUNDCONDFACES: 'BC Faces',
+	NC.MAXWELLSIM_SIMS_SIMGRIDAXES: 'Grid Axes',
 }

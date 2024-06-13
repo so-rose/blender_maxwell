@@ -14,16 +14,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `BoxStructureNode`."""
+
 import typing as typ
 
-import bpy
 import sympy as sp
 import sympy.physics.units as spu
 import tidy3d as td
-import tidy3d.plugins.adjoint as tdadj
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
-from blender_maxwell.utils import bl_cache, logger
+from blender_maxwell.utils import logger
 from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
@@ -32,9 +32,13 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+
 
 class BoxStructureNode(base.MaxwellSimNode):
-	"""A generic, differentiable box structure with configurable size and center."""
+	"""A generic box structure with configurable size and center."""
 
 	node_type = ct.NodeType.BoxStructure
 	bl_label = 'Box Structure'
@@ -48,17 +52,17 @@ class BoxStructureNode(base.MaxwellSimNode):
 		'Center': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
 			default_unit=spu.micrometer,
-			default_value=sp.Matrix([0, 0, 0]),
+			default_value=sp.ImmutableMatrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
 			default_unit=spu.nanometer,
-			default_value=sp.Matrix([500, 500, 500]),
+			default_value=sp.ImmutableMatrix([500, 500, 500]),
 			abs_min=0.001,
 		),
 	}
 	output_sockets: typ.ClassVar = {
-		'Structure': sockets.MaxwellStructureSocketDef(active_kind=ct.FlowKind.Func),
+		'Structure': sockets.MaxwellStructureSocketDef(active_kind=FK.Func),
 	}
 
 	managed_obj_types: typ.ClassVar = {
@@ -66,180 +70,123 @@ class BoxStructureNode(base.MaxwellSimNode):
 	}
 
 	####################
-	# - Properties
-	####################
-	differentiable: bool = bl_cache.BLField(False)
-
-	####################
-	# - UI
-	####################
-	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
-		layout.prop(
-			self,
-			self.blfields['differentiable'],
-			text='Differentiable',
-			toggle=True,
-		)
-
-	####################
 	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
 		# Loaded
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': {ct.FlowKind.Func, ct.FlowKind.Params}},
+		outscks_kinds={
+			'Structure': {FK.Func, FK.Params},
+		},
 	)
-	def compute_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | FS:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
-		output_func = output_sockets['Structure'][ct.FlowKind.Func]
-		output_params = output_sockets['Structure'][ct.FlowKind.Params]
-
-		has_output_func = not ct.FlowSignal.check(output_func)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_func and has_output_params and not output_params.symbols:
-			return output_func.realize(output_params, disallow_jax=True)
-		return ct.FlowSignal.FlowPending
+		value = events.realize_known(output_sockets['Structure'])
+		if value is not None:
+			return value
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
-		props={'differentiable'},
-		input_sockets={'Medium', 'Center', 'Size'},
-		input_socket_kinds={
-			'Medium': ct.FlowKind.Func,
-			'Center': ct.FlowKind.Func,
-			'Size': ct.FlowKind.Func,
+		inscks_kinds={
+			'Medium': FK.Func,
+			'Center': FK.Func,
+			'Size': FK.Func,
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_TIDY3D,
+			'Size': ct.UNITS_TIDY3D,
 		},
 	)
-	def compute_structure_func(self, props, input_sockets) -> td.Box:
-		"""Compute a possibly-differentiable function, producing a box structure from the input parameters."""
+	def compute_func(self, input_sockets) -> td.Box:
+		"""Compute a function, producing a box structure from the input parameters."""
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		medium = input_sockets['Medium']
 
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_medium = not ct.FlowSignal.check(medium)
-
-		if has_center and has_size and has_medium:
-			differentiable = props['differentiable']
-			if differentiable:
-				return (
-					center.scale_to_unit_system(ct.UNITS_TIDY3D)
-					| size.scale_to_unit_system(ct.UNITS_TIDY3D)
-					| medium
-				).compose_within(
-					lambda els: tdadj.JaxStructure(
-						geometry=tdadj.JaxBox(
-							center_jax=tuple(els[0].flatten()),
-							size_jax=tuple(els[1].flatten()),
-						),
-						medium=els[2],
-					),
-					supports_jax=True,
-				)
-			return (
-				center.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| size.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| medium
-			).compose_within(
-				lambda els: td.Structure(
-					geometry=td.Box(
-						center=els[0].flatten().tolist(),
-						size=els[1].flatten().tolist(),
-					),
-					medium=els[2],
+		return (center | size | medium).compose_within(
+			lambda els: td.Structure(
+				geometry=td.Box(
+					center=els[0].flatten().tolist(),
+					size=els[1].flatten().tolist(),
 				),
-				supports_jax=False,
-			)
-		return ct.FlowSignal.FlowPending
+				medium=els[2],
+			),
+		)
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
-		input_sockets={'Medium', 'Center', 'Size'},
-		input_socket_kinds={
-			'Medium': ct.FlowKind.Params,
-			'Center': ct.FlowKind.Params,
-			'Size': ct.FlowKind.Params,
+		inscks_kinds={
+			'Medium': FK.Params,
+			'Center': FK.Params,
+			'Size': FK.Params,
 		},
 	)
 	def compute_params(self, input_sockets) -> td.Box:
+		"""Aggregate the function parameters needed by the box."""
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		medium = input_sockets['Medium']
 
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_medium = not ct.FlowSignal.check(medium)
-
-		if has_center and has_size and has_medium:
-			return center | size | medium
-		return ct.FlowSignal.FlowPending
+		return center | size | medium
 
 	####################
 	# - Events: Preview
 	####################
 	@events.computes_output_socket(
 		'Structure',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
 		props={'sim_node_name'},
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
 	)
-	def compute_previews(self, props, output_sockets):
-		"""Mark the managed preview object when recursively linked to a viewer."""
-		output_params = output_sockets['Structure']
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_params and not output_params.symbols:
-			return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
-		return ct.PreviewsFlow()
+	def compute_previews(self, props):
+		"""Mark the box structure as participating in the preview."""
+		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'Size'},
+		socket_name={
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+		},
 		run_on_init=True,
 		# Loaded
 		managed_objs={'modifier'},
-		input_sockets={'Center', 'Size'},
-		output_sockets={'Structure'},
-		output_socket_kinds={'Structure': ct.FlowKind.Params},
+		inscks_kinds={
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_BLENDER,
+			'Size': ct.UNITS_BLENDER,
+		},
 	)
-	def on_previewable_changed(self, managed_objs, input_sockets, output_sockets):
-		center = input_sockets['Center']
-		size = input_sockets['Size']
-		output_params = output_sockets['Structure']
+	def on_previewable_changed(self, managed_objs, input_sockets) -> None:
+		"""Push changes in the inputs to the center / size."""
+		center = events.realize_preview(input_sockets['Center'])
+		size = events.realize_preview(input_sockets['Size'])
 
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_center and has_size and has_output_params and not output_params.symbols:
-			# Push Loose Input Values to GeoNodes Modifier
-			managed_objs['modifier'].bl_modifier(
-				'NODES',
-				{
-					'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
-					'unit_system': ct.UNITS_BLENDER,
-					'inputs': {
-						'Size': size,
-					},
+		managed_objs['modifier'].bl_modifier(
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.StructurePrimitiveBox),
+				'inputs': {
+					'Size': size,
 				},
-				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
-			)
+			},
+			location=center,
+		)
 
 
 ####################

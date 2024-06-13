@@ -33,8 +33,12 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	ReduceMath = enum.auto()
 	TransformMath = enum.auto()
 
-	# Inputs
+	# Utilities
+	Combine = enum.auto()
 	WaveConstant = enum.auto()
+	ViewText = enum.auto()
+
+	# Inputs
 	Scene = enum.auto()
 	## Inputs / Constants
 	ExprConstant = enum.auto()
@@ -47,6 +51,11 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	## Inputs / File Importers
 	DataFileImporter = enum.auto()
 	Tidy3DFileImporter = enum.auto()
+
+	# Solvers
+	FDTDSolver = enum.auto()
+	ModeSolver = enum.auto()
+	EMESolver = enum.auto()
 
 	# Outputs
 	Viewer = enum.auto()
@@ -82,7 +91,7 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	DebyeMedium = enum.auto()
 	## Mediums / Non-Linearities
 	AddNonLinearity = enum.auto()
-	ChiThreeSusceptibilityNonLinearity = enum.auto()
+	ChiThreeSuscepNonLinearity = enum.auto()
 	TwoPhotonAbsorptionNonLinearity = enum.auto()
 	KerrNonLinearity = enum.auto()
 
@@ -97,13 +106,6 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	CylinderStructure = enum.auto()
 	PolySlabStructure = enum.auto()
 
-	# Bounds
-	BoundConds = enum.auto()
-	## Bounds / Bound Conds
-	PMLBoundCond = enum.auto()
-	BlochBoundCond = enum.auto()
-	AdiabAbsorbBoundCond = enum.auto()
-
 	# Monitors
 	EHFieldMonitor = enum.auto()
 	PowerFluxMonitor = enum.auto()
@@ -115,15 +117,16 @@ class NodeType(blender_type_enum.BlenderTypeEnum):
 	KSpaceNearFieldProjectionMonitor = enum.auto()
 
 	# Sims
-	Combine = enum.auto()
 	SimDomain = enum.auto()
 	FDTDSim = enum.auto()
 	SimGrid = enum.auto()
-	## Sims / Sim Grid Axis
-	AutomaticSimGridAxis = enum.auto()
+	BoundConds = enum.auto()
+	## Sims / Bound Conds
+	PMLBoundCond = enum.auto()
+	BlochBoundCond = enum.auto()
+	AdiabAbsorbBoundCond = enum.auto()
+	## Sims / Grid Axes
+	AutoSimGridAxis = enum.auto()
 	ManualSimGridAxis = enum.auto()
 	UniformSimGridAxis = enum.auto()
 	ArraySimGridAxis = enum.auto()
-
-	# Utilities
-	Separate = enum.auto()

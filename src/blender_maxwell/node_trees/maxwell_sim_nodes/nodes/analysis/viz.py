@@ -22,6 +22,7 @@ import jaxtyping as jtyp
 import matplotlib.axis as mpl_ax
 import sympy as sp
 import sympy.physics.units as spu
+from frozendict import frozendict
 
 from blender_maxwell.utils import bl_cache, image_ops, logger, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
@@ -31,6 +32,9 @@ from ... import managed_objs, sockets
 from .. import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
 
 
 class VizMode(enum.StrEnum):
@@ -218,7 +222,7 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	input_sockets: typ.ClassVar = {
 		'Expr': sockets.ExprSocketDef(
-			active_kind=ct.FlowKind.Func,
+			active_kind=FK.Func,
 			default_symbols=[sym_x_um],
 			default_value=sp.exp(-(x_um**2)),
 		),
@@ -239,26 +243,24 @@ class VizNode(base.MaxwellSimNode):
 		socket_name={'Expr'},
 		# Loaded
 		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': ct.FlowKind.Info},
+		input_socket_kinds={'Expr': FK.Info},
 		input_sockets_optional={'Expr': True},
 		# Flow
 		## -> See docs in TransformMathNode
 		stop_propagation=True,
 	)
 	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
-		has_info = not ct.FlowSignal.check(input_sockets['Expr'])
+		has_info = not FS.check(input_sockets['Expr'])
 
-		info_pending = ct.FlowSignal.check_single(
-			input_sockets['Expr'], ct.FlowSignal.FlowPending
-		)
+		info_pending = FS.check_single(input_sockets['Expr'], FS.FlowPending)
 
 		if has_info and not info_pending:
 			self.expr_info = bl_cache.Signal.InvalidateCache
 
 	@bl_cache.cached_bl_property()
 	def expr_info(self) -> ct.InfoFlow | None:
-		info = self._compute_input('Expr', kind=ct.FlowKind.Info)
-		if not ct.FlowSignal.check(info):
+		info = self._compute_input('Expr', kind=FK.Info)
+		if not FS.check(info):
 			return info
 
 		return None
@@ -349,32 +351,28 @@ class VizNode(base.MaxwellSimNode):
 	####################
 	@events.on_value_changed(
 		# Trigger
-		socket_name='Expr',
+		socket_name={'Expr': {FK.Info, FK.Params}},
 		run_on_init=True,
 		# Loaded
-		input_sockets={'Expr'},
-		input_socket_kinds={'Expr': {ct.FlowKind.Info, ct.FlowKind.Params}},
-		input_sockets_optional={'Expr': True},
+		inscks_kinds={'Expr': {FK.Info, FK.Params}},
+		input_sockets_optional={'Expr'},
 	)
-	def on_any_changed(self, input_sockets: dict):
-		info = input_sockets['Expr'][ct.FlowKind.Info]
-		params = input_sockets['Expr'][ct.FlowKind.Params]
-
-		has_info = not ct.FlowSignal.check(info)
-		has_params = not ct.FlowSignal.check(params)
+	def on_expr_changed(self, input_sockets: dict):
+		"""Declare sockets for realizing all unknown symbols."""
+		info = input_sockets['Expr'][FK.Info]
+		params = input_sockets['Expr'][FK.Params]
 
 		# Declare Loose Sockets that Realize Symbols
 		## -> This happens if Params contains not-yet-realized symbols.
-		if has_info and has_params and params.symbols:
+		if params.symbols:
 			if set(self.loose_input_sockets) != {sym.name for sym in params.symbols}:
 				self.loose_input_sockets = {
 					sym.name: sockets.ExprSocketDef(
 						**(
 							expr_info
 							| {
-								'active_kind': ct.FlowKind.Range
-								if sym in info.dims
-								else ct.FlowKind.Value
+								'active_kind': FK.Value,
+								'use_value_range_swapper': sym in info.dims,
 							}
 						)
 					)
@@ -389,25 +387,13 @@ class VizNode(base.MaxwellSimNode):
 	#####################
 	@events.computes_output_socket(
 		'Preview',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
-		props={
-			'sim_node_name',
-			'viz_mode',
-			'viz_target',
-			'colormap',
-			'plot_width',
-			'plot_height',
-			'plot_dpi',
-		},
-		input_sockets={'Expr'},
-		input_socket_kinds={
-			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
-		},
-		all_loose_input_sockets=True,
+		props={'sim_node_name', 'expr_info'},
 	)
-	def compute_previews(self, props, input_sockets, loose_input_sockets):
+	def compute_previews(self, props):
 		"""Needed for the plot to regenerate in the viewer."""
+		# info = props['info']
 		return ct.PreviewsFlow(bl_image_name=props['sim_node_name'])
 
 	#####################
@@ -424,22 +410,19 @@ class VizNode(base.MaxwellSimNode):
 			'plot_dpi',
 		},
 		input_sockets={'Expr'},
-		input_socket_kinds={
-			'Expr': {ct.FlowKind.Func, ct.FlowKind.Info, ct.FlowKind.Params}
-		},
+		input_socket_kinds={'Expr': {FK.Func, FK.Info, FK.Params}},
 		all_loose_input_sockets=True,
-		stop_propagation=True,
 	)
 	def on_show_plot(
 		self, managed_objs, props, input_sockets, loose_input_sockets
 	) -> None:
 		log.debug('Show Plot')
-		lazy_func = input_sockets['Expr'][ct.FlowKind.Func]
-		info = input_sockets['Expr'][ct.FlowKind.Info]
-		params = input_sockets['Expr'][ct.FlowKind.Params]
+		lazy_func = input_sockets['Expr'][FK.Func]
+		info = input_sockets['Expr'][FK.Info]
+		params = input_sockets['Expr'][FK.Params]
 
-		has_info = not ct.FlowSignal.check(info)
-		has_params = not ct.FlowSignal.check(params)
+		has_info = not FS.check(info)
+		has_params = not FS.check(params)
 
 		plot = managed_objs['plot']
 		viz_mode = props['viz_mode']
@@ -452,11 +435,13 @@ class VizNode(base.MaxwellSimNode):
 			data = lazy_func.realize_as_data(
 				info,
 				params,
-				symbol_values={
-					sym: loose_input_sockets[sym.name] for sym in params.sorted_symbols
-				},
+				symbol_values=frozendict(
+					{
+						sym: loose_input_sockets[sym.name]
+						for sym in params.sorted_symbols
+					}
+				),
 			)
-			## TODO: CACHE entries that don't change, PLEASEEE
 
 			# Match Viz Type & Perform Visualization
 			## -> Viz Target determines how to plot.

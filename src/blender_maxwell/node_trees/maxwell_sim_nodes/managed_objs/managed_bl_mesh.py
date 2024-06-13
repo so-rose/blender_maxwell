@@ -18,6 +18,7 @@ import contextlib
 
 import bmesh
 import bpy
+import jax
 import numpy as np
 
 from blender_maxwell.utils import logger
@@ -127,8 +128,18 @@ class ManagedBLMesh(base.ManagedObj):
 	####################
 	# - BLMesh Management
 	####################
-	def bl_object(self, location: tuple[float, float, float] = (0, 0, 0)):
-		"""Returns the managed blender object."""
+	def bl_object(
+		self, location: np.ndarray | jax.Array | tuple[float, float, float] = (0, 0, 0)
+	):
+		"""Returns the managed blender object, centered at the given location."""
+		if isinstance(location, np.ndarray | jax.Array):
+			if isinstance(location.item(0), int):
+				center = tuple(location.astype(float).flatten().tolist())
+			else:
+				center = tuple(location.flatten().tolist())
+		else:
+			center = tuple([float(el) for el in location])
+
 		# Create Object w/Appropriate Data Block
 		if not (bl_object := bpy.data.objects.get(self.name)):
 			log.info(
@@ -143,7 +154,7 @@ class ManagedBLMesh(base.ManagedObj):
 			)
 			managed_collection().objects.link(bl_object)
 
-		for i, coord in enumerate(location):
+		for i, coord in enumerate(center):
 			if bl_object.location[i] != coord:
 				bl_object.location[i] = coord
 

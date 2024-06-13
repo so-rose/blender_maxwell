@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `Tidy3DCloudTaskBLSocket`."""
+
 import enum
 
 import bpy
@@ -29,49 +31,59 @@ from .. import base
 # - Operators
 ####################
 class ReloadFolderList(bpy.types.Operator):
+	"""Reload the list of available folders."""
+
 	bl_idname = ct.OperatorType.SocketReloadCloudFolderList
 	bl_label = 'Reload Tidy3D Folder List'
 	bl_description = 'Reload the the cached Tidy3D folder list'
 
 	@classmethod
 	def poll(cls, context):
+		"""Allow reloading the folder list when online, authenticated, and attached to a `Tidy3DCloudTask` socket."""
 		return (
 			tdcloud.IS_ONLINE
 			and tdcloud.IS_AUTHENTICATED
 			and hasattr(context, 'socket')
 			and hasattr(context.socket, 'socket_type')
-			and context.socket.socket_type == ct.SocketType.Tidy3DCloudTask
+			and context.socket.socket_type is ct.SocketType.Tidy3DCloudTask
 		)
 
 	def execute(self, context):
+		"""Update the folder list, as well as any tasks attached to any existing folder ID."""
 		bl_socket = context.socket
 
 		tdcloud.TidyCloudFolders.update_folders()
-		tdcloud.TidyCloudTasks.update_tasks(bl_socket.existing_folder_id)
-
 		bl_socket.existing_folder_id = bl_cache.Signal.ResetEnumItems
 		bl_socket.existing_folder_id = bl_cache.Signal.InvalidateCache
+
+		if bl_socket.existing_folder_id is not None:
+			tdcloud.TidyCloudTasks.update_tasks(bl_socket.existing_folder_id)
+
 		bl_socket.existing_task_id = bl_cache.Signal.ResetEnumItems
 		bl_socket.existing_task_id = bl_cache.Signal.InvalidateCache
-
 		return {'FINISHED'}
 
 
 class Authenticate(bpy.types.Operator):
+	"""Authenticate with the Tidy3D API."""
+
 	bl_idname = ct.OperatorType.SocketCloudAuthenticate
 	bl_label = 'Authenticate Tidy3D'
 	bl_description = 'Authenticate the Tidy3D Web API from a Cloud Task socket'
 
 	@classmethod
 	def poll(cls, context):
+		"""Allow authenticating when online, not authenticated, and attached to a `Tidy3DCloudTask` socket."""
 		return (
-			not tdcloud.IS_AUTHENTICATED
+			tdcloud.IS_ONLINE
+			and not tdcloud.IS_AUTHENTICATED
 			and hasattr(context, 'socket')
 			and hasattr(context.socket, 'socket_type')
-			and context.socket.socket_type == ct.SocketType.Tidy3DCloudTask
+			and context.socket.socket_type is ct.SocketType.Tidy3DCloudTask
 		)
 
 	def execute(self, context):
+		"""Try authenticating the socket with the web service."""
 		bl_socket = context.socket
 
 		if not tdcloud.check_authentication():
@@ -104,11 +116,14 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	bl_label = 'Tidy3D Cloud Task'
 
 	####################
-	# - Properties
+	# - Properties: Authentication
 	####################
 	api_key: str = bl_cache.BLField('', str_secret=True)
-	should_exist: bool = bl_cache.BLField(False)
 
+	####################
+	# - Properties: Existance
+	####################
+	should_exist: bool = bl_cache.BLField(False)
 	new_task_name: str = bl_cache.BLField('')
 
 	####################
@@ -119,10 +134,11 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	)
 
 	def search_cloud_folders(self) -> list[ct.BLEnumElement]:
+		"""Get all Tidy3D cloud folders."""
 		if tdcloud.IS_AUTHENTICATED:
 			return [
 				(
-					cloud_folder.folder_id,
+					folder_id,
 					cloud_folder.folder_name,
 					f'Folder {cloud_folder.folder_name} (ID={folder_id})',
 					'',
@@ -139,10 +155,12 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	# - Properties: Cloud Tasks
 	####################
 	existing_task_id: enum.StrEnum = bl_cache.BLField(
-		enum_cb=lambda self, _: self.search_cloud_tasks()
+		enum_cb=lambda self, _: self.search_cloud_tasks(),
+		cb_depends_on={'existing_folder_id'},
 	)
 
 	def search_cloud_tasks(self) -> list[ct.BLEnumElement]:
+		"""Retrieve all Tidy3D cloud folders from the cloud service."""
 		if self.existing_folder_id is None or not tdcloud.IS_AUTHENTICATED:
 			return []
 
@@ -200,6 +218,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	####################
 	@bl_cache.cached_bl_property(depends_on={'active_kind', 'should_exist'})
 	def capabilities(self) -> ct.CapabilitiesFlow:
+		"""Cloud task sockets are compatible by presumtion of existance."""
 		return ct.CapabilitiesFlow(
 			socket_type=self.socket_type,
 			active_kind=self.active_kind,
@@ -217,48 +236,41 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 	def value(
 		self,
 	) -> ct.NewSimCloudTask | tdcloud.CloudTask | ct.FlowSignal:
+		"""Return either the existing cloud task, or an object describing how to make it."""
 		if tdcloud.IS_AUTHENTICATED:
 			# Retrieve Folder
 			cloud_folder = tdcloud.TidyCloudFolders.folders().get(
 				self.existing_folder_id
 			)
-			if cloud_folder is None:
+			if cloud_folder is not None:
+				# Case: New Task
+				if not self.should_exist:
+					return ct.NewSimCloudTask(
+						task_name=self.new_task_name, cloud_folder=cloud_folder
+					)
+
+				# Case: Existing Task
+				if self.existing_task_id is not None:
+					cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder)[
+						self.existing_task_id
+					]
+					if cloud_task is not None:
+						return cloud_task
+			else:
 				return ct.FlowSignal.NoFlow  ## Folder deleted somewhere else
-
-			# Case: New Task
-			if not self.should_exist:
-				return ct.NewSimCloudTask(
-					task_name=self.new_task_name, cloud_folder=cloud_folder
-				)
-
-			# Case: Existing Task
-			if self.existing_task_id is not None:
-				cloud_task = tdcloud.TidyCloudTasks.tasks(cloud_folder).get(
-					self.existing_task_id
-				)
-				if cloud_folder is None:
-					return ct.FlowSignal.NoFlow  ## Task deleted somewhere else
-
-				return cloud_task
-
 		return ct.FlowSignal.FlowPending
 
 	####################
 	# - UI
 	####################
-	def draw_label_row(self, row: bpy.types.UILayout, text: str):
-		row.label(text=text)
-
-		auth_icon = 'LOCKVIEW_ON' if tdcloud.IS_AUTHENTICATED else 'LOCKVIEW_OFF'
-		row.label(text='', icon=auth_icon)
-
 	def draw_prelock(
 		self,
-		context: bpy.types.Context,
+		_: bpy.types.Context,
 		col: bpy.types.UILayout,
-		node: bpy.types.Node,
-		text: str,
+		node: bpy.types.Node,  # noqa: ARG002
+		text: str,  # noqa: ARG002
 	) -> None:
+		"""Draw a lock-immune interface for authenticating with the Tidy3D API, when the authentication is invalid."""
 		if not tdcloud.IS_AUTHENTICATED:
 			row = col.row()
 			row.alignment = 'CENTER'
@@ -274,6 +286,7 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 			)
 
 	def draw_value(self, col: bpy.types.UILayout) -> None:
+		"""When authenticated, draw the node UI."""
 		if not tdcloud.IS_AUTHENTICATED:
 			return
 
@@ -306,11 +319,14 @@ class Tidy3DCloudTaskBLSocket(base.MaxwellSimSocket):
 # - Socket Configuration
 ####################
 class Tidy3DCloudTaskSocketDef(base.SocketDef):
+	"""Declarative object guiding the creation of a `Tidy3DCloudTask` socket."""
+
 	socket_type: ct.SocketType = ct.SocketType.Tidy3DCloudTask
 
 	should_exist: bool
 
 	def init(self, bl_socket: Tidy3DCloudTaskBLSocket) -> None:
+		"""Initialize the passed socket with the properties of this object."""
 		bl_socket.should_exist = self.should_exist
 		bl_socket.use_prelock = True
 

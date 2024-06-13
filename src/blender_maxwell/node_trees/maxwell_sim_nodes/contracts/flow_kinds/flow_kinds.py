@@ -19,8 +19,8 @@ import functools
 import typing as typ
 
 from blender_maxwell.contracts import BLEnumElement
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils.staticproperty import staticproperty
 
 log = logger.get(__name__)
@@ -189,26 +189,32 @@ class FlowKind(enum.StrEnum):
 	####################
 	# - Class Methods
 	####################
-	## TODO: Remove this (only events uses it).
-	@classmethod
 	def scale_to_unit_system(
-		cls,
-		kind: typ.Self,
-		flow_obj: spux.SympyExpr,
+		self,
+		flow: typ.Any,
 		unit_system: spux.UnitSystem,
+		use_jax_array: bool = True,
 	):
-		# log.debug('%s: Scaling "%s" to Unit System', kind, str(flow_obj))
-		## TODO: Use a hot-path logger.
-		if kind == FlowKind.Value:
-			return spux.scale_to_unit_system(
-				flow_obj,
-				unit_system,
-			)
-		if kind == FlowKind.Range:
-			return flow_obj.rescale_to_unit_system(unit_system)
+		"""Perform unit-system scaling per-`FlowKind`."""
+		match self:
+			case FlowKind.Value if isinstance(spux.SympyType):
+				return spux.scale_to_unit_system(
+					flow,
+					unit_system,
+					use_jax_array=use_jax_array,
+				)
 
-		if kind == FlowKind.Params:
-			return flow_obj.rescale_to_unit_system(unit_system)
+			case FlowKind.Array | FlowKind.Range:
+				return flow.rescale_to_unit_system(unit_system)
 
-		msg = 'Tried to scale unknown kind'
+			case FlowKind.Func:
+				return flow.scale_to_unit_system(unit_system)
+
+			case FlowKind.Params:
+				return flow
+
+			case FlowKind.Info:
+				return flow.scale_to_unit_system(unit_system)
+
+		msg = f"Applying unit-system scaling to {self} doesn't make sense"
 		raise ValueError(msg)

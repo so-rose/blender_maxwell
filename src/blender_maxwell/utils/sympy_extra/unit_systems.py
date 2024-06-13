@@ -25,6 +25,7 @@ Attributes:
 import typing as typ
 
 import sympy.physics.units as spu
+from frozendict import frozendict
 
 from . import units as spux
 from .physical_type import PhysicalType as PT  # noqa: N817
@@ -33,48 +34,50 @@ from .sympy_expr import Unit
 ####################
 # - Unit System Representation
 ####################
-UnitSystem: typ.TypeAlias = dict[PT, Unit]
+UnitSystem: typ.TypeAlias = frozendict[PT, Unit]
 
 ####################
 # - Standard Unit Systems
 ####################
-UNITS_SI: UnitSystem = {
-	PT.NonPhysical: None,
-	# Global
-	PT.Time: spu.second,
-	PT.Angle: spu.radian,
-	PT.SolidAngle: spu.steradian,
-	PT.Freq: spu.hertz,
-	PT.AngFreq: spu.radian * spu.hertz,
-	# Cartesian
-	PT.Length: spu.meter,
-	PT.Area: spu.meter**2,
-	PT.Volume: spu.meter**3,
-	# Mechanical
-	PT.Vel: spu.meter / spu.second,
-	PT.Accel: spu.meter / spu.second**2,
-	PT.Mass: spu.kilogram,
-	PT.Force: spu.newton,
-	# Energy
-	PT.Work: spu.joule,
-	PT.Power: spu.watt,
-	PT.PowerFlux: spu.watt / spu.meter**2,
-	PT.Temp: spu.kelvin,
-	# Electrodynamics
-	PT.Current: spu.ampere,
-	PT.CurrentDensity: spu.ampere / spu.meter**2,
-	PT.Voltage: spu.volt,
-	PT.Capacitance: spu.farad,
-	PT.Impedance: spu.ohm,
-	PT.Conductance: spu.siemens,
-	PT.Conductivity: spu.siemens / spu.meter,
-	PT.MFlux: spu.weber,
-	PT.MFluxDensity: spu.tesla,
-	PT.Inductance: spu.henry,
-	PT.EField: spu.volt / spu.meter,
-	PT.HField: spu.ampere / spu.meter,
-	# Luminal
-	PT.LumIntensity: spu.candela,
-	PT.LumFlux: spux.lumen,
-	PT.Illuminance: spu.lux,
-}
+UNITS_SI: UnitSystem = frozendict(
+	{
+		PT.NonPhysical: None,
+		# Global
+		PT.Time: spu.second,
+		PT.Angle: spu.radian,
+		PT.SolidAngle: spu.steradian,
+		PT.Freq: spu.hertz,
+		PT.AngFreq: spu.radian * spu.hertz,
+		# Cartesian
+		PT.Length: spu.meter,
+		PT.Area: spu.meter**2,
+		PT.Volume: spu.meter**3,
+		# Mechanical
+		PT.Vel: spu.meter / spu.second,
+		PT.Accel: spu.meter / spu.second**2,
+		PT.Mass: spu.kilogram,
+		PT.Force: spu.newton,
+		# Energy
+		PT.Work: spu.joule,
+		PT.Power: spu.watt,
+		PT.PowerFlux: spu.watt / spu.meter**2,
+		PT.Temp: spu.kelvin,
+		# Electrodynamics
+		PT.Current: spu.ampere,
+		PT.CurrentDensity: spu.ampere / spu.meter**2,
+		PT.Voltage: spu.volt,
+		PT.Capacitance: spu.farad,
+		PT.Impedance: spu.ohm,
+		PT.Conductance: spu.siemens,
+		PT.Conductivity: spu.siemens / spu.meter,
+		PT.MFlux: spu.weber,
+		PT.MFluxDensity: spu.tesla,
+		PT.Inductance: spu.henry,
+		PT.EField: spu.volt / spu.meter,
+		PT.HField: spu.ampere / spu.meter,
+		# Luminal
+		PT.LumIntensity: spu.candela,
+		PT.LumFlux: spux.lumen,
+		PT.Illuminance: spu.lux,
+	}
+)

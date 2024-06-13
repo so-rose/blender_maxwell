@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `SymbolConstantNode`."""
+
 import enum
 import typing as typ
 from fractions import Fraction
@@ -32,6 +34,8 @@ log = logger.get(__name__)
 
 
 class SymbolConstantNode(base.MaxwellSimNode):
+	"""A symbol usable as itself, or as a symbol."""
+
 	node_type = ct.NodeType.SymbolConstant
 	bl_label = 'Symbol'
 
@@ -87,7 +91,7 @@ class SymbolConstantNode(base.MaxwellSimNode):
 
 		return None
 
-	@property
+	@bl_cache.cached_bl_property(depends_on={'unit'})
 	def unit_factor(self) -> spux.Unit | None:
 		"""Like `self.unit`, except `1` instead of `None` when unitless."""
 		return sp.Integer(1) if self.unit is None else self.unit
@@ -95,6 +99,8 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	####################
 	# - Domain
 	####################
+	exclude_zero: bool = bl_cache.BLField(False)
+
 	interval_finite_z: tuple[int, int] = bl_cache.BLField((0, 1))
 	interval_finite_q: tuple[tuple[int, int], tuple[int, int]] = bl_cache.BLField(
 		((0, 1), (1, 1))
@@ -146,22 +152,27 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			'preview_value_q',
 			'preview_value_re',
 			'preview_value_im',
+			'unit_factor',
 		}
 	)
-	def preview_value(
+	def preview_value_phy(
 		self,
 	) -> int | Fraction | float | complex:
 		"""Return the appropriate finite interval from the UI, as guided by `self.mathtype`."""
 		MT = spux.MathType
 		match self.mathtype:
 			case MT.Integer:
-				return self.preview_value_z
+				preview_value = sp.Integer(self.preview_value_z)
 			case MT.Rational:
-				return Fraction(*self.preview_value_q)
+				preview_value = sp.Rational(*self.preview_value_q)
 			case MT.Real:
-				return self.preview_value_re
+				preview_value = sp.Float(self.preview_value_re, 4)
 			case MT.Complex:
-				return complex(self.preview_value_re, self.preview_value_im)
+				preview_value = sp.Float(self.preview_value_re) + sp.I * sp.Float(
+					self.preview_value_im
+				)
+
+		return preview_value * self.unit_factor
 
 	@bl_cache.cached_bl_property(
 		depends_on={
@@ -179,11 +190,27 @@ class SymbolConstantNode(base.MaxwellSimNode):
 		"""Deduce the domain specified in the UI."""
 		MT = spux.MathType
 		match self.mathtype:
-			case MT.Integer | MT.Real | MT.Rational:
-				return sim_symbols.mk_interval(
-					self.interval_finite,
-					self.interval_inf,
-					self.interval_closed,
+			case MT.Integer:
+				start = (
+					self.interval_inf[0]
+					if self.interval_inf[0]
+					else self.interval_finite[0]
+				)
+				end = (
+					self.interval_inf[1]
+					if self.interval_inf[1]
+					else self.interval_finite[1]
+				)
+
+				return spux.BlessedSet(sp.Range(start, end, 1))
+
+			case MT.Real | MT.Rational:
+				return spux.BlessedSet(
+					sim_symbols.mk_interval(
+						self.interval_finite,
+						self.interval_inf,
+						self.interval_closed,
+					)
 				)
 
 			case MT.Complex:
@@ -198,7 +225,11 @@ class SymbolConstantNode(base.MaxwellSimNode):
 					self.interval_inf_im,
 					self.interval_closed_im,
 				)
-				return sp.ComplexRegion(domain_re, domain_im, polar=False)
+				return spux.BlessedSet(spux.ComplexRegion(domain_re, domain_im))
+
+	@bl_cache.cached_bl_property(depends_on={'domain'})
+	def is_nonzero(self) -> bool:
+		return 0 in self.domain
 
 	####################
 	# - Computed Properties
@@ -211,7 +242,6 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			'unit',
 			'size',
 			'domain',
-			'preview_value',
 		}
 	)
 	def symbol(self) -> sim_symbols.SimSymbol:
@@ -224,7 +254,6 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			rows=self.size.rows,
 			cols=self.size.cols,
 			domain=self.domain,
-			preview_value=self.preview_value,
 		)
 
 	####################
@@ -268,6 +297,14 @@ class SymbolConstantNode(base.MaxwellSimNode):
 			row.label(text='Domain - Closure')
 
 			row = col.row(align=True)
+			match self.mathtype:
+				case spux.MathType.Rational | spux.MathType.Real:
+					row.prop(self, self.blfields['interval_closed'], text='')
+
+				case spux.MathType.Complex:
+					row.prop(self, self.blfields['interval_closed'], text='ℝ')
+					row.prop(self, self.blfields['interval_closed_im'], text='𝕀')
+
 			if self.mathtype is spux.MathType.Complex:
 				row.prop(self, self.blfields['interval_closed'], text='ℝ')
 				row.prop(self, self.blfields['interval_closed_im'], text='𝕀')
@@ -353,7 +390,6 @@ class SymbolConstantNode(base.MaxwellSimNode):
 	)
 	def compute_info(self, props) -> typ.Any:
 		return ct.InfoFlow(
-			dims={props['symbol']: None},
 			output=props['symbol'],
 		)
 
@@ -362,14 +398,14 @@ class SymbolConstantNode(base.MaxwellSimNode):
 		'Expr',
 		kind=ct.FlowKind.Params,
 		# Loaded
-		props={'symbol'},
+		props={'symbol', 'preview_value_phy'},
 	)
 	def compute_params(self, props) -> typ.Any:
 		sym = props['symbol']
 		return ct.ParamsFlow(
-			arg_targets=[sym],
 			func_args=[sym.sp_symbol],
 			symbols={sym},
+			previewed_symbols={sym: props['preview_value_phy']},
 		)
 
 

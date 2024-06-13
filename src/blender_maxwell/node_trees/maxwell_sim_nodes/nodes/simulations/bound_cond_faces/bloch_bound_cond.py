@@ -29,6 +29,9 @@ from ... import base, events
 
 log = logger.get(__name__)
 
+FK = ct.FlowKind
+FS = ct.FlowSignal
+
 
 class BlochBoundCondNode(base.MaxwellSimNode):
 	r"""A boundary condition that declares an "infinitely repeating" window, by applying Bloch's theorem to accurately describe how a boundary would behave if it were interacting with an infinitely repeating simulation structure.
@@ -117,7 +120,7 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 	input_socket_sets: typ.ClassVar = {
 		'Naive': {},
 		'Source-Derived': {
-			'Angled Source': sockets.MaxwellSourceSocketDef(),
+			'Angled Source': sockets.MaxwellSourceSocketDef(active_kind=FK.Func),
 			## TODO: Constrain to gaussian beam, plane wafe, and tfsf
 			'Sim Domain': sockets.MaxwellSimDomainSocketDef(),
 		},
@@ -138,10 +141,20 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Draw the user interface of the node's properties.
+
+		Parameters:
+			layout: UI target for drawing.
+		"""
 		if self.active_socket_set == 'Source-Derived':
 			layout.prop(self, self.blfields['valid_sim_axis'], expand=True)
 
 	def draw_info(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Draw the user interfaces of the node's reported info.
+
+		Parameters:
+			layout: UI target for drawing.
+		"""
 		if self.active_socket_set == 'Manual':
 			box = layout.box()
 			row = box.row()
@@ -204,7 +217,7 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			'Bloch Vector': True,
 		},
 		output_sockets={'BC'},
-		output_socket_kinds={'BC': ct.FlowKind.Params},
+		output_socket_kinds={'BC': FK.Params},
 	)
 	def compute_value(
 		self, props, input_sockets, output_sockets
@@ -217,9 +230,9 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 		- **Manual**: Set the Bloch vector to the user-specified value.
 		"""
 		output_params = output_sockets['BC']
-		has_output_params = not ct.FlowSignal.check(output_params)
+		has_output_params = not FS.check(output_params)
 		if not has_output_params or (has_output_params and output_params.symbols):
-			return ct.FlowSignal.FlowPending
+			return FS.FlowPending
 
 		active_socket_set = props['active_socket_set']
 		match active_socket_set:
@@ -230,8 +243,8 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 				angled_source = input_sockets['Angled Source']
 				sim_domain = input_sockets['Sim Domain']
 
-				has_angled_source = not ct.FlowSignal.check(angled_source)
-				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+				has_angled_source = not FS.check(angled_source)
+				has_sim_domain = not FS.check(sim_domain)
 
 				if has_angled_source and has_sim_domain:
 					valid_sim_axis = props['valid_sim_axis']
@@ -241,22 +254,22 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 						axis=valid_sim_axis.axis,
 						medium=sim_domain['medium'],
 					)
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 			case 'Manual':
 				bloch_vector = input_sockets['Bloch Vector']
-				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+				has_bloch_vector = not FS.check(bloch_vector)
 
 				if has_bloch_vector:
 					return td.BlochBoundary(bloch_vec=bloch_vector)
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'BC',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'active_socket_set', 'valid_sim_axis'},
 		input_sockets={
@@ -265,29 +278,18 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 			'Bloch Vector',
 		},
 		input_socket_kinds={
-			'Angled Source': ct.FlowKind.Func,
-			'Sim Domain': ct.FlowKind.Func,
-			'Bloch Vector': ct.FlowKind.Func,
+			'Angled Source': FK.Func,
+			'Sim Domain': FK.Func,
+			'Bloch Vector': FK.Func,
 		},
-		input_sockets_optional={
-			'Angled Source': True,
-			'Sim Domain': True,
-			'Bloch Vector': True,
-		},
-		output_sockets={'BC'},
-		output_socket_kinds={'BC': ct.FlowKind.Params},
+		input_sockets_optional={'Angled Source', 'Sim Domain', 'Bloch Vector'},
 	)
-	def compute_bc_func(self, props, input_sockets, output_sockets) -> td.Absorber:
-		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
+	def compute_bc_func(self, props, input_sockets) -> td.Absorber:
+		r"""Computes the bloch boundary condition based on the active socket set.
 
 		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
 		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
-		output_params = output_sockets['BC']
-		has_output_params = not ct.FlowSignal.check(output_params)
-		if not has_output_params:
-			return ct.FlowSignal.FlowPending
-
 		active_socket_set = props['active_socket_set']
 		match active_socket_set:
 			case 'Naive':
@@ -300,8 +302,8 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 				angled_source = input_sockets['Angled Source']
 				sim_domain = input_sockets['Sim Domain']
 
-				has_angled_source = not ct.FlowSignal.check(angled_source)
-				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+				has_angled_source = not FS.check(angled_source)
+				has_sim_domain = not FS.check(sim_domain)
 
 				if has_angled_source and has_sim_domain:
 					valid_sim_axis = props['valid_sim_axis']
@@ -314,11 +316,11 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 						),
 						supports_jax=False,
 					)
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 			case 'Manual':
 				bloch_vector = input_sockets['Bloch Vector']
-				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+				has_bloch_vector = not FS.check(bloch_vector)
 
 				if has_bloch_vector:
 					return bloch_vector.compose_within(
@@ -327,33 +329,25 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 						),
 						supports_jax=False,
 					)
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'BC',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
 		props={'active_socket_set'},
-		input_sockets={
-			'Angled Source',
-			'Sim Domain',
-			'Bloch Vector',
+		inscks_kinds={
+			'Angled Source': FK.Params,
+			'Sim Domain': FK.Params,
+			'Bloch Vector': FK.Params,
 		},
-		input_socket_kinds={
-			'Angled Source': ct.FlowKind.Params,
-			'Sim Domain': ct.FlowKind.Params,
-			'Bloch Vector': ct.FlowKind.Params,
-		},
-		input_sockets_optional={
-			'Angled Source': True,
-			'Sim Domain': True,
-			'Bloch Vector': True,
-		},
+		input_sockets_optional={'Angled Source', 'Sim Domain', 'Bloch Vector'},
 	)
-	def compute_bc_params(self, props, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_bc_params(self, props, input_sockets) -> ct.ParamsFlow | FS:
+		"""Aggregate the function parameters needed by the bloch BC."""
 		active_socket_set = props['active_socket_set']
 		match active_socket_set:
 			case 'Naive':
@@ -363,20 +357,20 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 				angled_source = input_sockets['Angled Source']
 				sim_domain = input_sockets['Sim Domain']
 
-				has_angled_source = not ct.FlowSignal.check(angled_source)
-				has_sim_domain = not ct.FlowSignal.check(sim_domain)
+				has_angled_source = not FS.check(angled_source)
+				has_sim_domain = not FS.check(sim_domain)
 
 				if has_sim_domain and has_angled_source:
 					return angled_source | sim_domain
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 			case 'Manual':
 				bloch_vector = input_sockets['Bloch Vector']
-				has_bloch_vector = not ct.FlowSignal.check(bloch_vector)
+				has_bloch_vector = not FS.check(bloch_vector)
 
 				if has_bloch_vector:
 					return bloch_vector
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
 
 ####################
@@ -385,4 +379,6 @@ class BlochBoundCondNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	BlochBoundCondNode,
 ]
-BL_NODES = {ct.NodeType.BlochBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)}
+BL_NODES = {
+	ct.NodeType.BlochBoundCond: (ct.NodeCategory.MAXWELLSIM_SIMS_BOUNDCONDFACES)
+}

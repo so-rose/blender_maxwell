@@ -18,19 +18,22 @@
 
 import dataclasses
 import enum
+import functools
 import typing as typ
+from fractions import Fraction
 from pathlib import Path
 
 import jax.numpy as jnp
 import jaxtyping as jtyp
 import numpy as np
 import polars as pl
+import pydantic as pyd
 import tidy3d as td
 
 from blender_maxwell.contracts import BLEnumElement
 from blender_maxwell.services import tdcloud
+from blender_maxwell.utils import logger, sim_symbols
 from blender_maxwell.utils import sympy_extra as spux
-from blender_maxwell.utils import logger
 
 from .flow_kinds.info import InfoFlow
 
@@ -668,3 +671,56 @@ class DataFileFormat(enum.StrEnum):
 			E.Txt: True,  ## Use # Comments
 			E.TxtGz: True,  ## Same as Txt
 		}[self]
+
+
+####################
+# - Encode/Decode Metadata
+####################
+RealizationScalar: typ.TypeAlias = int | float
+Realization: typ.TypeAlias = (
+	RealizationScalar
+	| tuple[RealizationScalar, ...]
+	| tuple[tuple[RealizationScalar, ...], ...]
+)
+
+
+class SimRealizations(pyd.BaseModel):
+	"""Encodes the realized values of symbols that were used to generate a particular simulation."""
+
+	model_config = pyd.ConfigDict(frozen=True)
+
+	syms: tuple[sim_symbols.SimSymbol, ...] = ()
+	vals: tuple[Realization, ...] = ()
+
+	@pyd.model_validator(mode='after')
+	def syms_vals_eq_length(self) -> typ.Self:
+		"""Ensure that `self.syms` and `self.vals` are of equal length."""
+		if len(self.syms) != len(self.vals):
+			msg = f"'syms' and 'vals' are of differing length (syms={self.syms}, vals={self.vals})"
+			raise ValueError(msg)
+
+		return self
+
+
+class SimMetadata(pyd.BaseModel):
+	"""Encodes simulation metadata."""
+
+	model_config = pyd.ConfigDict(frozen=True)
+
+	sim_metadata_version: str = '0.1.0'
+	realizations: SimRealizations = SimRealizations()
+
+	@staticmethod
+	def from_sim(sim: td.Simulation | td.SimulationData) -> typ.Self:
+		"""Deduce simulation metadata from a simulation / simulation data."""
+		if 'sim_metadata_version' in sim.attrs:
+			## TODO: Semantic versioning comparison
+			return SimMetadata(**sim.attrs)
+		return SimMetadata()
+
+	@functools.cached_property
+	def syms_vals(
+		self,
+	) -> tuple[tuple[sim_symbols.SimSymbol, ...], tuple[Realization, ...]]:
+		"""Deduce simulation metadata from a simulation / simulation data."""
+		return (self.realizations.syms, self.realizations.vals)

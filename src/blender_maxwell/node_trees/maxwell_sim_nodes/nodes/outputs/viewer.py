@@ -104,6 +104,7 @@ class ViewerNode(base.MaxwellSimNode):
 	@events.on_value_changed(
 		# Trugger
 		socket_name='Any',
+		prop_name='auto_expr',
 		# Loaded
 		props={'auto_expr', 'console_print_kind'},
 	)
@@ -114,11 +115,7 @@ class ViewerNode(base.MaxwellSimNode):
 		This **does not** call the flow twice, as `self._compute_input()` will be cached the first time.
 		"""
 		# Invalidate PreviewsFlow
-		setattr(
-			self,
-			'input_' + ct.FlowKind.Previews.property_name,
-			bl_cache.Signal.InvalidateCache,
-		)
+		self.input_previews = bl_cache.Signal.InvalidateCache
 
 		# Invalidate PreviewsFlow
 		if props['auto_expr']:
@@ -128,35 +125,35 @@ class ViewerNode(base.MaxwellSimNode):
 				bl_cache.Signal.InvalidateCache,
 			)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_capabilities(self) -> ct.CapabilitiesFlow | None:
 		return self.get_flow(ct.FlowKind.Capabilities)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_previews(self) -> ct.PreviewsFlow | None:
 		return self.get_flow(ct.FlowKind.Previews, always_load=True)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_value(self) -> ct.ValueFlow | None:
 		return self.get_flow(ct.FlowKind.Value)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_array(self) -> ct.ArrayFlow | None:
 		return self.get_flow(ct.FlowKind.Array)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_lazy_range(self) -> ct.RangeFlow | None:
 		return self.get_flow(ct.FlowKind.Range)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_lazy_func(self) -> ct.FuncFlow | None:
 		return self.get_flow(ct.FlowKind.Func)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_params(self) -> ct.ParamsFlow | None:
 		return self.get_flow(ct.FlowKind.Params)
 
-	@bl_cache.cached_bl_property(depends_on={'auto_expr'})
+	@bl_cache.cached_bl_property()
 	def input_info(self) -> ct.InfoFlow | None:
 		return self.get_flow(ct.FlowKind.Info)
 
@@ -213,6 +210,11 @@ class ViewerNode(base.MaxwellSimNode):
 				for key, value in dict(value).items()
 				if key != 'type'
 			]
+
+		# Parse Straight String
+		if isinstance(value, str):
+			lines = value.split('\n')
+			return [[line] for line in lines]
 
 		return None
 
@@ -305,6 +307,9 @@ class ViewerNode(base.MaxwellSimNode):
 		log.info('Printing to Console')
 		if isinstance(flow, spux.SympyType):
 			console.print(sp.pretty(flow, use_unicode=True))
+		elif isinstance(flow, ct.ArrayFlow):
+			console.print(flow)
+			console.print(flow.values)
 		else:
 			console.print(flow)
 

@@ -34,6 +34,7 @@ from .bl import (
 	KeymapItemDef,
 	ManagedObjName,
 	PresetName,
+	PropName,
 	SocketName,
 )
 from .bl_types import BLEnumStrEnum
@@ -64,6 +65,7 @@ __all__ = [
 	'KeymapItemDef',
 	'ManagedObjName',
 	'PresetName',
+	'PropName',
 	'SocketName',
 	'BLEnumStrEnum',
 	'BLInstance',

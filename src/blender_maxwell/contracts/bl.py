@@ -21,8 +21,9 @@ import bpy
 ####################
 # - Blender Strings
 ####################
-BLEnumID = str
-SocketName = str
+BLEnumID: typ.TypeAlias = str
+SocketName: typ.TypeAlias = str
+PropName: typ.TypeAlias = str
 
 ####################
 # - Blender Enums

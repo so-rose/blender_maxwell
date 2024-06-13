@@ -22,14 +22,19 @@ import sympy as sp
 import sympy.physics.units as spu
 
 from blender_maxwell.assets.geonodes import GeoNodes, import_geonodes
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
 from ... import managed_objs, sockets
 from .. import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
+MT = spux.MathType
+PT = spux.PhysicalType
 
 
 class SimDomainNode(base.MaxwellSimNode):
@@ -41,24 +46,24 @@ class SimDomainNode(base.MaxwellSimNode):
 
 	input_sockets: typ.ClassVar = {
 		'Duration': sockets.ExprSocketDef(
-			physical_type=spux.PhysicalType.Time,
+			physical_type=PT.Time,
 			default_unit=spu.picosecond,
 			default_value=5,
 			abs_min=0,
 		),
 		'Center': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Length,
+			mathtype=MT.Real,
+			physical_type=PT.Length,
 			default_unit=spu.micrometer,
-			default_value=sp.Matrix([0, 0, 0]),
+			default_value=sp.ImmutableMatrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec3,
-			mathtype=spux.MathType.Real,
-			physical_type=spux.PhysicalType.Length,
+			mathtype=MT.Real,
+			physical_type=PT.Length,
 			default_unit=spu.micrometer,
-			default_value=sp.Matrix([1, 1, 1]),
+			default_value=sp.ImmutableMatrix([1, 1, 1]),
 			abs_min=0.001,
 		),
 		'Grid': sockets.MaxwellSimGridSocketDef(),
@@ -77,89 +82,75 @@ class SimDomainNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Domain',
-		kind=ct.FlowKind.Value,
+		kind=FK.Value,
 		# Loaded
-		output_sockets={'Domain'},
-		output_socket_kinds={'Domain': {ct.FlowKind.Func, ct.FlowKind.Params}},
+		outscks_kinds={
+			'Domain': {FK.Func, FK.Params},
+		},
 	)
-	def compute_domain_value(self, output_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_domain_value(self, output_sockets) -> ct.ParamsFlow | FS:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
-		output_func = output_sockets['Domain'][ct.FlowKind.Func]
-		output_params = output_sockets['Domain'][ct.FlowKind.Params]
-
-		has_output_func = not ct.FlowSignal.check(output_func)
-		has_output_params = not ct.FlowSignal.check(output_params)
-
-		if has_output_func and has_output_params and not output_params.symbols:
-			return output_func.realize(output_params)
-		return ct.FlowSignal.FlowPending
+		value = events.realize_known(output_sockets['Domain'])
+		if value is not None:
+			return value
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'Domain',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		input_sockets={'Duration', 'Center', 'Size', 'Grid', 'Ambient Medium'},
 		input_socket_kinds={
-			'Duration': ct.FlowKind.Func,
-			'Center': ct.FlowKind.Func,
-			'Size': ct.FlowKind.Func,
-			'Grid': ct.FlowKind.Func,
-			'Ambient Medium': ct.FlowKind.Func,
+			'Duration': FK.Func,
+			'Center': FK.Func,
+			'Size': FK.Func,
+			'Grid': FK.Func,
+			'Ambient Medium': FK.Func,
+		},
+		scale_input_sockets={
+			'Duration': ct.UNITS_TIDY3D,
+			'Center': ct.UNITS_TIDY3D,
+			'Size': ct.UNITS_TIDY3D,
 		},
 	)
-	def compute_domain_func(self, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_domain_func(self, input_sockets) -> ct.ParamsFlow | FS:
 		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
 		duration = input_sockets['Duration']
 		center = input_sockets['Center']
 		size = input_sockets['Size']
 		grid = input_sockets['Grid']
 		medium = input_sockets['Ambient Medium']
-
-		has_duration = not ct.FlowSignal.check(duration)
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_grid = not ct.FlowSignal.check(grid)
-		has_medium = not ct.FlowSignal.check(medium)
-
-		if has_duration and has_center and has_size and has_grid and has_medium:
-			return (
-				duration.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| center.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| size.scale_to_unit_system(ct.UNITS_TIDY3D)
-				| grid
-				| medium
-			).compose_within(
-				lambda els: {
-					'run_time': els[0],
-					'center': els[1].flatten().tolist(),
-					'size': els[2].flatten().tolist(),
-					'grid_spec': els[3],
-					'medium': els[4],
-				},
-				supports_jax=False,
-			)
-		return ct.FlowSignal.FlowPending
+		return (duration | center | size | grid | medium).compose_within(
+			lambda els: {
+				'run_time': els[0],
+				'center': els[1].flatten().tolist(),
+				'size': els[2].flatten().tolist(),
+				'grid_spec': els[3],
+				'medium': els[4],
+			},
+			supports_jax=False,
+		)
 
 	####################
 	# - FlowKind.Params
 	####################
 	@events.computes_output_socket(
 		'Domain',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
 		input_sockets={'Duration', 'Center', 'Size', 'Grid', 'Ambient Medium'},
 		input_socket_kinds={
-			'Duration': ct.FlowKind.Params,
-			'Center': ct.FlowKind.Params,
-			'Size': ct.FlowKind.Params,
-			'Grid': ct.FlowKind.Params,
-			'Ambient Medium': ct.FlowKind.Params,
+			'Duration': FK.Params,
+			'Center': FK.Params,
+			'Size': FK.Params,
+			'Grid': FK.Params,
+			'Ambient Medium': FK.Params,
 		},
 	)
-	def compute_domain_params(self, input_sockets) -> ct.ParamsFlow | ct.FlowSignal:
+	def compute_domain_params(self, input_sockets) -> ct.ParamsFlow | FS:
 		"""Compute the output `ParamsFlow` of the simulation domain from strictly non-symbolic inputs."""
 		duration = input_sockets['Duration']
 		center = input_sockets['Center']
@@ -167,22 +158,14 @@ class SimDomainNode(base.MaxwellSimNode):
 		grid = input_sockets['Grid']
 		medium = input_sockets['Ambient Medium']
 
-		has_duration = not ct.FlowSignal.check(duration)
-		has_center = not ct.FlowSignal.check(center)
-		has_size = not ct.FlowSignal.check(size)
-		has_grid = not ct.FlowSignal.check(grid)
-		has_medium = not ct.FlowSignal.check(medium)
-
-		if has_duration and has_center and has_size and has_grid and has_medium:
-			return duration | center | size | grid | medium
-		return ct.FlowSignal.FlowPending
+		return duration | center | size | grid | medium
 
 	####################
 	# - Preview
 	####################
 	@events.computes_output_socket(
 		'Domain',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
 		props={'sim_node_name'},
 	)
@@ -192,35 +175,37 @@ class SimDomainNode(base.MaxwellSimNode):
 
 	@events.on_value_changed(
 		# Trigger
-		socket_name={'Center', 'Size'},
+		socket_name={
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+		},
 		run_on_init=True,
 		# Loaded
-		input_sockets={'Center', 'Size'},
 		managed_objs={'modifier'},
-		output_sockets={'Domain'},
-		output_socket_kinds={'Domain': ct.FlowKind.Params},
+		inscks_kinds={
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_BLENDER,
+			'Size': ct.UNITS_BLENDER,
+		},
 	)
-	def on_input_changed(self, managed_objs, input_sockets, output_sockets) -> None:
+	def on_input_changed(self, managed_objs, input_sockets) -> None:
 		"""Preview the simulation domain based on input parameters, so long as they are not dependent on unrealized symbols."""
-		output_params = output_sockets['Domain']
-		center = input_sockets['Center']
+		center = events.realize_preview(input_sockets['Center'])
+		size = events.realize_preview(input_sockets['Size'])
 
-		has_output_params = not ct.FlowSignal.check(output_params)
-		has_center = not ct.FlowSignal.check(center)
-
-		if has_center and has_output_params and not output_params.symbols:
-			# Push Loose Input Values to GeoNodes Modifier
-			managed_objs['modifier'].bl_modifier(
-				'NODES',
-				{
-					'node_group': import_geonodes(GeoNodes.SimulationSimDomain),
-					'unit_system': ct.UNITS_BLENDER,
-					'inputs': {
-						'Size': input_sockets['Size'],
-					},
+		managed_objs['modifier'].bl_modifier(
+			'NODES',
+			{
+				'node_group': import_geonodes(GeoNodes.SimulationSimDomain),
+				'inputs': {
+					'Size': size,
 				},
-				location=spux.scale_to_unit_system(center, ct.UNITS_BLENDER),
-			)
+			},
+			location=center,
+		)
 
 
 ####################

@@ -18,21 +18,16 @@ from . import (
 	constants,
 	file_importers,
 	scene,
-	wave_constant,
 	web_importers,
 )
 
-# from . import file_importers
-
 BL_REGISTER = [
-	*wave_constant.BL_REGISTER,
-	*scene.BL_REGISTER,
 	*constants.BL_REGISTER,
 	*web_importers.BL_REGISTER,
 	*file_importers.BL_REGISTER,
+	*scene.BL_REGISTER,
 ]
 BL_NODES = {
-	**wave_constant.BL_NODES,
 	**scene.BL_NODES,
 	**constants.BL_NODES,
 	**web_importers.BL_NODES,

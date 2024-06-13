@@ -14,126 +14,234 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Declares `ReduceMathNode`."""
+
+import enum
 import typing as typ
 
 import bpy
+import jax
 import jax.numpy as jnp
-import sympy as sp
+import numpy as np
 
-from blender_maxwell.utils import logger
+from blender_maxwell.utils import bl_cache, logger, sim_symbols
 
 from .... import contracts as ct
-from .... import sockets
+from .... import math_system, sockets
 from ... import base, events
 
 log = logger.get(__name__)
+FK = ct.FlowKind
+FS = ct.FlowSignal
+RO = math_system.ReduceOperation
 
 
 class ReduceMathNode(base.MaxwellSimNode):
+	r"""Applies a function to the array as a whole, with arbitrary results.
+
+	The shape, type, and interpretation of the input/output data is dynamically shown.
+
+	Attributes:
+		operation: Operation to apply to the input.
+	"""
+
 	node_type = ct.NodeType.ReduceMath
 	bl_label = 'Reduce Math'
 
 	input_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
-		'Axis': sockets.IntegerNumberSocketDef(),
-	}
-	input_socket_sets: typ.ClassVar = {
-		'By Axis': {
-			'Axis': sockets.IntegerNumberSocketDef(),
-		},
-		'Expr': {
-			'Reducer': sockets.ExprSocketDef(
-				symbols=[sp.Symbol('a'), sp.Symbol('b')],
-				default_expr=sp.Symbol('a') + sp.Symbol('b'),
-			),
-			'Axis': sockets.IntegerNumberSocketDef(),
-		},
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func, show_func_ui=False),
 	}
 	output_sockets: typ.ClassVar = {
-		'Data': sockets.AnySocketDef(),
+		'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
 	}
 
 	####################
-	# - Properties
+	# - Properties: Expr InfoFlow
 	####################
-	operation: bpy.props.EnumProperty(
-		name='Op',
-		description='Operation to reduce the input axis with',
-		items=lambda self, _: self.search_operations(),
-		update=lambda self, context: self.on_prop_changed('operation', context),
+	@events.on_value_changed(
+		# Trigger
+		socket_name={'Expr': FK.Info},
+		# Loaded
+		inscks_kinds={'Expr': FK.Info},
+		input_sockets_optional={'Expr'},
+		# Flow
+		## -> Expr wants to emit DataChanged, which is usually fine.
+		## -> However, this node sets `expr_info`, which causes DC to emit.
+		## -> One action should emit one DataChanged pipe.
+		## -> Therefore, defer responsibility for DataChanged to self.expr_info.
+		# stop_propagation=True,
+	)
+	def on_input_exprs_changed(self, input_sockets) -> None:  # noqa: D102
+		has_info = not FS.check(input_sockets['Expr'])
+		info_pending = FS.check_single(input_sockets['Expr'], FS.FlowPending)
+
+		if has_info and not info_pending:
+			self.expr_info = bl_cache.Signal.InvalidateCache
+
+	@bl_cache.cached_bl_property()
+	def expr_info(self) -> ct.InfoFlow | None:
+		"""Retrieve the input expression's `InfoFlow`."""
+		info = self._compute_input('Expr', kind=FK.Info)
+		has_info = not FS.check(info)
+		if has_info:
+			return info
+
+		return None
+
+	####################
+	# - Properties: Operation
+	####################
+	operation: RO = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_operations(),
+		cb_depends_on={'expr_info'},
 	)
 
-	def search_operations(self) -> list[tuple[str, str, str]]:
-		items = []
-		if self.active_socket_set == 'By Axis':
-			items += [
-				# Accumulation
-				('SUM', 'Sum', 'sum(*, N, *) -> (*, 1, *)'),
-				('PROD', 'Prod', 'prod(*, N, *) -> (*, 1, *)'),
-				('MIN', 'Axis-Min', '(*, N, *) -> (*, 1, *)'),
-				('MAX', 'Axis-Max', '(*, N, *) -> (*, 1, *)'),
-				('P2P', 'Peak-to-Peak', '(*, N, *) -> (*, 1 *)'),
-				# Stats
-				('MEAN', 'Mean', 'mean(*, N, *) -> (*, 1, *)'),
-				('MEDIAN', 'Median', 'median(*, N, *) -> (*, 1, *)'),
-				('STDDEV', 'Std Dev', 'stddev(*, N, *) -> (*, 1, *)'),
-				('VARIANCE', 'Variance', 'var(*, N, *) -> (*, 1, *)'),
-				# Dimension Reduction
-				('SQUEEZE', 'Squeeze', '(*, 1, *) -> (*, *)'),
-			]
-		else:
-			items += [('NONE', 'None', 'No operations...')]
+	def search_operations(self) -> list[ct.BLEnumElement]:
+		"""Retrieve valid operations based on the input `InfoFlow`."""
+		if self.expr_info is not None:
+			return RO.bl_enum_elements(self.expr_info)
+		return []
 
-		return items
+	####################
+	# - Properties: Dimension Selection
+	####################
+	active_dim: enum.StrEnum = bl_cache.BLField(
+		enum_cb=lambda self, _: self.search_dims(),
+		cb_depends_on={'operation', 'expr_info'},
+	)
+
+	def search_dims(self) -> list[ct.BLEnumElement]:
+		"""Search valid dimensions for reduction."""
+		if self.expr_info is not None and self.operation is not None:
+			return [
+				(dim.name, dim.name_pretty, dim.name, '', i)
+				for i, dim in enumerate(self.operation.valid_dims(self.expr_info))
+			]
+		return []
+
+	@bl_cache.cached_bl_property(depends_on={'expr_info', 'active_dim'})
+	def dim(self) -> sim_symbols.SimSymbol | None:
+		"""Deduce the valid dimension."""
+		if self.expr_info is not None and self.active_dim is not None:
+			return self.expr_info.dim_by_name(self.active_dim, optional=True)
+		return None
+
+	@bl_cache.cached_bl_property(depends_on={'dim_0'})
+	def axis(self) -> int | None:
+		"""The first currently active axis, derived from `self.dim_0`."""
+		if self.expr_info is not None and self.dim is not None:
+			return self.expr_info.dim_axis(self.dim)
+		return None
+
+	####################
+	# - UI
+	####################
+	def draw_label(self):
+		"""Show the active reduce operation in the node's header label.
+
+		Notes:
+			Called by Blender to determine the text to place in the node's header.
+		"""
+		if self.operation is not None:
+			if self.dim is not None:
+				return self.operation.name.replace('[a]', f'[{self.dim.name_pretty}]')
+			return self.operation.name
+		return self.bl_label
 
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
-		if self.active_socket_set != 'Axis Expr':
-			layout.prop(self, 'operation')
+		"""Draw the user interfaces of the node's properties inside of the node itself.
+
+		Parameters:
+			layout: UI target for drawing.
+		"""
+		layout.prop(self, self.blfields['operation'], text='')
+		layout.prop(self, self.blfields['active_dim'], text='')
 
 	####################
-	# - Compute
+	# - Compute: Array
 	####################
 	@events.computes_output_socket(
-		'Data',
-		props={'active_socket_set', 'operation'},
-		input_sockets={'Data', 'Axis', 'Reducer'},
-		input_socket_kinds={'Reducer': ct.FlowKind.Func},
-		input_sockets_optional={'Reducer': True},
+		'Expr',
+		kind=FK.Array,
+		# Loaded
+		outscks_kinds={
+			'Expr': {FK.Func, FK.Params},
+		},
 	)
-	def compute_data(self, props: dict, input_sockets: dict):
-		if props['active_socket_set'] == 'By Axis':
-			# Simple Accumulation
-			if props['operation'] == 'SUM':
-				return jnp.sum(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'PROD':
-				return jnp.prod(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'MIN':
-				return jnp.min(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'MAX':
-				return jnp.max(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'P2P':
-				return jnp.p2p(input_sockets['Data'], axis=input_sockets['Axis'])
+	def compute_array(self, output_sockets) -> ct.ArrayFlow | FS:
+		"""Realize an `ArrayFlow` containing the array."""
+		array = events.realize_known(output_sockets['Expr'])
+		if array is not None:
+			return ct.ArrayFlow(
+				jax_bytes=(
+					array
+					if isinstance(array, np.ndarray | jax.Array)
+					else jnp.array(array)
+				),
+				unit=output_sockets['Expr'][FK.Func].func_output.unit,
+				is_sorted=True,
+			)
+		return FS.FlowPending
 
-			# Stats
-			if props['operation'] == 'MEAN':
-				return jnp.mean(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'MEDIAN':
-				return jnp.median(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'STDDEV':
-				return jnp.std(input_sockets['Data'], axis=input_sockets['Axis'])
-			if props['operation'] == 'VARIANCE':
-				return jnp.var(input_sockets['Data'], axis=input_sockets['Axis'])
+	####################
+	# - Compute: Func
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=FK.Func,
+		# Loaded
+		props={'operation'},
+		inscks_kinds={
+			'Expr': FK.Func,
+		},
+	)
+	def compute_func(self, props, input_sockets) -> ct.FuncFlow | FS:
+		"""Transform the input `FuncFlow` depending on the reduce operation."""
+		func = input_sockets['Expr']
 
-			# Dimension Reduction
-			if props['operation'] == 'SQUEEZE':
-				return jnp.squeeze(input_sockets['Data'], axis=input_sockets['Axis'])
+		operation = props['operation']
+		if operation is not None:
+			return operation.transform_func(func)
+		return FS.FlowPending
 
-		if props['active_socket_set'] == 'Expr':
-			ufunc = jnp.ufunc(input_sockets['Reducer'], nin=2, nout=1)
-			return ufunc.reduce(input_sockets['Data'], axis=input_sockets['Axis'])
+	####################
+	# - FlowKind.Info
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=FK.Info,
+		# Loaded
+		props={'operation', 'dim', 'expr_info'},
+	)
+	def compute_info(self, props) -> ct.InfoFlow | FS:
+		"""Transform the input `InfoFlow` depending on the reduce operation."""
+		info = props['expr_info']
+		dim = props['dim']
 
-		msg = 'Operation invalid'
-		raise ValueError(msg)
+		operation = props['operation']
+		if operation is not None:
+			return operation.transform_info(info, dim)
+		return FS.FlowPending
+
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=FK.Params,
+		# Loaded
+		props={'operation', 'axis'},
+		inscks_kinds={'Expr': FK.Params},
+	)
+	def compute_params(self, props, input_sockets) -> ct.ParamsFlow | FS:
+		"""Transform the input `InfoFlow` depending on the reduce operation."""
+		params = input_sockets['Expr']
+		axis = props['axis']
+
+		operation = props['operation']
+		if operation is not None and axis is not None:
+			return operation.transform_params(params, axis)
+		return FS.FlowPending
 
 
 ####################

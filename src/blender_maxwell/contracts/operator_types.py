@@ -44,6 +44,10 @@ class OperatorType(enum.StrEnum):
 	# Node: ExportDataFile
 	NodeExportDataFile = enum.auto()
 
+	# Node: PoleResidueMediumNode
+	NodeFitDispersiveMedium = enum.auto()
+	NodeReleaseDispersiveFit = enum.auto()
+
 	# Node: Tidy3DWebImporter
 	NodeLoadCloudSim = enum.auto()
 

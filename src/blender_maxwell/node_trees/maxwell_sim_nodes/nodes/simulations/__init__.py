@@ -14,21 +14,28 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# from . import sim_grid
-# from . import sim_grid_axes
-from . import combine, fdtd_sim, sim_domain
+from . import (
+	bound_cond_faces,
+	bound_conds,
+	fdtd_sim,
+	sim_domain,
+	sim_grid,
+	sim_grid_axes,
+)
 
 BL_REGISTER = [
-	*combine.BL_REGISTER,
-	*sim_domain.BL_REGISTER,
-	# *sim_grid.BL_REGISTER,
-	# *sim_grid_axes.BL_REGISTER,
 	*fdtd_sim.BL_REGISTER,
+	*sim_domain.BL_REGISTER,
+	*bound_conds.BL_REGISTER,
+	*bound_cond_faces.BL_REGISTER,
+	*sim_grid.BL_REGISTER,
+	*sim_grid_axes.BL_REGISTER,
 ]
 BL_NODES = {
-	**combine.BL_NODES,
-	**sim_domain.BL_NODES,
-	# **sim_grid.BL_NODES,
-	# **sim_grid_axes.BL_NODES,
 	**fdtd_sim.BL_NODES,
+	**sim_domain.BL_NODES,
+	**bound_conds.BL_NODES,
+	**bound_cond_faces.BL_NODES,
+	**sim_grid.BL_NODES,
+	**sim_grid_axes.BL_NODES,
 }

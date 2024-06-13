@@ -137,6 +137,23 @@ SympyExpr = typx.Annotated[
 ## TODO: The type game between SympyType, SympyExpr, and the various flavors of ConstrSympyExpr(), is starting to be a bit much. Let's consolidate.
 
 
+def SympyObj(instance_of: set[typ.Any]) -> typx.Annotated:  # noqa: N802
+	"""Declare that a sympy object guaranteed to be an instance of the given bases."""
+
+	def validate_sp_obj(sp_obj: SympyType):
+		if any(isinstance(sp_obj, Base) for Base in instance_of):
+			return sp_obj
+
+		msg = f'Sympy object {sp_obj} is not an instance of a specified valid base {instance_of}.'
+		raise ValueError(msg)
+
+	return typx.Annotated[
+		sp.Basic,
+		_SympyExpr,
+		pyd.AfterValidator(validate_sp_obj),
+	]
+
+
 def ConstrSympyExpr(  # noqa: N802, PLR0913
 	# Features
 	allow_variables: bool = True,
@@ -237,7 +254,7 @@ def ConstrSympyExpr(  # noqa: N802, PLR0913
 
 
 ####################
-# - Common ConstrSympyExpr
+# - Numbers
 ####################
 # Expression
 ScalarUnitlessRealExpr: typ.TypeAlias = ConstrSympyExpr(

@@ -17,7 +17,6 @@
 """Useful image processing operations for use in the addon."""
 
 import enum
-import functools
 import typing as typ
 
 import jax
@@ -28,10 +27,11 @@ import matplotlib.axis as mpl_ax
 import matplotlib.backends.backend_agg
 import matplotlib.figure
 import seaborn as sns
+import sympy as sp
 
 from blender_maxwell import contracts as ct
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 
 sns.set_theme()
 
@@ -138,7 +138,7 @@ def rgba_image_from_2d_map(
 ####################
 # - MPL Helpers
 ####################
-@functools.lru_cache(maxsize=4)
+# @functools.lru_cache(maxsize=4)
 def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 	fig = matplotlib.figure.Figure(
 		figsize=[width_inches, height_inches], dpi=dpi, layout='tight'
@@ -154,30 +154,51 @@ def mpl_fig_canvas_ax(width_inches: float, height_inches: float, dpi: int):
 ####################
 # - Plotters
 ####################
+def _parse_val(val):
+	return spux.sp_to_str(sp.S(val).n(2))
+
+
+def pinned_labels(pinned_data) -> str:
+	return (
+		'\n'
+		+ ', '.join(
+			[
+				f'{sym.name_pretty}:' + _parse_val(val)
+				for sym, val in pinned_data.items()
+			]
+		)
+		# + ']'
+	)
+
+
 # (ℤ) -> ℝ
 def plot_box_plot_1d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, y_sym = list(data.keys())
+	x_sym, y_sym, pinned = list(data.keys())
 
 	ax.boxplot([data[y_sym]])
-	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
+	ax.set_title(
+		f'{x_sym.name_pretty} → {y_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(y_sym.plot_label)
 
 
 def plot_bar(data, ax: mpl_ax.Axis) -> None:
-	x_sym, heights_sym = list(data.keys())
+	x_sym, heights_sym, pinned = list(data.keys())
 
 	p = ax.bar(data[x_sym], data[heights_sym])
 	ax.bar_label(p, label_type='center')
 
-	ax.set_title(f'{x_sym.name_pretty} -> {heights_sym.name_pretty}')
+	ax.set_title(
+		f'{x_sym.name_pretty} → {heights_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(heights_sym.plot_label)
 
 
 # (ℝ) -> ℝ (| sometimes complex)
 def plot_curve_2d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, y_sym = list(data.keys())
+	x_sym, y_sym, pinned = list(data.keys())
 
 	if y_sym.mathtype is spux.MathType.Complex:
 		ax.plot(data[x_sym], data[y_sym].real, label='ℝ')
@@ -185,38 +206,47 @@ def plot_curve_2d(data, ax: mpl_ax.Axis) -> None:
 		ax.legend()
 
 	ax.plot(data[x_sym], data[y_sym])
+	ax.set_title(
+		f'{x_sym.name_pretty} → {y_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(y_sym.plot_label)
 
 
 def plot_points_2d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, y_sym = list(data.keys())
+	x_sym, y_sym, pinned = list(data.keys())
 
 	ax.scatter(data[x_sym], data[y_sym])
-	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
+	ax.set_title(
+		f'{x_sym.name_pretty} → {y_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(y_sym.plot_label)
 
 
 # (ℝ, ℤ) -> ℝ
 def plot_curves_2d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, label_sym, y_sym = list(data.keys())
+	x_sym, label_sym, y_sym, pinned = list(data.keys())
 
 	for i, label in enumerate(data[label_sym]):
 		ax.plot(data[x_sym], data[y_sym][:, i], label=label)
 
-	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
+	ax.set_title(
+		f'{x_sym.name_pretty} → {y_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(y_sym.plot_label)
 	ax.legend()
 
 
 def plot_filled_curves_2d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, _, y_sym = list(data.keys(data))
+	x_sym, _, y_sym, pinned = list(data.keys(data))
 
 	ax.fill_between(data[x_sym], data[y_sym][:, 0], data[x_sym], data[y_sym][:, 1])
-	ax.set_title(f'{x_sym.name_pretty} → {y_sym.name_pretty}')
+	ax.set_title(
+		f'{x_sym.name_pretty} → {y_sym.name_pretty} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_ylabel(y_sym.plot_label)
 	ax.legend()
@@ -224,12 +254,14 @@ def plot_filled_curves_2d(data, ax: mpl_ax.Axis) -> None:
 
 # (ℝ, ℝ) -> ℝ
 def plot_heatmap_2d(data, ax: mpl_ax.Axis) -> None:
-	x_sym, y_sym, c_sym = list(data.keys())
+	x_sym, y_sym, c_sym, pinned = list(data.keys())
 
 	heatmap = ax.imshow(data[c_sym], aspect='equal', interpolation='none')
-	ax.figure.colorbar(heatmap, cax=ax)
+	# ax.figure.colorbar(heatmap, ax=ax)
 
-	ax.set_title(f'({x_sym.name_pretty}, {y_sym.name_pretty}) → {c_sym.plot_label}')
+	ax.set_title(
+		f'({x_sym.name_pretty}, {y_sym.name_pretty}) → {c_sym.plot_label} {pinned_labels(data[pinned])}'
+	)
 	ax.set_xlabel(x_sym.plot_label)
 	ax.set_xlabel(y_sym.plot_label)
 	ax.legend()

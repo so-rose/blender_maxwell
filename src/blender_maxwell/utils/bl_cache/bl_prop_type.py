@@ -582,7 +582,7 @@ class BLPropType(enum.StrEnum):
 				return str(value)
 
 			# Single Enum: Coerce to set[str]
-			case BPT.SetEnum | BPT.SetDynEnum if isinstance(value, set):
+			case BPT.SetEnum | BPT.SetDynEnum if isinstance(value, set | frozenset):
 				return {str(v) for v in value}
 
 			# BLPointer: Don't Alter
@@ -594,7 +594,7 @@ class BLPropType(enum.StrEnum):
 			case BPT.Serialized:
 				return serialize.encode(value).decode('utf-8')
 
-		msg = f'{self}: No encoder defined for argument {value}'
+		msg = f'{self}: No encoder defined for argument {value} (type={type(value)})'
 		raise NotImplementedError(msg)
 
 	####################
@@ -603,7 +603,7 @@ class BLPropType(enum.StrEnum):
 	def decode(self, raw_value: typ.Any, obj_type: type) -> typ.Any:  # noqa: PLR0911
 		"""Transform a raw value from a form read directly from the Blender property returned by `self.bl_type`, to its intended value of approximate type `obj_type`.
 
-		Notes:
+		Ntes:
 			`obj_type` is only a hint - for example, `obj_type = enum.StrEnum` is an indicator for a dynamic enum.
 			Its purpose is to guide ex. sizing and `StrEnum` coersion, not to guarantee a particular output type.
 
@@ -661,7 +661,7 @@ class BLPropType(enum.StrEnum):
 			## -> This happens independent of whether there's a enum_cb.
 			case BPT.SingleEnum if isinstance(raw_value, str):
 				return obj_type(raw_value)
-			case BPT.SetEnum if isinstance(raw_value, set):
+			case BPT.SetEnum if isinstance(raw_value, set | frozenset):
 				SubStrEnum = typ.get_args(obj_type)[0]
 				return {SubStrEnum(v) for v in raw_value}
 
@@ -670,7 +670,7 @@ class BLPropType(enum.StrEnum):
 			## -> All dynamic enums have an enum_cb, but this is merely a symptom of ^.
 			case BPT.SingleDynEnum if isinstance(raw_value, str):
 				return raw_value
-			case BPT.SetDynEnum if isinstance(raw_value, set):
+			case BPT.SetDynEnum if isinstance(raw_value, set | frozenset):
 				return raw_value
 
 			# BLPointer

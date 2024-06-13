@@ -14,217 +14,32 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import enum
-import functools
-import string
-import sys
-import typing as typ
-from fractions import Fraction
+"""Implements `SimSymbol`, a convenient representation of a symbolic variable suiteable for use when describing various mathematical and numerical interfaces."""
 
+import functools
+import random
+import typing as typ
+
+import jax
+import jax.numpy as jnp
 import jaxtyping as jtyp
+import numpy as np
 import pydantic as pyd
 import sympy as sp
+import sympy.stats as sps
+from sympy.tensor.array.expressions import ArraySymbol
 
-from . import logger, serialize
-from . import sympy_extra as spux
+from blender_maxwell.utils import logger, serialize
+from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.frozendict import frozendict
+from blender_maxwell.utils.lru_method import method_lru
 
-int_min = -(2**64)
-int_max = 2**64
-float_min = sys.float_info.min
-float_max = sys.float_info.max
+from .name import SimSymbolName
+from .utils import unicode_superscript
 
 log = logger.get(__name__)
 
-
-def unicode_superscript(n: int) -> str:
-	"""Transform an integer into its unicode-based superscript character."""
-	return ''.join(['⁰¹²³⁴⁵⁶⁷⁸⁹'[ord(c) - ord('0')] for c in str(n)])
-
-
-####################
-# - Simulation Symbol Names
-####################
-_l = ''
-_it_lower = iter(string.ascii_lowercase)
-
-
-class SimSymbolName(enum.StrEnum):
-	# Generic
-	Constant = enum.auto()
-	Expr = enum.auto()
-	Data = enum.auto()
-
-	# Ascii Letters
-	while True:
-		try:
-			globals()['_l'] = next(globals()['_it_lower'])
-		except StopIteration:
-			break
-
-		locals()[f'Lower{globals()["_l"].upper()}'] = enum.auto()
-		locals()[f'Upper{globals()["_l"].upper()}'] = enum.auto()
-
-	# Greek Letters
-	LowerTheta = enum.auto()
-	LowerPhi = enum.auto()
-
-	# EM Fields
-	Ex = enum.auto()
-	Ey = enum.auto()
-	Ez = enum.auto()
-	Hx = enum.auto()
-	Hy = enum.auto()
-	Hz = enum.auto()
-
-	Er = enum.auto()
-	Etheta = enum.auto()
-	Ephi = enum.auto()
-	Hr = enum.auto()
-	Htheta = enum.auto()
-	Hphi = enum.auto()
-
-	# Optics
-	Wavelength = enum.auto()
-	Frequency = enum.auto()
-
-	Perm = enum.auto()
-	PermXX = enum.auto()
-	PermYY = enum.auto()
-	PermZZ = enum.auto()
-
-	Flux = enum.auto()
-
-	DiffOrderX = enum.auto()
-	DiffOrderY = enum.auto()
-
-	BlochX = enum.auto()
-	BlochY = enum.auto()
-	BlochZ = enum.auto()
-
-	# New Backwards Compatible Entries
-	## -> Ordered lists carry a particular enum integer index.
-	## -> Therefore, anything but adding an index breaks backwards compat.
-	## -> ...With all previous files.
-	ConstantRange = enum.auto()
-
-	####################
-	# - UI
-	####################
-	@staticmethod
-	def to_name(v: typ.Self) -> str:
-		"""Convert the enum value to a human-friendly name.
-
-		Notes:
-			Used to print names in `EnumProperty`s based on this enum.
-
-		Returns:
-			A human-friendly name corresponding to the enum value.
-		"""
-		return SimSymbolName(v).name
-
-	@staticmethod
-	def to_icon(_: typ.Self) -> str:
-		"""Convert the enum value to a Blender icon.
-
-		Notes:
-			Used to print icons in `EnumProperty`s based on this enum.
-
-		Returns:
-			A human-friendly name corresponding to the enum value.
-		"""
-		return ''
-
-	####################
-	# - Computed Properties
-	####################
-	@property
-	def name(self) -> str:
-		SSN = SimSymbolName
-		return (
-			# Ascii Letters
-			{SSN[f'Lower{letter.upper()}']: letter for letter in string.ascii_lowercase}
-			| {
-				SSN[f'Upper{letter.upper()}']: letter.upper()
-				for letter in string.ascii_lowercase
-			}
-			| {
-				# Generic
-				SSN.Constant: 'cst',
-				SSN.ConstantRange: 'cst_range',
-				SSN.Expr: 'expr',
-				SSN.Data: 'data',
-				# Greek Letters
-				SSN.LowerTheta: 'theta',
-				SSN.LowerPhi: 'phi',
-				# Fields
-				SSN.Ex: 'Ex',
-				SSN.Ey: 'Ey',
-				SSN.Ez: 'Ez',
-				SSN.Hx: 'Hx',
-				SSN.Hy: 'Hy',
-				SSN.Hz: 'Hz',
-				SSN.Er: 'Ex',
-				SSN.Etheta: 'Ey',
-				SSN.Ephi: 'Ez',
-				SSN.Hr: 'Hx',
-				SSN.Htheta: 'Hy',
-				SSN.Hphi: 'Hz',
-				# Optics
-				SSN.Wavelength: 'wl',
-				SSN.Frequency: 'freq',
-				SSN.Perm: 'eps_r',
-				SSN.PermXX: 'eps_xx',
-				SSN.PermYY: 'eps_yy',
-				SSN.PermZZ: 'eps_zz',
-				SSN.Flux: 'flux',
-				SSN.DiffOrderX: 'order_x',
-				SSN.DiffOrderY: 'order_y',
-				SSN.BlochX: 'bloch_x',
-				SSN.BlochY: 'bloch_y',
-				SSN.BlochZ: 'bloch_z',
-			}
-		)[self]
-
-	@property
-	def name_pretty(self) -> str:
-		SSN = SimSymbolName
-		return {
-			# Generic
-			# Greek Letters
-			SSN.LowerTheta: 'θ',
-			SSN.LowerPhi: 'φ',
-			# Fields
-			SSN.Er: 'Er',
-			SSN.Etheta: 'Eθ',
-			SSN.Ephi: 'Eφ',
-			SSN.Hr: 'Hr',
-			SSN.Htheta: 'Hθ',
-			SSN.Hphi: 'Hφ',
-			# Optics
-			SSN.Wavelength: 'λ',
-			SSN.Frequency: 'fᵣ',
-			SSN.Perm: 'εᵣ',
-			SSN.PermXX: 'εᵣ[xx]',
-			SSN.PermYY: 'εᵣ[yy]',
-			SSN.PermZZ: 'εᵣ[zz]',
-		}.get(self, self.name)
-
-
-####################
-# - Simulation Symbol
-####################
-def mk_interval(
-	interval_finite: tuple[int | Fraction | float, int | Fraction | float],
-	interval_inf: tuple[bool, bool],
-	interval_closed: tuple[bool, bool],
-) -> sp.Interval:
-	"""Create a symbolic interval from the tuples (and unit) defining it."""
-	return sp.Interval(
-		start=(interval_finite[0] if not interval_inf[0] else -sp.oo),
-		end=(interval_finite[1] if not interval_inf[1] else sp.oo),
-		left_open=(True if interval_inf[0] else not interval_closed[0]),
-		right_open=(True if interval_inf[1] else not interval_closed[1]),
-	)
+MT = spux.MathType
 
 
 class SimSymbol(pyd.BaseModel):
@@ -258,93 +73,205 @@ class SimSymbol(pyd.BaseModel):
 
 	model_config = pyd.ConfigDict(frozen=True)
 
+	# Name | Type
 	sym_name: SimSymbolName
-	mathtype: spux.MathType = spux.MathType.Real
+	mathtype: MT = MT.Real
 	physical_type: spux.PhysicalType = spux.PhysicalType.NonPhysical
 
 	# Units
 	## -> 'None' indicates that no particular unit has yet been chosen.
-	## -> When 'self.physical_type' is NonPhysical, can only be None.
+	## -> When 'self.physical_type' is NonPhysical, _no unit_ can be chosen.
 	unit: spux.Unit | None = None
 
+	####################
+	# - Dimensionality
+	####################
 	# Size
-	## -> All SimSymbol sizes are "2D", but interpreted by convention.
-	## -> 1x1: "Scalar".
-	## -> nx1: "Vector".
-	## -> 1xn: "Covector".
-	## -> nxn: "Matrix".
+	## -> 1*1: "Scalar".
+	## -> n*1: "Vector".
+	## -> 1*n: "Covector".
+	## -> n*m: "Matrix".
+	## -> n*m*...: "Tensor".
 	rows: int = 1
 	cols: int = 1
-
-	# Valid Domain
-	## -> Declares the valid set of values that may be given to this symbol.
-	## -> By convention, units are not encoded in the domain sp.Set.
-	## -> 'sp.Set's are extremely expressive and cool.
-	domain: spux.SympyExpr | None = None
+	depths: tuple[int, ...] = ()
 
 	@functools.cached_property
-	def domain_mat(self) -> sp.Set | sp.matrices.MatrixSet:
-		if self.rows > 1 or self.cols > 1:
-			return sp.matrices.MatrixSet(self.rows, self.cols, self.domain)
-		return self.domain
+	def is_scalar(self) -> bool:
+		"""Whether the symbol represents a scalar."""
+		return self.rows == self.cols == 1 and self.depths == ()
 
-	preview_value: spux.SympyExpr | None = None
+	@functools.cached_property
+	def is_vector(self) -> bool:
+		"""Whether the symbol represents a (column) vector."""
+		return self.rows > 1 and self.cols == 1 and self.depths == ()
 
-	####################
-	# - Validators
-	####################
-	## TODO: Check domain against MathType
-	## -- Surprisingly hard without a lot of special-casing.
+	@functools.cached_property
+	def is_covector(self) -> bool:
+		"""Whether the symbol represents a covector."""
+		return self.rows == 1 and self.cols > 1 and self.depths == ()
 
-	## TODO: Check that size is valid for the PhysicalType.
+	@functools.cached_property
+	def is_matrix(self) -> bool:
+		"""Whether the symbol represents a matrix, which isn't better described as a scalar/vector/covector."""
+		return self.rows > 1 and self.cols > 1 and self.depths == ()
 
-	## TODO: Check that constant value (domain=FiniteSet(cst)) is compatible with the MathType.
-
-	## TODO: Check that preview_value is in the domain.
-
-	@pyd.model_validator(mode='after')
-	def set_undefined_domain_from_mathtype(self) -> typ.Self:
-		"""When the domain is not set, then set it using the symbolic set of the MathType."""
-		if self.domain is None:
-			object.__setattr__(self, 'domain', self.mathtype.symbolic_set)
-		return self
-
-	@pyd.model_validator(mode='after')
-	def conform_undefined_preview_value_to_constant(self) -> typ.Self:
-		"""When the `SimSymbol` is a constant, but the preview value is not set, then set the preview value from the constant."""
-		if self.is_constant and not self.preview_value:
-			object.__setattr__(self, 'preview_value', self.constant_value)
-		return self
-
-	@pyd.model_validator(mode='after')
-	def conform_preview_value(self) -> typ.Self:
-		"""Conform the given preview value to the `SimSymbol`."""
-		if self.is_constant and not self.preview_value:
-			object.__setattr__(
-				self,
-				'preview_value',
-				self.conform(self.preview_value, strip_units=True),
-			)
-		return self
+	@functools.cached_property
+	def is_ndim(self) -> bool:
+		"""Whether the symbol represents an n-dimensional tensor, which isn't better described as a scalar/vector/covector/matrix."""
+		return self.depths != ()
 
 	####################
 	# - Domain
 	####################
-	@functools.cached_property
-	def is_constant(self) -> bool:
-		"""When the symbol domain is a single-element `sp.FiniteSet`, then the symbol can be considered to be a constant."""
-		return isinstance(self.domain, sp.FiniteSet) and len(self.domain) == 1
+	# Representation of Valid Symbolic Domain
+	## -> Declares the valid set of values that may be given to this symbol.
+	## -> By convention, units are not encoded in the domain sp.Set.
+	## -> 'sp.Set's are extremely expressive and cool.
+	domain: spux.BlessedSet | None = None
 
 	@functools.cached_property
-	def constant_value(self) -> bool:
-		"""Get the constant when `is_constant` is True.
+	def domain_mat(self) -> sp.Set | sp.matrices.MatrixSet:
+		"""Get the domain as a `MatrixSet`, if the symbol represents a vector/covector/matrix, otherwise .
 
-		The `self.unit_factor` is multiplied onto the constant at this point.
+		Raises:
+			ValueError: If the symbol is an arbitrary n-dimensional tensor.
 		"""
-		if self.is_constant:
-			return next(iter(self.domain)) * self.unit_factor
+		if self.is_scalar:
+			return self.domain
+		if self.is_vector or self.is_covector or self.is_matrix:
+			return self.domain.bset_mat(self.rows, self.cols)
 
-		msg = 'Tried to get constant value of non-constant SimSymbol.'
+		msg = f"Can't determine set representation of arbitrary n-dimensional tensor (SimSymbol = {self})"
+		raise ValueError(msg)
+
+	####################
+	# - Stochastic Variables
+	####################
+	# Stochastic Sample Space | PDF
+	## -> When stoch_var is set, this variable should be considered stochastic.
+	## -> When stochastic, the SimSymbol must be real | unitless | [0,1] dm.
+	stoch_var: spux.SympyExpr | None = None
+	stoch_seed: int = 0
+
+	@functools.cached_property
+	def stoch_key_jax(self) -> jax._src.prng.PRNGKeyArray:
+		"""The key guaranteeing a deterministic random sample based on `self.stoch_seed`."""
+		return jax.random.key(self.stock_seed)
+
+	@functools.cached_property
+	def sample_space(self) -> sp.Set | None:
+		"""The space of valid inputs to the PDF."""
+		return self.stoch_var.pspace.set
+
+	@functools.cached_property
+	def pdf(self) -> spux.SympyExpr | None:
+		"""The expression of probability density function.
+
+		When `self.sample_space` is `None`, then this too returns `None`, since the symbol is not stochastic (and therefore has no "measurable space").
+		"""
+		if self.stoch_var is not None:
+			return self.stoch_var.pspace.pdf
+		return None
+
+	@functools.cached_property
+	def cdf(self) -> spux.SympyExpr | None:
+		"""The expression of cumulative distribution function."""
+		if self.stoch_var is not None:
+			return sps.cdf(self.stoch_var)
+		return None
+
+	@functools.cached_property
+	def pdf_jax(self) -> typ.Callable[[jax.Array], jax.Array] | None:
+		"""The stochastic PDF as a `jax`-registered function."""
+		if self.stoch_var is not None:
+			return sp.lambdify(self.stoch_var, self.pdf, 'jax')
+		return None
+
+	@method_lru()
+	def sample_np(self, repeat: int = 1) -> typ.Callable[[jax.Array], jax.Array] | None:
+		"""Sample the stochastic variable `repeat` times, using 'numpy'."""
+		if self.stoch_var is not None:
+			sample_shape = (*self.shape, repeat)
+			return sps.sample(self.stoch_var, size=sample_shape, library='numpy')
+		return None
+
+	@method_lru()
+	def sample_jax(
+		self, repeat: int = 1
+	) -> typ.Callable[[jax.Array], jax.Array] | None:
+		"""Sample the stochastic variable `repeat` times, using 'jax'.
+
+		For now, this cannot be used in `@jit`, since it merely converts the output of `sample_np`.
+		In the long run, we'll need a way of directly sampling `sympy` stochastic variables with `jax` functions
+		"""
+		if self.stoch_var is not None:
+			return jnp.array(self.sample_np(repeat))
+		return None
+
+	# TODO: 'Ecosystem'!
+	## -- Ideally we'd expand sympy.stats.sample to support 'jax' directly.
+	## -- 'None' dims in InfoFlow would mean either cont. or stochastic.
+	## -- Stochastic dims would be realized w/integer n argument.
+	## -- I suppose a dedicated 'stochastic symbol' node would be warranted.
+	## -- With a nice dropdown for cool distributions and cool jazz.
+
+	####################
+	# - Validators: Stochastic Variable
+	####################
+	@pyd.model_validator(mode='after')
+	def randomize_stochvar_key(self) -> typ.Self:
+		"""Select a random integer value for the stochastic seed.
+
+		Repeated calls to `self.sample_jax()`
+		"""
+		if self.stoch_var is not None:
+			self.stoch_seed = random.randint(0, 2**32)
+		return self
+
+	@pyd.model_validator(mode='after')
+	def set_stochvar_output_space_to_domain(self) -> typ.Self:
+		"""When the symbol is stochastic, set `self.domain` to the range of the stochastic variable's probability density function.
+
+		All PDFs are real, unitless values defined on the closed interval `[0,1]`.
+		Therefore, the symbol itself must conform to these preconditions.
+		"""
+		if self.stoch_var is not None:
+			if (
+				self.domain is None
+				and self.physical_type is spux.PhysicalType.NonPhysical
+				and self.unit is None
+			):
+				object.__setattr__(self, 'domain', spux.BlessedSet(sp.Interval(0, 1)))
+			else:
+				msg = 'Stochastic variables must be unitless'
+				raise ValueError(msg)
+		return self
+
+	####################
+	# - Validators: Set Domain
+	####################
+	@pyd.model_validator(mode='after')
+	def set_undefined_domain_from_mathtype(self) -> typ.Self:
+		"""When the domain is not set, then set it using the symbolic set of the MathType."""
+		if self.domain is None:
+			object.__setattr__(
+				self, 'domain', spux.BlessedSet(self.mathtype.symbolic_set)
+			)
+		return self
+
+	####################
+	# - Validators: Asserters
+	####################
+	@pyd.model_validator(mode='after')
+	def assert_domain_in_mathtype_set(self) -> typ.Self:
+		"""Verify that the domain is a (non-strict) subset of the MathType."""
+		if self.domain.bset is sp.EmptySet or self.domain.bset.issubset(
+			self.mathtype.symbolic_set
+		):
+			return self
+
+		msg = f'Domain {self.domain} is not in the mathtype {self.mathtype}'
 		raise ValueError(msg)
 
 	@functools.cached_property
@@ -422,12 +349,14 @@ class SimSymbol(pyd.BaseModel):
 	@functools.cached_property
 	def size(self) -> spux.NumberSize1D | None:
 		"""The 1D number size of this `SimSymbol`, if it has one; else None."""
-		return {
-			(1, 1): spux.NumberSize1D.Scalar,
-			(2, 1): spux.NumberSize1D.Vec2,
-			(3, 1): spux.NumberSize1D.Vec3,
-			(4, 1): spux.NumberSize1D.Vec4,
-		}.get((self.rows, self.cols))
+		if self.depths == ():
+			return {
+				(1, 1): spux.NumberSize1D.Scalar,
+				(2, 1): spux.NumberSize1D.Vec2,
+				(3, 1): spux.NumberSize1D.Vec3,
+				(4, 1): spux.NumberSize1D.Vec4,
+			}.get((self.rows, self.cols))
+		return None
 
 	@functools.cached_property
 	def shape(self) -> tuple[int, ...]:
@@ -437,13 +366,16 @@ class SimSymbol(pyd.BaseModel):
 
 		Is never `None`; instead, empty tuple `()` is used.
 		"""
-		match (self.rows, self.cols):
-			case (1, 1):
-				return ()
-			case (_, 1):
-				return (self.rows,)
-			case (_, _):
-				return (self.rows, self.cols)
+		if self.depths == ():
+			match (self.rows, self.cols):
+				case (1, 1):
+					return ()
+				case (_, 1):
+					return (self.rows,)
+				case (_, _):
+					return (self.rows, self.cols)
+
+		return (self.rows, self.cols, *self.depths)
 
 	@functools.cached_property
 	def shape_len(self) -> spux.SympyExpr:
@@ -471,13 +403,13 @@ class SimSymbol(pyd.BaseModel):
 		# MathType Assumption
 		mathtype_kwargs = {}
 		match self.mathtype:
-			case spux.MathType.Integer:
+			case MT.Integer:
 				mathtype_kwargs |= {'integer': True}
-			case spux.MathType.Rational:
+			case MT.Rational:
 				mathtype_kwargs |= {'rational': True}
-			case spux.MathType.Real:
+			case MT.Real:
 				mathtype_kwargs |= {'real': True}
-			case spux.MathType.Complex:
+			case MT.Complex:
 				mathtype_kwargs |= {'complex': True}
 
 		# Non-Zero Assumption
@@ -485,28 +417,38 @@ class SimSymbol(pyd.BaseModel):
 			mathtype_kwargs |= {'nonzero': True}
 
 		# Positive/Negative Assumption
-		if self.mathtype is not spux.MathType.Complex:
-			if self.domain.inf >= 0:
+		if self.mathtype is not MT.Complex:
+			has_pos = self.domain & sp.Interval.open(0, sp.oo) is not sp.EmptySet
+			has_neg = self.domain & sp.Interval.open(0, sp.oo) is not sp.EmptySet
+			if has_pos and not has_neg:
 				mathtype_kwargs |= {'positive': True}
-			elif self.domain.sup < 0:
+			if has_neg and not has_pos:
 				mathtype_kwargs |= {'negative': True}
 
 		# Scalar: Return Symbol
-		if self.rows == 1 and self.cols == 1:
+		if self.is_scalar:
 			return sp.Symbol(self.sym_name.name, **mathtype_kwargs)
 
 		# Vector|Matrix: Return Matrix of Symbols
 		## -> MatrixSymbol doesn't support assumptions.
 		## -> This little construction does.
-		return sp.ImmutableMatrix(
-			[
+		if not self.is_ndim:
+			return sp.ImmutableMatrix(
 				[
-					sp.Symbol(self.sym_name.name + f'_{row}{col}', **mathtype_kwargs)
-					for col in range(self.cols)
+					[
+						sp.Symbol(
+							self.sym_name.name + f'_{row}{col}', **mathtype_kwargs
+						)
+						for col in range(self.cols)
+					]
+					for row in range(self.rows)
 				]
-				for row in range(self.rows)
-			]
-		)
+			)
+
+		# Arbitrary Tensor: Just Return Symbol
+		## -> Maybe we'll do the other stuff later to keep assumptions.
+		## -> Maybe we'll retire matrix-of-symbol entirely instead.
+		return self.sp_symbol_matsym
 
 	@functools.cached_property
 	def sp_symbol_matsym(self) -> sp.Symbol | sp.MatrixSymbol:
@@ -525,7 +467,9 @@ class SimSymbol(pyd.BaseModel):
 		"""
 		if self.shape_len == 0:
 			return self.sp_symbol
-		return sp.MatrixSymbol(self.sym_name.name, self.rows, self.cols)
+		if self.depths == ():
+			return sp.MatrixSymbol(self.sym_name.name, self.rows, self.cols)
+		return ArraySymbol(self.sym_name.name, self.shape)
 
 	@functools.cached_property
 	def sp_symbol_phy(self) -> spux.SympyExpr:
@@ -545,7 +489,9 @@ class SimSymbol(pyd.BaseModel):
 			Since `ExprSocketDef` allows the use of infinite bounds for `default_min` and `default_max`, we defer the decision of how to treat finite-fallback to the `ExprSocketDef`.
 		"""
 		if self.size is not None:
-			if self.unit in self.physical_type.valid_units:
+			if self.unit in self.physical_type.valid_units or (
+				self.unit is None and self.physical_type is None
+			):
 				socket_info = {
 					'output_name': self.sym_name,
 					# Socket Interface
@@ -555,27 +501,29 @@ class SimSymbol(pyd.BaseModel):
 					# Defaults: Units
 					'default_unit': self.unit,
 					'default_symbols': [],
+					'exclude_zero': 0 not in self.domain,
+					# Domain Info
+					'abs_min': self.domain.inf,
+					'abs_max': self.domain.sup,
+					'abs_min_closed': self.domain.min_closed,
+					'abs_max_closed': self.domain.max_closed,
 				}
 
-				# Defaults: FlowKind.Value
-				if self.preview_value:
+				# Complex Domain: Closure of Imaginary Axis
+				if self.mathtype is MT.Complex:
 					socket_info |= {
-						'default_value': self.conform(
-							self.preview_value, strip_unit=True
-						)
+						'abs_min_closed_im': self.domain.min_closed_im,
+						'abs_max_closed_im': self.domain.min_closed_im,
 					}
 
-				# Defaults: FlowKind.Range
-				if (
-					self.mathtype is not spux.MathType.Complex
-					and self.rows == 1
-					and self.cols == 1
-				):
+				# FlowKind.Range: Min/Max
+				if self.mathtype is not MT.Complex and self.shape_len == 0:
 					socket_info |= {
 						'default_min': self.domain.inf,
 						'default_max': self.domain.sup,
 					}
-					## TODO: Handle discontinuities / disjointness / open boundaries.
+
+				return socket_info
 
 			msg = f'Tried to generate an ExprSocket from a SymSymbol "{self.name}", but its unit ({self.unit}) is not a valid unit of its physical type ({self.physical_type}) (SimSymbol={self})'
 			raise NotImplementedError(msg)
@@ -586,8 +534,8 @@ class SimSymbol(pyd.BaseModel):
 	####################
 	# - Operations: Raw Update
 	####################
-	def update(self, **kwargs) -> typ.Self:
-		"""Create a new `SimSymbol`, such that the given keyword arguments override the existing values."""
+	@method_lru()
+	def _update(self, kwargs: frozendict) -> typ.Self:
 		if not kwargs:
 			return self
 
@@ -607,9 +555,29 @@ class SimSymbol(pyd.BaseModel):
 			domain=get_attr('domain'),
 		)
 
+	def update(self, **kwargs) -> typ.Self:
+		"""Create a new `SimSymbol`, such that the given keyword arguments override the existing values."""
+		return self._update(frozendict(kwargs))
+
+	@method_lru(maxsize=512)
+	def scale_to_unit_system(self, unit_system: spux.UnitSystem | None) -> typ.Self:
+		"""Compute the SimSymbol resulting from the unit system conversion."""
+		if self.unit is not None:
+			new_unit = spux.convert_to_unit_system(self.unit, unit_system)
+
+			scaling_factor = spux.convert_to_unit_system(
+				self.unit, unit_system, strip_units=True
+			)
+			return self.update(
+				unit=new_unit,
+				domain=self.domain * scaling_factor,
+			)
+		return self
+
 	####################
 	# - Operations: Comparison
 	####################
+	@method_lru(maxsize=256)
 	def compare(self, other: typ.Self) -> typ.Self:
 		"""Whether this SimSymbol can be considered equivalent to another, and thus universally usable in arbitrary mathematical operations together.
 
@@ -626,36 +594,44 @@ class SimSymbol(pyd.BaseModel):
 			and self.domain == other.domain
 		)
 
+	@method_lru(maxsize=256)
 	def compare_size(self, other: typ.Self) -> typ.Self:
 		"""Compare the size of this `SimSymbol` with another."""
-		return self.rows == other.rows and self.cols == other.cols
+		return (
+			self.rows == other.rows
+			and self.cols == other.cols
+			and self.depths == other.depths
+		)
 
+	@method_lru(maxsize=256)
 	def compare_addable(
 		self, other: typ.Self, allow_differing_unit: bool = False
 	) -> bool:
 		"""Whether two `SimSymbol`s can be added."""
 		common = (
-			self.compare_size(other.output)
+			self.compare_size(other)
 			and self.physical_type is other.physical_type
 			and not (
-				self.physical_type is spux.NonPhysical
+				self.physical_type is spux.PhysicalType.NonPhysical
 				and self.unit is not None
 				and self.unit != other.unit
 			)
 			and not (
-				other.physical_type is spux.NonPhysical
+				other.physical_type is spux.PhysicalType.NonPhysical
 				and other.unit is not None
 				and self.unit != other.unit
 			)
 		)
 		if not allow_differing_unit:
-			return common and self.output.unit == other.output.unit
+			return common and self.unit == other.unit
 		return common
 
+	@method_lru(maxsize=256)
 	def compare_multiplicable(self, other: typ.Self) -> bool:
 		"""Whether two `SimSymbol`s can be multiplied."""
-		return self.shape_len == 0 or self.compare_size(other)
+		return self.shape_len == 0 or other.shape_len == 0 or self.compare_size(other)
 
+	@method_lru(maxsize=256)
 	def compare_exponentiable(self, other: typ.Self) -> bool:
 		"""Whether two `SimSymbol`s can be exponentiated.
 
@@ -673,34 +649,10 @@ class SimSymbol(pyd.BaseModel):
 		)
 
 	####################
-	# - Operations: Copying Setters
-	####################
-	def set_constant(self, constant_value: spux.SympyType) -> typ.Self:
-		"""Set the constant value of this `SimSymbol`, by setting it as the only value in a `sp.FiniteSet` domain.
-
-		The `constant_value` will be conformed and stripped (with `self.conform()`) before being injected into the new `sp.FiniteSet` domain.
-
-		Warnings:
-			Keep in mind that domains do not encode units, for practical reasons related to the diverging ways in which various `sp.Set` subclasses interpret units.
-
-			This isn't noticeable in normal constant-symbol workflows, where the constant is retrieved using `self.constant_value` (which adds `self.unit_factor`).
-			However, **remember that retrieving the domain directly won't add the unit**.
-
-			Ye been warned!
-		"""
-		if self.is_constant:
-			return self.update(
-				domain=sp.FiniteSet(self.conform(constant_value, strip_unit=True))
-			)
-
-		msg = 'Tried to set constant value of non-constant SimSymbol.'
-		raise ValueError(msg)
-
-	####################
 	# - Operations: Conforming Mappers
 	####################
 	def conform(
-		self, sp_obj: spux.SympyType, strip_unit: bool = False
+		self, obj: np.ndarray | jax.Array | spux.SympyType, strip_unit: bool = False
 	) -> spux.SympyType:
 		"""Conform a sympy object to the properties of this `SimSymbol`, if possible.
 
@@ -715,30 +667,41 @@ class SimSymbol(pyd.BaseModel):
 		Raises:
 			ValueError: If the units of `sp_obj` can't be cleanly converted to `self.unit`.
 		"""
-		res = sp_obj
+		if isinstance(obj, np.ndarray | jax.Array):
+			if obj.shape == ():  # noqa: SIM108
+				res = sp.S(obj.item(0))
+			else:
+				res = sp.S(np.array(obj))
+		else:
+			res = sp.S(obj)
 
 		# Unit Conversion
-		match (spux.uses_units(sp_obj), self.unit is not None):
+		match (spux.uses_units(res), self.unit is not None):
 			case (True, True):
-				res = spux.scale_to_unit(sp_obj, self.unit) * self.unit
+				res = spux.scale_to_unit(res, self.unit) * self.unit
 
 			case (False, True):
-				res = sp_obj * self.unit
+				res = res * self.unit
 
 			case (True, False):
-				res = spux.strip_unit_system(sp_obj)
+				res = spux.strip_unit_system(res)
 
 		if strip_unit:
-			res = spux.strip_unit_system(sp_obj)
+			res = spux.strip_unit_system(res)
 
 		# Broadcast Expansion
-		if (self.rows > 1 or self.cols > 1) and not isinstance(
-			res, sp.MatrixBase | sp.MatrixSymbol
+		if (
+			self.depths == ()
+			and (self.rows > 1 or self.cols > 1)
+			and not isinstance(res, sp.MatrixBase | sp.MatrixSymbol)
 		):
-			res = res * sp.ImmutableMatrix.ones(self.rows, self.cols)
+			res = sp.ImmutableMatrix.ones(self.rows, self.cols).applyfunc(
+				lambda el: 5 * el
+			)
 
 		return res
 
+	@method_lru(maxsize=256)
 	def scale(
 		self, sp_obj: spux.SympyType, use_jax_array: bool = True
 	) -> int | float | complex | jtyp.Inexact[jtyp.Array, '...']:
@@ -769,12 +732,13 @@ class SimSymbol(pyd.BaseModel):
 	####################
 	# - Creation
 	####################
+	@functools.lru_cache(maxsize=512)
 	@staticmethod
 	def from_expr(
 		sym_name: SimSymbolName,
 		expr: spux.SympyExpr,
 		unit_expr: spux.SympyExpr,
-		is_constant: bool = False,
+		new_domain: spux.BlessedSet | None = None,
 		optional: bool = False,
 	) -> typ.Self | None:
 		"""Deduce a `SimSymbol` that matches the output of a given expression (and unit expression).
@@ -802,7 +766,7 @@ class SimSymbol(pyd.BaseModel):
 		# MathType from Expr Assumptions
 		## -> All input symbols have assumptions, because we are very pedantic.
 		## -> Therefore, we should be able to reconstruct the MathType.
-		mathtype = spux.MathType.from_expr(expr, optional=optional)
+		mathtype = MT.from_expr(expr, optional=optional)
 		if mathtype is None:
 			return None
 
@@ -830,6 +794,13 @@ class SimSymbol(pyd.BaseModel):
 			expr.shape if isinstance(expr, sp.MatrixBase | sp.MatrixSymbol) else (1, 1)
 		)
 
+		# Set Domain
+		domain = (
+			new_domain
+			if new_domain is not None
+			else spux.BlessedSet(mathtype.symbolic_set)
+		)
+
 		return SimSymbol(
 			sym_name=sym_name,
 			mathtype=mathtype,
@@ -837,8 +808,11 @@ class SimSymbol(pyd.BaseModel):
 			unit=unit,
 			rows=rows,
 			cols=cols,
-			is_constant=is_constant,
-			exclude_zero=expr.is_zero is not None and not expr.is_zero,
+			domain=(
+				domain - sp.FiniteSet(0)
+				if expr.is_zero is not None and not expr.is_zero
+				else domain
+			),
 		)
 
 	####################
@@ -873,266 +847,3 @@ class SimSymbol(pyd.BaseModel):
 			A new instance of `SimSymbol`, initialized using the `model_dump()` dictionary.
 		"""
 		return SimSymbol(**obj[2])
-
-
-####################
-# - Common Sim Symbols
-####################
-class CommonSimSymbol(enum.StrEnum):
-	"""Identifiers for commonly used `SimSymbol`s, with all information about ex. `MathType`, `PhysicalType`, and (in general) valid intervals all pre-loaded.
-
-	The enum is UI-compatible making it easy to declare a UI-driven dropdown of commonly used symbols that will all behave as expected.
-
-	Attributes:
-		X:
-		Time: A symbol representing a real-valued wavelength.
-		Wavelength: A symbol representing a real-valued wavelength.
-			Implicitly, this symbol often represents "vacuum wavelength" in particular.
-		Wavelength: A symbol representing a real-valued frequency.
-			Generally, this is the non-angular frequency.
-	"""
-
-	Index = enum.auto()
-
-	# Space|Time
-	SpaceX = enum.auto()
-	SpaceY = enum.auto()
-	SpaceZ = enum.auto()
-
-	AngR = enum.auto()
-	AngTheta = enum.auto()
-	AngPhi = enum.auto()
-
-	DirX = enum.auto()
-	DirY = enum.auto()
-	DirZ = enum.auto()
-
-	Time = enum.auto()
-
-	# Fields
-	FieldEx = enum.auto()
-	FieldEy = enum.auto()
-	FieldEz = enum.auto()
-	FieldHx = enum.auto()
-	FieldHy = enum.auto()
-	FieldHz = enum.auto()
-
-	FieldEr = enum.auto()
-	FieldEtheta = enum.auto()
-	FieldEphi = enum.auto()
-	FieldHr = enum.auto()
-	FieldHtheta = enum.auto()
-	FieldHphi = enum.auto()
-
-	# Optics
-	Wavelength = enum.auto()
-	Frequency = enum.auto()
-
-	Flux = enum.auto()
-
-	DiffOrderX = enum.auto()
-	DiffOrderY = enum.auto()
-
-	####################
-	# - UI
-	####################
-	@staticmethod
-	def to_name(v: typ.Self) -> str:
-		"""Convert the enum value to a human-friendly name.
-
-		Notes:
-			Used to print names in `EnumProperty`s based on this enum.
-
-		Returns:
-			A human-friendly name corresponding to the enum value.
-		"""
-		return CommonSimSymbol(v).name
-
-	@staticmethod
-	def to_icon(_: typ.Self) -> str:
-		"""Convert the enum value to a Blender icon.
-
-		Notes:
-			Used to print icons in `EnumProperty`s based on this enum.
-
-		Returns:
-			A human-friendly name corresponding to the enum value.
-		"""
-		return ''
-
-	####################
-	# - Properties
-	####################
-	@property
-	def name(self) -> str:
-		SSN = SimSymbolName
-		CSS = CommonSimSymbol
-		return {
-			CSS.Index: SSN.LowerI,
-			# Space|Time
-			CSS.SpaceX: SSN.LowerX,
-			CSS.SpaceY: SSN.LowerY,
-			CSS.SpaceZ: SSN.LowerZ,
-			CSS.AngR: SSN.LowerR,
-			CSS.AngTheta: SSN.LowerTheta,
-			CSS.AngPhi: SSN.LowerPhi,
-			CSS.DirX: SSN.LowerX,
-			CSS.DirY: SSN.LowerY,
-			CSS.DirZ: SSN.LowerZ,
-			CSS.Time: SSN.LowerT,
-			# Fields
-			CSS.FieldEx: SSN.Ex,
-			CSS.FieldEy: SSN.Ey,
-			CSS.FieldEz: SSN.Ez,
-			CSS.FieldHx: SSN.Hx,
-			CSS.FieldHy: SSN.Hy,
-			CSS.FieldHz: SSN.Hz,
-			CSS.FieldEr: SSN.Er,
-			CSS.FieldHr: SSN.Hr,
-			# Optics
-			CSS.Frequency: SSN.Frequency,
-			CSS.Wavelength: SSN.Wavelength,
-			CSS.DiffOrderX: SSN.DiffOrderX,
-			CSS.DiffOrderY: SSN.DiffOrderY,
-		}[self]
-
-	def sim_symbol(self, unit: spux.Unit | None) -> SimSymbol:
-		"""Retrieve the `SimSymbol` associated with the `CommonSimSymbol`."""
-		CSS = CommonSimSymbol
-
-		# Space
-		sym_space = SimSymbol(
-			sym_name=self.name,
-			physical_type=spux.PhysicalType.Length,
-			unit=unit,
-		)
-		sym_ang = SimSymbol(
-			sym_name=self.name,
-			physical_type=spux.PhysicalType.Angle,
-			unit=unit,
-		)
-
-		# Fields
-		def sym_field(eh: typ.Literal['e', 'h']) -> SimSymbol:
-			return SimSymbol(
-				sym_name=self.name,
-				physical_type=spux.PhysicalType.EField
-				if eh == 'e'
-				else spux.PhysicalType.HField,
-				unit=unit,
-				interval_finite_re=(0, float_max),
-				interval_inf_re=(False, True),
-				interval_closed_re=(True, False),
-				interval_finite_im=(float_min, float_max),
-				interval_inf_im=(True, True),
-			)
-
-		return {
-			CSS.Index: SimSymbol(
-				sym_name=self.name,
-				mathtype=spux.MathType.Integer,
-				interval_finite_z=(0, 2**64),
-				interval_inf=(False, True),
-				interval_closed=(True, False),
-			),
-			# Space|Time
-			CSS.SpaceX: sym_space,
-			CSS.SpaceY: sym_space,
-			CSS.SpaceZ: sym_space,
-			CSS.AngR: sym_space,
-			CSS.AngTheta: sym_ang,
-			CSS.AngPhi: sym_ang,
-			CSS.Time: SimSymbol(
-				sym_name=self.name,
-				physical_type=spux.PhysicalType.Time,
-				unit=unit,
-				interval_finite_re=(0, float_max),
-				interval_inf=(False, True),
-				interval_closed=(True, False),
-			),
-			# Fields
-			CSS.FieldEx: sym_field('e'),
-			CSS.FieldEy: sym_field('e'),
-			CSS.FieldEz: sym_field('e'),
-			CSS.FieldHx: sym_field('h'),
-			CSS.FieldHy: sym_field('h'),
-			CSS.FieldHz: sym_field('h'),
-			CSS.FieldEr: sym_field('e'),
-			CSS.FieldEtheta: sym_field('e'),
-			CSS.FieldEphi: sym_field('e'),
-			CSS.FieldHr: sym_field('h'),
-			CSS.FieldHtheta: sym_field('h'),
-			CSS.FieldHphi: sym_field('h'),
-			# Optics
-			CSS.Wavelength: SimSymbol(
-				sym_name=self.name,
-				mathtype=spux.MathType.Real,
-				physical_type=spux.PhysicalType.Length,
-				unit=unit,
-				interval_finite=(0, float_max),
-				interval_inf=(False, True),
-				interval_closed=(False, False),
-			),
-			CSS.Frequency: SimSymbol(
-				sym_name=self.name,
-				mathtype=spux.MathType.Real,
-				physical_type=spux.PhysicalType.Freq,
-				unit=unit,
-				interval_finite=(0, float_max),
-				interval_inf=(False, True),
-				interval_closed=(False, False),
-			),
-			CSS.Flux: SimSymbol(
-				sym_name=SimSymbolName.Flux,
-				mathtype=spux.MathType.Real,
-				physical_type=spux.PhysicalType.Power,
-				unit=unit,
-			),
-			CSS.DiffOrderX: SimSymbol(
-				sym_name=self.name,
-				mathtype=spux.MathType.Integer,
-				interval_finite=(int_min, int_max),
-				interval_inf=(True, True),
-				interval_closed=(False, False),
-			),
-			CSS.DiffOrderY: SimSymbol(
-				sym_name=self.name,
-				mathtype=spux.MathType.Integer,
-				interval_finite=(int_min, int_max),
-				interval_inf=(True, True),
-				interval_closed=(False, False),
-			),
-		}[self]
-
-
-####################
-# - Selected Direct-Access to SimSymbols
-####################
-idx = CommonSimSymbol.Index.sim_symbol
-t = CommonSimSymbol.Time.sim_symbol
-wl = CommonSimSymbol.Wavelength.sim_symbol
-freq = CommonSimSymbol.Frequency.sim_symbol
-
-space_x = CommonSimSymbol.SpaceX.sim_symbol
-space_y = CommonSimSymbol.SpaceY.sim_symbol
-space_z = CommonSimSymbol.SpaceZ.sim_symbol
-
-dir_x = CommonSimSymbol.DirX.sim_symbol
-dir_y = CommonSimSymbol.DirY.sim_symbol
-dir_z = CommonSimSymbol.DirZ.sim_symbol
-
-ang_r = CommonSimSymbol.AngR.sim_symbol
-ang_theta = CommonSimSymbol.AngTheta.sim_symbol
-ang_phi = CommonSimSymbol.AngPhi.sim_symbol
-
-field_ex = CommonSimSymbol.FieldEx.sim_symbol
-field_ey = CommonSimSymbol.FieldEy.sim_symbol
-field_ez = CommonSimSymbol.FieldEz.sim_symbol
-field_hx = CommonSimSymbol.FieldHx.sim_symbol
-field_hy = CommonSimSymbol.FieldHx.sim_symbol
-field_hz = CommonSimSymbol.FieldHx.sim_symbol
-
-flux = CommonSimSymbol.Flux.sim_symbol
-
-diff_order_x = CommonSimSymbol.DiffOrderX.sim_symbol
-diff_order_y = CommonSimSymbol.DiffOrderY.sim_symbol

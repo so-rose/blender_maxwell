@@ -22,14 +22,17 @@ import bpy
 import sympy as sp
 import tidy3d as td
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
 
 from .... import contracts as ct
 from .... import sockets
 from ... import base, events
 
 log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
 
 
 class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
@@ -78,7 +81,7 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 			),
 			'σ Range': sockets.ExprSocketDef(
 				size=spux.NumberSize1D.Vec2,
-				default_value=sp.Matrix([0, 1.5]),
+				default_value=sp.ImmutableMatrix([0, 1.5]),
 				abs_min=0,
 			),
 		},
@@ -91,6 +94,11 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_info(self, _: bpy.types.Context, layout: bpy.types.UILayout) -> None:
+		"""Draw the user interfaces of the node's reported info.
+
+		Parameters:
+			layout: UI target for drawing.
+		"""
 		if self.active_socket_set == 'Full':
 			box = layout.box()
 			row = box.row()
@@ -115,118 +123,71 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 	@events.computes_output_socket(
 		'BC',
 		# Loaded
-		props={'active_socket_set'},
-		input_sockets={
-			'Layers',
-			'σ Order',
-			'σ Range',
+		outscks_kinds={
+			'BC': {FK.Func, FK.Params},
 		},
-		input_sockets_optional={
-			'σ Order': True,
-			'σ Range': True,
-		},
-		output_sockets={'BC'},
-		output_socket_kinds={'BC': ct.FlowKind.Params},
 	)
-	def compute_bc_value(self, props, input_sockets, output_sockets) -> td.Absorber:
+	def compute_bc_value(self, output_sockets) -> td.Absorber | FS:
 		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
 
 		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
 		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
-		output_params = output_sockets['BC']
-		layers = input_sockets['Layers']
-
-		has_output_params = not ct.FlowSignal.check(output_params)
-		has_layers = not ct.FlowSignal.check(layers)
-
-		active_socket_set = props['active_socket_set']
-		if has_layers and has_output_params and not output_params.symbols:
-			# Simple PML
-			if active_socket_set == 'Simple':
-				return td.Absorber(num_layers=layers)
-
-			# Full PML
-			sig_order = input_sockets['σ Order']
-			sig_range = input_sockets['σ Range']
-
-			has_sig_order = not ct.FlowSignal.check(sig_order)
-			has_sig_range = not ct.FlowSignal.check(sig_range)
-
-			if has_sig_order and has_sig_range:
-				return td.Absorber(
-					num_layers=layers,
-					parameters=td.AbsorberParams(
-						sigma_order=sig_order,
-						sigma_min=sig_range[0],
-						sigma_max=sig_range[1],
-					),
-				)
-		return ct.FlowSignal.FlowPending
+		value = events.realize_known(output_sockets['BC'])
+		if value is not None:
+			return value
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Func
 	####################
 	@events.computes_output_socket(
 		'BC',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
 		props={'active_socket_set'},
-		input_sockets={
-			'Layers',
-			'σ Order',
-			'σ Range',
+		inscks_kinds={
+			'Layers': FK.Func,
+			'σ Order': FK.Func,
+			'σ Range': FK.Func,
 		},
-		input_socket_kinds={
-			'Layers': ct.FlowKind.Func,
-			'σ Order': ct.FlowKind.Func,
-			'σ Range': ct.FlowKind.Func,
-		},
-		input_sockets_optional={
-			'σ Order': True,
-			'σ Range': True,
-		},
-		output_sockets={'BC'},
-		output_socket_kinds={'BC': ct.FlowKind.Params},
+		input_sockets_optional={'σ Order', 'σ Range'},
 	)
-	def compute_bc_func(self, props, input_sockets, output_sockets) -> td.Absorber:
+	def compute_bc_func(self, props, input_sockets) -> td.Absorber:
 		r"""Computes the adiabatic absorber boundary condition based on the active socket set.
 
 		- **Simple**: Use `tidy3d`'s default parameters for defining the absorber parameters (apart from number of layers).
 		- **Full**: Use the user-defined $\sigma$ parameters, specifically polynomial order and sim-relative min/max conductivity values.
 		"""
 		layers = input_sockets['Layers']
-
-		has_layers = not ct.FlowSignal.check(layers)
-
 		active_socket_set = props['active_socket_set']
-		if has_layers:
-			# Simple PML
-			if active_socket_set == 'Simple':
+
+		match active_socket_set:
+			case 'Simple':
 				return layers.compose_within(
 					enclosing_func=lambda _layers: td.Absorber(num_layers=_layers),
 					supports_jax=False,
 				)
+			case 'Full':
+				sig_order = input_sockets['σ Order']
+				sig_range = input_sockets['σ Range']
 
-			# Full PML
-			sig_order = input_sockets['σ Order']
-			sig_range = input_sockets['σ Range']
+				has_sig_order = not FS.check(sig_order)
+				has_sig_range = not FS.check(sig_range)
 
-			has_sig_order = not ct.FlowSignal.check(sig_order)
-			has_sig_range = not ct.FlowSignal.check(sig_range)
-
-			if has_sig_order and has_sig_range:
-				return (layers | sig_order | sig_range).compose_within(
-					enclosing_func=lambda els: td.Absorber(
-						num_layers=els[0],
-						parameters=td.AbsorberParams(
-							sigma_order=els[1],
-							sigma_min=els[2][0],
-							sigma_max=els[2][1],
+				if has_sig_order and has_sig_range:
+					return (layers | sig_order | sig_range).compose_within(
+						enclosing_func=lambda els: td.Absorber(
+							num_layers=els[0],
+							parameters=td.AbsorberParams(
+								sigma_order=els[1],
+								sigma_min=els[2].item(0),
+								sigma_max=els[2].item(1),
+							),
 						),
-					),
-					supports_jax=False,
-				)
+						supports_jax=False,
+					)
+
 		return ct.FlowSignal.FlowPending
 
 	####################
@@ -234,44 +195,35 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'BC',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		# Loaded
 		props={'active_socket_set'},
-		input_sockets={
-			'Layers',
-			'σ Order',
-			'σ Range',
+		inscks_kinds={
+			'Layers': FK.Params,
+			'σ Order': FK.Params,
+			'σ Range': FK.Params,
 		},
-		input_socket_kinds={
-			'Layers': ct.FlowKind.Params,
-			'σ Order': ct.FlowKind.Params,
-			'σ Range': ct.FlowKind.Params,
-		},
-		input_sockets_optional={
-			'σ Order': True,
-			'σ Range': True,
-		},
+		input_sockets_optional={'σ Order', 'σ Range'},
 	)
 	def compute_params(self, props, input_sockets) -> td.Box:
+		"""Aggregate the function parameters needed by the absorbing BC."""
 		layers = input_sockets['Layers']
-
-		has_layers = not ct.FlowSignal.check(layers)
-
 		active_socket_set = props['active_socket_set']
-		if has_layers:
-			# Simple PML
-			if active_socket_set == 'Simple':
+
+		match active_socket_set:
+			case 'Simple':
 				return layers
 
-			# Full PML
-			sig_order = input_sockets['σ Order']
-			sig_range = input_sockets['σ Range']
+			case 'Full':
+				sig_order = input_sockets['σ Order']
+				sig_range = input_sockets['σ Range']
 
-			has_sig_order = not ct.FlowSignal.check(sig_order)
-			has_sig_range = not ct.FlowSignal.check(sig_range)
+				has_sig_order = not FS.check(sig_order)
+				has_sig_range = not FS.check(sig_range)
 
-			if has_sig_order and has_sig_range:
-				return layers | sig_order | sig_range
+				if has_sig_order and has_sig_range:
+					return layers | sig_order | sig_range
+
 		return ct.FlowSignal.FlowPending
 
 
@@ -281,4 +233,6 @@ class AdiabAbsorbBoundCondNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	AdiabAbsorbBoundCondNode,
 ]
-BL_NODES = {ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_BOUNDS)}
+BL_NODES = {
+	ct.NodeType.AdiabAbsorbBoundCond: (ct.NodeCategory.MAXWELLSIM_SIMS_BOUNDCONDFACES)
+}

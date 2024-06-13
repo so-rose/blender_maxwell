@@ -14,7 +14,30 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Robust serialization tool for use in the addon.
+"""A fast, robust `msgspec`-based serialization tool providing for string-based persistance of many objects.
+
+Blender provides for strong persistence guarantees based on its `bpy.types.Property` system.
+In essence, properties are defined on instances of objects like nodes and sockets, and in turn, these properties can help ex. drive update chains, are **persisted on save**, and more.
+
+The problem is fundamentally one of type support: Only "natural" types like `bool` `int`, `float`, `str`, and particular variants thereof are supported, with notable inclusions in the form of 1D/2D vectors and internal Blender pointers (which _are also persisted_).
+While this forms the extent of UI support, we do extremely often want to persist things that _aren't_ one of these blessed types: At the very least things like sympy types, immutable `pydantic` models, Tidy3D objects, and more.
+We want these "special" types to have the same guarantees as Blender's builtin properties.
+
+This brings us to the intersection of `msgspec`, `pydantic`, and `bpy.props.StringProperty`.
+
+- With a string-based property, we can "simply" serialize whatever object we want to persist, then later deserialize it into its original form.
+- The property access pattern is often in a hot-loop where that same property is accessed, so even with a cache layer above it, we cannot afford to wait ex. `100ms` per a one-way (de)serialization operation.
+- `pydantic` (especially V2) provides a very sane story for _many_ models, but fails in edge cases: It is simply too flexible, providing few robustness and completeness guarantees when it comes to generic serialization, while also demanding complete conformance to its `BaseModel` schema to do anything at all, which does nothing to cover the use-case of transparent type-driven serialization. To boot, its speed is fundamentally great, but still sometimes lacking in nuanced ways.
+- Conversely, `msgspec` is a far, far simpler approach to _best-in-class_, type-driven serialization of _almost_ all natural Python types. It has several very important caveats, but it also supports defining custom encoding/decoding as fallbacks to normal operation.
+
+Therefore, this module provides custom wrappers on top of `msgspec`, which are tailored to the use of several common types, including specially-enabled `pydantic` models and any `tidy3d` model encapsulated by its `dict(*)`.
+We standardize on `json`, which can be easily inserted into an internal `bpy.props.StringProperty` for persistance, with access times very low.
+
+What else did we consider?
+
+- Direct: We tried, quite thoroughly, to keep serialization of arbitrary objects a specialized use case. The result was thousands of lines of unbearably slow, error-prone boilerplate with severe limitations.
+- `json`: The standard-libary module `json` is rather inflexible, far too slow for our use case, and has no mechanisms for hooking custom objects into it.
+- Use of `MsgPack`: Unfortunately, while `bpy.props.StringProperty` does have a "bytes" mode, it refuses to encode arbitrary non-UTF8 bytes. Therefore, the formal binary `MsgPack` format is out of the question, though it is preferrable in almost every other context due to both density, speed, and flexibility.
 
 Attributes:
 	NaiveEncodableType: See <https://jcristharif.com/msgspec/supported-types.html> for details.
@@ -25,11 +48,14 @@ import datetime as dt
 import decimal
 import enum
 import functools
+import json
 import typing as typ
 import uuid
 
 import msgspec
+import numpy as np
 import sympy as sp
+import tidy3d as td
 
 from . import logger
 from . import sympy_extra as spux
@@ -101,6 +127,7 @@ class TypeID(enum.StrEnum):
 	SocketDef: str = '!type=socketdef'
 	SimSymbol: str = '!type=simsymbol'
 	ManagedObj: str = '!type=managedobj'
+	Tidy3DObj: str = '!type=tidy3dobj'
 
 
 NaiveRepresentation: typ.TypeAlias = list[TypeID, str | None, typ.Any]
@@ -131,6 +158,9 @@ def _enc_hook(obj: typ.Any) -> NaivelyEncodableType:
 	if isinstance(obj, spux.SympyType):
 		return ['!type=sympytype', None, sp.srepr(obj)]
 
+	if isinstance(obj, td.components.base.Tidy3dBaseModel):
+		return ['!type=tidy3dobj', None, obj._json()]
+
 	if hasattr(obj, 'dump_as_msgspec'):
 		return obj.dump_as_msgspec()
 
@@ -160,6 +190,14 @@ def _dec_hook(_type: type, obj: NaivelyEncodableType) -> typ.Any:
 	):
 		obj_value = obj[2]
 		return sp.sympify(obj_value).subs(spux.UNIT_BY_SYMBOL)
+
+	if (
+		issubclass(_type, td.components.base.Tidy3dBaseModel)
+		and is_representation(obj)
+		and obj[0] == TypeID.Tidy3DObj
+	):
+		obj_json = obj[2]
+		return _type.parse_obj(json.loads(obj_json))
 
 	if hasattr(_type, 'parse_as_msgspec') and (
 		is_representation(obj)

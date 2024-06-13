@@ -6,13 +6,13 @@ authors = [
     { name = "Sofus Albert Høgsbro Rose", email = "blender-maxwell@sofusrose.com" }
 ]
 dependencies = [
-    "tidy3d>=2.6.3",
+    "tidy3d==2.7.0rc2",
     "pydantic>=2.7.1",
     "sympy==1.12",
     "scipy==1.12.*",
     "trimesh==4.2.*",
     "networkx==3.2.*",
-    "rich==12.5.*",
+    "rich>=13.7.1",
     "rtree==1.2.*",
     "jax[cpu]==0.4.26",
     "msgspec[toml]==0.18.6",
@@ -28,6 +28,8 @@ dependencies = [
     "certifi==2021.10.8",
     "polars>=0.20.26",
     "seaborn[stats]>=0.13.2",
+    "frozendict>=2.4.4",
+    "pydantic-tensor>=0.2.0",
 ]
 ## When it comes to dev-dep conflicts:
 ## -> It's okay to leave Blender-pinned deps out of prod; Blender still has them.

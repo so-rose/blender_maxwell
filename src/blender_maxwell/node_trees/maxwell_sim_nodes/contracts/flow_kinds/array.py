@@ -14,16 +14,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import base64
 import functools
+import io
 import typing as typ
 
+import jax
+import jax.numpy as jnp
 import jaxtyping as jtyp
 import numpy as np
 import pydantic as pyd
 import sympy as sp
 
-from blender_maxwell.utils import sympy_extra as spux
 from blender_maxwell.utils import logger
+from blender_maxwell.utils import sympy_extra as spux
+from blender_maxwell.utils.jaxarray import JaxArrayBytes
+from blender_maxwell.utils.lru_method import method_lru
 
 log = logger.get(__name__)
 
@@ -40,16 +46,28 @@ class ArrayFlow(pyd.BaseModel):
 			None if unitless.
 	"""
 
-	model_config = pyd.ConfigDict(frozen=True, arbitrary_types_allowed=True)
+	model_config = pyd.ConfigDict(frozen=True)
 
-	values: jtyp.Inexact[jtyp.Array, '...']  ## TODO: Custom field type
 	unit: spux.Unit | None = None
-
 	is_sorted: bool = False
+
+	####################
+	# - Array Access
+	####################
+	jax_bytes: JaxArrayBytes  ## Immutable jax.Array, anyone? :)
+
+	@functools.cached_property
+	def values(self) -> jax.Array:
+		"""Return the jax array."""
+		with io.BytesIO() as memfile:
+			memfile.write(base64.b64decode(self.jax_bytes.decode('utf-8')))
+			memfile.seek(0)
+			return jnp.load(memfile)
 
 	####################
 	# - Computed Properties
 	####################
+	@method_lru()
 	def __len__(self) -> int:
 		"""Outer length of the contained array."""
 		return len(self.values)
@@ -70,7 +88,7 @@ class ArrayFlow(pyd.BaseModel):
 	####################
 	# - Array Features
 	####################
-	@property
+	@functools.cached_property
 	def realize_array(self) -> jtyp.Shaped[jtyp.Array, '...']:
 		"""Standardized access to `self.values`."""
 		return self.values
@@ -80,6 +98,13 @@ class ArrayFlow(pyd.BaseModel):
 		"""Shape of the contained array."""
 		return self.values.shape
 
+	@method_lru(maxsize=32)
+	def _getitem_index(self, i: int) -> typ.Self | spux.SympyExpr:
+		value = self.values[i]
+		if len(value.shape) == 0:
+			return value * self.unit if self.unit is not None else sp.S(value)
+		return ArrayFlow(jax_bytes=value, unit=self.unit, is_sorted=self.is_sorted)
+
 	def __getitem__(self, subscript: slice) -> typ.Self | spux.SympyExpr:
 		"""Implement indexing and slicing in a sane way.
 
@@ -88,16 +113,13 @@ class ArrayFlow(pyd.BaseModel):
 		"""
 		if isinstance(subscript, slice):
 			return ArrayFlow(
-				values=self.values[subscript],
+				jax_bytes=self.values[subscript],
 				unit=self.unit,
 				is_sorted=self.is_sorted,
 			)
 
 		if isinstance(subscript, int):
-			value = self.values[subscript]
-			if len(value.shape) == 0:
-				return value * self.unit if self.unit is not None else sp.S(value)
-			return ArrayFlow(values=value, unit=self.unit, is_sorted=self.is_sorted)
+			return self._getitem_index(subscript)
 
 		raise NotImplementedError
 
@@ -121,7 +143,7 @@ class ArrayFlow(pyd.BaseModel):
 		## -> However, too-large ints may cause JAX to suffer from an overflow.
 		## -> Jax works in 32-bit domain by default, for performance.
 		## -> While it can be adjusted, that would also have tradeoffs.
-		## -> Instead, a quick .n() turns all the big-ints into floats.
+		## -> Instead, a quick float() turns all the big-ints into floats.
 		## -> Not super satisfying, but hey - it's all numerical anyway.
 		a = self.mathtype.sp_symbol_a
 		rescale_expr = (
@@ -134,11 +156,12 @@ class ArrayFlow(pyd.BaseModel):
 
 		# Return ArrayFlow
 		return ArrayFlow(
-			values=values[::-1] if reverse else values,
+			jax_bytes=values[::-1] if reverse else values,
 			unit=new_unit,
 			is_sorted=self.is_sorted,
 		)
 
+	# @method_lru()
 	def nearest_idx_of(self, value: spux.SympyType, require_sorted: bool = True) -> int:
 		"""Find the index of the value that is closest to the given value.
 
@@ -159,26 +182,27 @@ class ArrayFlow(pyd.BaseModel):
 		# BinSearch for "Right IDX"
 		## >>> self.values[right_idx] > scaled_value
 		## >>> self.values[right_idx - 1] < scaled_value
-		right_idx = np.searchsorted(self.values, scaled_value, side='left')
+		right_idx = jnp.searchsorted(self.values, scaled_value, side='left')
 
 		# Case: Right IDX is Boundary
 		if right_idx == 0:
-			return right_idx
+			return int(right_idx)
 		if right_idx == len(self.values):
-			return right_idx - 1
+			return int(right_idx - 1)
 
 		# Find Closest of [Right IDX - 1, Right IDX]
 		left_val = self.values[right_idx - 1]
 		right_val = self.values[right_idx]
 
 		if (scaled_value - left_val) <= (right_val - scaled_value):
-			return right_idx - 1
+			return int(right_idx - 1)
 
-		return right_idx
+		return int(right_idx)
 
 	####################
 	# - Unit Transforms
 	####################
+	@method_lru()
 	def correct_unit(self, unit: spux.Unit) -> typ.Self:
 		"""Simply replace the existing unit with the given one.
 
@@ -186,8 +210,9 @@ class ArrayFlow(pyd.BaseModel):
 			corrected_unit: The new unit to insert.
 				**MUST** be associable with a well-defined `PhysicalType`.
 		"""
-		return ArrayFlow(values=self.values, unit=unit, is_sorted=self.is_sorted)
+		return ArrayFlow(jax_bytes=self.values, unit=unit, is_sorted=self.is_sorted)
 
+	@method_lru()
 	def rescale_to_unit(self, new_unit: spux.Unit | None) -> typ.Self:
 		"""Rescale the `ArrayFlow` to be expressed in the given unit.
 

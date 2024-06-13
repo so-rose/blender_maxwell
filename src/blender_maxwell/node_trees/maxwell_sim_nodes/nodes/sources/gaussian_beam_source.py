@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Implements `GaussianBeamSourceNode`."""
+
 import typing as typ
 
 import bpy
@@ -29,6 +31,8 @@ from ... import managed_objs, sockets
 from .. import base, events
 
 log = logger.get(__name__)
+FK = ct.FlowKind
+FS = ct.FlowSignal
 
 
 class GaussianBeamSourceNode(base.MaxwellSimNode):
@@ -57,13 +61,13 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 			size=spux.NumberSize1D.Vec3,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
-			default_value=sp.Matrix([0, 0, 0]),
+			default_value=sp.ImmutableMatrix([0, 0, 0]),
 		),
 		'Size': sockets.ExprSocketDef(
 			size=spux.NumberSize1D.Vec2,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Length,
-			default_value=sp.Matrix([1, 1]),
+			default_value=sp.ImmutableMatrix([1, 1]),
 		),
 		'Waist Dist': sockets.ExprSocketDef(
 			mathtype=spux.MathType.Real,
@@ -80,7 +84,7 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 			size=spux.NumberSize1D.Vec2,
 			mathtype=spux.MathType.Real,
 			physical_type=spux.PhysicalType.Angle,
-			default_value=sp.Matrix([0, 0]),
+			default_value=sp.ImmutableMatrix([0, 0]),
 		),
 		'Pol ∡': sockets.ExprSocketDef(
 			physical_type=spux.PhysicalType.Angle,
@@ -106,129 +110,225 @@ class GaussianBeamSourceNode(base.MaxwellSimNode):
 	# - UI
 	####################
 	def draw_props(self, _: bpy.types.Context, layout: bpy.types.UILayout):
+		"""Draw choices of injection axis and direction."""
 		layout.prop(self, self.blfields['injection_axis'], expand=True)
 		layout.prop(self, self.blfields['injection_direction'], expand=True)
 		# layout.prop(self, self.blfields['num_freqs'], text='f Points')
 		## TODO: UI is a bit crowded already!
 
 	####################
-	# - Outputs
+	# - FlowKind.Value
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		props={'sim_node_name', 'injection_axis', 'injection_direction', 'num_freqs'},
-		input_sockets={
-			'Temporal Shape',
-			'Center',
-			'Size',
-			'Waist Dist',
-			'Waist Radius',
-			'Spherical',
-			'Pol ∡',
-		},
-		unit_systems={'Tidy3DUnits': ct.UNITS_TIDY3D},
-		scale_input_sockets={
-			'Center': 'Tidy3DUnits',
-			'Size': 'Tidy3DUnits',
-			'Waist Dist': 'Tidy3DUnits',
-			'Waist Radius': 'Tidy3DUnits',
-			'Spherical': 'Tidy3DUnits',
-			'Pol ∡': 'Tidy3DUnits',
+		kind=FK.Value,
+		# Loaded
+		outscks_kinds={
+			'Angled Source': {FK.Func, FK.Params},
 		},
 	)
-	def compute_source(self, props, input_sockets, unit_systems):
-		size_2d = input_sockets['Size']
-		size = {
-			ct.SimSpaceAxis.X: (0, *size_2d),
-			ct.SimSpaceAxis.Y: (size_2d[0], 0, size_2d[1]),
-			ct.SimSpaceAxis.Z: (*size_2d, 0),
-		}[props['injection_axis']]
+	def compute_value(self, output_sockets) -> ct.ParamsFlow | FS:
+		"""Compute the particular value of the simulation domain from strictly non-symbolic inputs."""
+		output_func = output_sockets['Structure'][FK.Func]
+		output_params = output_sockets['Structure'][FK.Params]
 
-		# Display the results
-		return td.GaussianBeam(
-			name=props['sim_node_name'],
-			center=input_sockets['Center'],
-			size=size,
-			source_time=input_sockets['Temporal Shape'],
-			num_freqs=props['num_freqs'],
-			direction=props['injection_direction'].plus_or_minus,
-			angle_theta=input_sockets['Spherical'][0],
-			angle_phi=input_sockets['Spherical'][1],
-			pol_angle=input_sockets['Pol ∡'],
-			waist_radius=input_sockets['Waist Radius'],
-			waist_distance=input_sockets['Waist Dist'],
-			## NOTE: Waist is place at this signed dist along neg. direction
+		if not output_params.symbols:
+			return output_func.realize(output_params, disallow_jax=True)
+		return ct.FlowSignal.FlowPending
+
+	####################
+	# - FlowKind.Value
+	####################
+	@events.computes_output_socket(
+		'Angled Source',
+		kind=FK.Func,
+		# Loaded
+		props={'sim_node_name', 'injection_axis', 'injection_direction', 'num_freqs'},
+		inscks_kinds={
+			'Temporal Shape': FK.Func,
+			'Center': FK.Func,
+			'Size': FK.Func,
+			'Waist Dist': FK.Func,
+			'Waist Radius': FK.Func,
+			'Spherical': FK.Func,
+			'Pol ∡': FK.Func,
+		},
+		scale_input_sockets={
+			'Center': ct.UNITS_TIDY3D,
+			'Size': ct.UNITS_TIDY3D,
+			'Waist Dist': ct.UNITS_TIDY3D,
+			'Waist Radius': ct.UNITS_TIDY3D,
+			'Spherical': ct.UNITS_TIDY3D,
+			'Pol ∡': ct.UNITS_TIDY3D,
+		},
+	)
+	def compute_func(self, props, input_sockets) -> td.GaussianBeam:
+		"""Compute a function that returns a gaussian beam object, given sufficient parameters."""
+		inj_dir = props['injection_axis']
+
+		def size(size_2d: tuple[float, float]) -> tuple[float, float, float]:
+			return {
+				ct.SimSpaceAxis.X: (0, *size_2d),
+				ct.SimSpaceAxis.Y: (size_2d[0], 0, size_2d[1]),
+				ct.SimSpaceAxis.Z: (*size_2d, 0),
+			}[inj_dir]
+
+		center = input_sockets['Center']
+		size_2d = input_sockets['Size']
+		temporal_shape = input_sockets['Temporal Shape']
+		spherical = input_sockets['Spherical']
+		pol_ang = input_sockets['Pol ∡']
+		waist_radius = input_sockets['Waist Radius']
+		waist_dist = input_sockets['Waist Dist']
+
+		sim_node_name = props['sim_node_name']
+		num_freqs = props['num_freqs']
+		return (
+			center
+			| size_2d
+			| temporal_shape
+			| spherical
+			| pol_ang
+			| waist_radius
+			| waist_dist
+		).compose_within(
+			lambda els: td.GaussianBeam(
+				name=sim_node_name,
+				center=els[0],
+				size=size(els[1]),
+				source_time=els[2],
+				num_freqs=num_freqs,
+				direction=inj_dir.plus_or_minus,
+				angle_theta=els[3].item(0),
+				angle_phi=els[3].item(1),
+				pol_angle=els[4],
+				waist_radius=els[5],
+				waist_distance=els[6],
+			)
 		)
 
 	####################
-	# - Preview - Changes to Input Sockets
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Structure',
+		kind=FK.Params,
+		# Loaded
+		inscks_kinds={
+			'Temporal Shape': FK.Func,
+			'Center': FK.Func,
+			'Size': FK.Func,
+			'Waist Dist': FK.Func,
+			'Waist Radius': FK.Func,
+			'Spherical': FK.Func,
+			'Pol ∡': FK.Func,
+		},
+	)
+	def compute_params(self, input_sockets) -> ct.ParamsFlow:
+		"""Propagate function parameters from inputs."""
+		center = input_sockets['Center']
+		size_2d = input_sockets['Size']
+		temporal_shape = input_sockets['Temporal Shape']
+		spherical = input_sockets['Spherical']
+		pol_ang = input_sockets['Pol ∡']
+		waist_radius = input_sockets['Waist Radius']
+		waist_dist = input_sockets['Waist Dist']
+
+		return (
+			center
+			| size_2d
+			| temporal_shape
+			| spherical
+			| pol_ang
+			| waist_radius
+			| waist_dist
+		)
+
+	####################
+	# - Events: Preview
 	####################
 	@events.computes_output_socket(
 		'Angled Source',
-		kind=ct.FlowKind.Previews,
+		kind=FK.Previews,
 		# Loaded
 		props={'sim_node_name'},
+		outscks_kinds={'Angled Source': ct.FlowKind.Func},
+		output_sockets_optional={'Angled Source'},
 	)
-	def compute_previews(self, props):
-		return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+	def compute_previews(self, props, output_sockets):
+		"""Update the preview state when the name or output function change."""
+		if not FS.check(output_sockets['Structure']):
+			return ct.PreviewsFlow(bl_object_names={props['sim_node_name']})
+		return ct.PreviewsFlow()
 
 	@events.on_value_changed(
 		# Trigger
 		socket_name={
-			'Center',
-			'Size',
-			'Waist Dist',
-			'Waist Radius',
-			'Spherical',
-			'Pol ∡',
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+			'Waist Dist': {FK.Func, FK.Params},
+			'Waist Radius': {FK.Func, FK.Params},
+			'Spherical': {FK.Func, FK.Params},
+			'Pol ∡': {FK.Func, FK.Params},
 		},
 		prop_name={'injection_axis', 'injection_direction'},
 		run_on_init=True,
 		# Loaded
 		managed_objs={'modifier'},
 		props={'injection_axis', 'injection_direction'},
-		input_sockets={
-			'Temporal Shape',
-			'Center',
-			'Size',
-			'Waist Dist',
-			'Waist Radius',
-			'Spherical',
-			'Pol ∡',
+		inscks_kinds={
+			'Center': {FK.Func, FK.Params},
+			'Size': {FK.Func, FK.Params},
+			'Waist Dist': {FK.Func, FK.Params},
+			'Waist Radius': {FK.Func, FK.Params},
+			'Spherical': {FK.Func, FK.Params},
+			'Pol ∡': {FK.Func, FK.Params},
 		},
-		unit_systems={'BlenderUnits': ct.UNITS_BLENDER},
 		scale_input_sockets={
-			'Center': 'BlenderUnits',
+			'Center': ct.UNITS_BLENDER,
+			'Size': ct.UNITS_BLENDER,
+			'Waist Dist': ct.UNITS_BLENDER,
+			'Waist Radius': ct.UNITS_BLENDER,
+			'Spherical': ct.UNITS_BLENDER,
+			'Pol ∡': ct.UNITS_BLENDER,
 		},
 	)
-	def on_inputs_changed(self, managed_objs, props, input_sockets, unit_systems):
-		size_2d = input_sockets['Size']
+	def on_previewable_chnaged(self, managed_objs, props, input_sockets):
+		"""Update the preview when relevant inputs change."""
+		center = events.realize_preview(input_sockets['Center'])
+		size_2d = events.realize_preview(input_sockets['Size'])
+		spherical = events.realize_preview(input_sockets['Spherical'])
+		pol_ang = events.realize_preview(input_sockets['Pol ∡'])
+		waist_radius = events.realize_preview(input_sockets['Waist Radius'])
+		waist_dist = events.realize_preview(input_sockets['Waist Dist'])
+
+		# Retrieve Properties
+		inj_dir = props['injection_axis']
 		size = {
-			ct.SimSpaceAxis.X: sp.Matrix([0, *size_2d]),
-			ct.SimSpaceAxis.Y: sp.Matrix([size_2d[0], 0, size_2d[1]]),
-			ct.SimSpaceAxis.Z: sp.Matrix([*size_2d, 0]),
+			ct.SimSpaceAxis.X: sp.ImmutableMatrix([0, *size_2d]),
+			ct.SimSpaceAxis.Y: sp.ImmutableMatrix([size_2d[0], 0, size_2d[1]]),
+			ct.SimSpaceAxis.Z: sp.ImmutableMatrix([*size_2d, 0]),
 		}[props['injection_axis']]
 
-		# Push Input Values to GeoNodes Modifier
+		# Push Updated Values
 		managed_objs['modifier'].bl_modifier(
 			'NODES',
 			{
 				'node_group': import_geonodes(GeoNodes.SourceGaussianBeam),
-				'unit_system': unit_systems['BlenderUnits'],
 				'inputs': {
 					# Orientation
-					'Inj Axis': props['injection_axis'].axis,
-					'Direction': props['injection_direction'].true_or_false,
-					'theta': input_sockets['Spherical'][0],
-					'phi': input_sockets['Spherical'][1],
-					'Pol Angle': input_sockets['Pol ∡'],
+					'Inj Axis': inj_dir.axis,
+					'Direction': inj_dir.true_or_false,
+					'theta': spherical[0],
+					'phi': spherical[1],
+					'Pol Angle': pol_ang,
 					# Gaussian Beam
 					'Size': size,
-					'Waist Dist': input_sockets['Waist Dist'],
-					'Waist Radius': input_sockets['Waist Radius'],
+					'Waist Radius': waist_radius,
+					'Waist Dist': waist_dist,
 				},
 			},
-			location=input_sockets['Center'],
+			location=center,
 		)
 
 

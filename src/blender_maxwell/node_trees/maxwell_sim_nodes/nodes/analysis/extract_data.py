@@ -24,9 +24,9 @@ import bpy
 import jax.numpy as jnp
 import sympy.physics.units as spu
 import tidy3d as td
+import xarray
 
 from blender_maxwell.utils import bl_cache, logger, sim_symbols
-from blender_maxwell.utils import sympy_extra as spux
 
 from ... import contracts as ct
 from ... import sockets
@@ -36,33 +36,44 @@ log = logger.get(__name__)
 
 TDMonitorData: typ.TypeAlias = td.components.data.monitor_data.MonitorData
 
+RealizedSymsVals: typ.TypeAlias = tuple[sim_symbols.SimSymbol, ...], tuple[typ.Any, ...]
+SimDataArray: typ.TypeAlias = dict[RealizedSymsVals, td.SimulationData]
+SimDataArrayInfo: typ.TypeAlias = dict[RealizedSymsVals, typ.Any]
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
+
 
 ####################
-# - Monitor Label Arrays
+# - Monitor Labelling
 ####################
-def valid_monitor_attrs(sim_data: td.SimulationData, monitor_name: str) -> list[str]:
+def valid_monitor_attrs(
+	example_sim_data: td.SimulationData, monitor_name: str
+) -> tuple[str, ...]:
 	"""Retrieve the valid attributes of `sim_data.monitor_data' from a valid `sim_data` of type `td.SimulationData`.
 
 	Parameters:
 		monitor_type: The name of the monitor type, with the 'Data' prefix removed.
 	"""
-	monitor_data = sim_data.monitor_data[monitor_name]
-	monitor_type = monitor_data.type
+	monitor_data = example_sim_data.monitor_data[monitor_name]
+	monitor_type = monitor_data.type.removesuffix('Data')
 
 	match monitor_type:
 		case 'Field' | 'FieldTime' | 'Mode':
 			## TODO: flux, poynting, intensity
-			return [
-				field_component
-				for field_component in ['Ex', 'Ey', 'Ez', 'Hx', 'Hy', 'Hz']
-				if getattr(monitor_data, field_component, None) is not None
-			]
+			return tuple(
+				[
+					field_component
+					for field_component in ['Ex', 'Ey', 'Ez', 'Hx', 'Hy', 'Hz']
+					if getattr(monitor_data, field_component, None) is not None
+				]
+			)
 
 		case 'Permittivity':
-			return ['eps_xx', 'eps_yy', 'eps_zz']
+			return ('eps_xx', 'eps_yy', 'eps_zz')
 
 		case 'Flux' | 'FluxTime':
-			return ['flux']
+			return ('flux',)
 
 		case (
 			'FieldProjectionAngle'
@@ -70,140 +81,246 @@ def valid_monitor_attrs(sim_data: td.SimulationData, monitor_name: str) -> list[
 			| 'FieldProjectionKSpace'
 			| 'Diffraction'
 		):
-			return [
+			return (
 				'Er',
 				'Etheta',
 				'Ephi',
 				'Hr',
 				'Htheta',
 				'Hphi',
-			]
-
-
-def extract_info(monitor_data, monitor_attr: str) -> ct.InfoFlow | None:  # noqa: PLR0911
-	"""Extract an InfoFlow encapsulating raw data contained in an attribute of the given monitor data."""
-	xarr = getattr(monitor_data, monitor_attr, None)
-	if xarr is None:
-		return None
-
-	def mk_idx_array(axis: str) -> ct.RangeFlow | ct.ArrayFlow:
-		return ct.RangeFlow.try_from_array(
-			ct.ArrayFlow(
-				values=xarr.get_index(axis).values,
-				unit=symbols[axis].unit,
-				is_sorted=True,
 			)
+
+	raise TypeError
+
+
+####################
+# - Extract InfoFlow
+####################
+MONITOR_SYMBOLS: dict[str, sim_symbols.SimSymbol] = {
+	# Field Label
+	'EH*': sim_symbols.sim_axis_idx(None),
+	# Cartesian
+	'x': sim_symbols.space_x(spu.micrometer),
+	'y': sim_symbols.space_y(spu.micrometer),
+	'z': sim_symbols.space_z(spu.micrometer),
+	# Spherical
+	'r': sim_symbols.ang_r(spu.micrometer),
+	'theta': sim_symbols.ang_theta(spu.radian),
+	'phi': sim_symbols.ang_phi(spu.radian),
+	# Freq|Time
+	'f': sim_symbols.freq(spu.hertz),
+	't': sim_symbols.t(spu.second),
+	# Power Flux
+	'flux': sim_symbols.flux(spu.watt),
+	# Wavevector
+	'ux': sim_symbols.dir_x(spu.watt),
+	'uy': sim_symbols.dir_y(spu.watt),
+	# Diffraction Orders
+	'orders_x': sim_symbols.diff_order_x(None),
+	'orders_y': sim_symbols.diff_order_y(None),
+	# Cartesian Fields
+	'field': sim_symbols.field_e(spu.volt / spu.micrometer),  ## TODO: H???
+	'field_e': sim_symbols.field_e(spu.volt / spu.micrometer),
+	'field_h': sim_symbols.field_h(spu.ampere / spu.micrometer),
+}
+
+
+def _mk_idx_array(xarr: xarray.DataArray, axis: str) -> ct.RangeFlow | ct.ArrayFlow:
+	return ct.RangeFlow.try_from_array(
+		ct.ArrayFlow(
+			jax_bytes=xarr.get_index(axis).values,
+			unit=MONITOR_SYMBOLS[axis].unit,
+			is_sorted=True,
 		)
+	)
 
-	# Compute InfoFlow from XArray
-	symbols = {
-		# Cartesian
-		'x': sim_symbols.space_x(spu.micrometer),
-		'y': sim_symbols.space_y(spu.micrometer),
-		'z': sim_symbols.space_z(spu.micrometer),
-		# Spherical
-		'r': sim_symbols.ang_r(spu.micrometer),
-		'theta': sim_symbols.ang_theta(spu.radian),
-		'phi': sim_symbols.ang_phi(spu.radian),
-		# Freq|Time
-		'f': sim_symbols.freq(spu.hertz),
-		't': sim_symbols.t(spu.second),
-		# Power Flux
-		'flux': sim_symbols.flux(spu.watt),
-		# Cartesian Fields
-		'Ex': sim_symbols.field_ex(spu.volt / spu.micrometer),
-		'Ey': sim_symbols.field_ey(spu.volt / spu.micrometer),
-		'Ez': sim_symbols.field_ez(spu.volt / spu.micrometer),
-		'Hx': sim_symbols.field_hx(spu.volt / spu.micrometer),
-		'Hy': sim_symbols.field_hy(spu.volt / spu.micrometer),
-		'Hz': sim_symbols.field_hz(spu.volt / spu.micrometer),
-		# Spherical Fields
-		'Er': sim_symbols.field_er(spu.volt / spu.micrometer),
-		'Etheta': sim_symbols.ang_theta(spu.volt / spu.micrometer),
-		'Ephi': sim_symbols.field_ez(spu.volt / spu.micrometer),
-		'Hr': sim_symbols.field_hr(spu.volt / spu.micrometer),
-		'Htheta': sim_symbols.field_hy(spu.volt / spu.micrometer),
-		'Hphi': sim_symbols.field_hz(spu.volt / spu.micrometer),
-		# Wavevector
-		'ux': sim_symbols.dir_x(spu.watt),
-		'uy': sim_symbols.dir_y(spu.watt),
-		# Diffraction Orders
-		'orders_x': sim_symbols.diff_order_x(None),
-		'orders_y': sim_symbols.diff_order_y(None),
-	}
 
-	match monitor_data.type:
+def output_symbol_by_type(monitor_type: str) -> sim_symbols.SimSymbol:
+	match monitor_type:
+		case 'Field' | 'FieldProjectionCartesian' | 'Permittivity' | 'Mode':
+			return MONITOR_SYMBOLS['field_e']
+
+		case 'FieldTime':
+			return MONITOR_SYMBOLS['field']
+
+		case 'Flux':
+			return MONITOR_SYMBOLS['flux']
+
+		case 'FluxTime':
+			return MONITOR_SYMBOLS['flux']
+
+		case 'FieldProjectionAngle':
+			return MONITOR_SYMBOLS['field']
+
+		case 'FieldProjectionKSpace':
+			return MONITOR_SYMBOLS['field']
+
+		case 'Diffraction':
+			return MONITOR_SYMBOLS['field']
+
+	return None
+
+
+def _extract_info(
+	example_xarr: xarray.DataArray,
+	monitor_type: str,
+	monitor_attrs: tuple[str, ...],
+	batch_dims: dict[sim_symbols.SimSymbol, ct.RangeFlow | ct.ArrayFlow],
+) -> ct.InfoFlow | None:
+	log.debug([monitor_type, monitor_attrs, batch_dims])
+	mk_idx_array = functools.partial(_mk_idx_array, example_xarr)
+	match monitor_type:
 		case 'Field' | 'FieldProjectionCartesian' | 'Permittivity' | 'Mode':
 			return ct.InfoFlow(
-				dims={
-					symbols['x']: mk_idx_array('x'),
-					symbols['y']: mk_idx_array('y'),
-					symbols['z']: mk_idx_array('z'),
-					symbols['f']: mk_idx_array('f'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['EH*']: monitor_attrs,
+					MONITOR_SYMBOLS['x']: mk_idx_array('x'),
+					MONITOR_SYMBOLS['y']: mk_idx_array('y'),
+					MONITOR_SYMBOLS['z']: mk_idx_array('z'),
+					MONITOR_SYMBOLS['f']: mk_idx_array('f'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['field_e'],
 			)
 
 		case 'FieldTime':
 			return ct.InfoFlow(
-				dims={
-					symbols['x']: mk_idx_array('x'),
-					symbols['y']: mk_idx_array('y'),
-					symbols['z']: mk_idx_array('z'),
-					symbols['t']: mk_idx_array('t'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['EH*']: monitor_attrs,
+					MONITOR_SYMBOLS['x']: mk_idx_array('x'),
+					MONITOR_SYMBOLS['y']: mk_idx_array('y'),
+					MONITOR_SYMBOLS['z']: mk_idx_array('z'),
+					MONITOR_SYMBOLS['t']: mk_idx_array('t'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['field'],
 			)
 
 		case 'Flux':
 			return ct.InfoFlow(
-				dims={
-					symbols['f']: mk_idx_array('f'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['f']: mk_idx_array('f'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['flux'],
 			)
 
 		case 'FluxTime':
 			return ct.InfoFlow(
-				dims={
-					symbols['t']: mk_idx_array('t'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['t']: mk_idx_array('t'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['flux'],
 			)
 
 		case 'FieldProjectionAngle':
 			return ct.InfoFlow(
-				dims={
-					symbols['r']: mk_idx_array('r'),
-					symbols['theta']: mk_idx_array('theta'),
-					symbols['phi']: mk_idx_array('phi'),
-					symbols['f']: mk_idx_array('f'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['EH*']: monitor_attrs,
+					MONITOR_SYMBOLS['r']: mk_idx_array('r'),
+					MONITOR_SYMBOLS['theta']: mk_idx_array('theta'),
+					MONITOR_SYMBOLS['phi']: mk_idx_array('phi'),
+					MONITOR_SYMBOLS['f']: mk_idx_array('f'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['field'],
 			)
 
 		case 'FieldProjectionKSpace':
 			return ct.InfoFlow(
-				dims={
-					symbols['ux']: mk_idx_array('ux'),
-					symbols['uy']: mk_idx_array('uy'),
-					symbols['r']: mk_idx_array('r'),
-					symbols['f']: mk_idx_array('f'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['EH*']: monitor_attrs,
+					MONITOR_SYMBOLS['ux']: mk_idx_array('ux'),
+					MONITOR_SYMBOLS['uy']: mk_idx_array('uy'),
+					MONITOR_SYMBOLS['r']: mk_idx_array('r'),
+					MONITOR_SYMBOLS['f']: mk_idx_array('f'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['field'],
 			)
 
 		case 'Diffraction':
 			return ct.InfoFlow(
-				dims={
-					symbols['orders_x']: mk_idx_array('orders_x'),
-					symbols['orders_y']: mk_idx_array('orders_y'),
-					symbols['f']: mk_idx_array('f'),
+				dims=batch_dims
+				| {
+					MONITOR_SYMBOLS['EH*']: monitor_attrs,
+					MONITOR_SYMBOLS['orders_x']: mk_idx_array('orders_x'),
+					MONITOR_SYMBOLS['orders_y']: mk_idx_array('orders_y'),
+					MONITOR_SYMBOLS['f']: mk_idx_array('f'),
 				},
-				output=symbols[monitor_attr],
+				output=MONITOR_SYMBOLS['field'],
 			)
 
-	return None
+	raise TypeError
+
+
+def extract_monitor_xarrs(
+	monitor_datas: dict[RealizedSymsVals, typ.Any], monitor_attrs: tuple[str, ...]
+) -> dict[RealizedSymsVals, ct.InfoFlow]:
+	return {
+		syms_vals: {
+			monitor_attr: getattr(monitor_data, monitor_attr, None)
+			for monitor_attr in monitor_attrs
+		}
+		for syms_vals, monitor_data in monitor_datas.items()
+	}
+
+
+def extract_info(
+	monitor_datas: dict[RealizedSymsVals, typ.Any], monitor_attrs: tuple[str, ...]
+) -> dict[RealizedSymsVals, ct.InfoFlow]:
+	"""Extract an InfoFlow describing monitor data from a batch of simulations."""
+	# Extract Dimension from Batched Values
+	## -> Comb the data to expose each symbol's realized values as an array.
+	## -> Each symbol: array can then become a dimension.
+	## -> These are the "batch dimensions", which allows indexing across sims.
+	## -> The retained sim symbol provides semantic index coordinates.
+	example_syms_vals = next(iter(monitor_datas.keys()))
+	syms = example_syms_vals[0] if example_syms_vals != () else ()
+	vals_per_sym_pos = (
+		[vals for _, vals in monitor_datas] if example_syms_vals != () else []
+	)
+
+	_batch_dims = dict(
+		zip(
+			syms,
+			zip(*vals_per_sym_pos, strict=True),
+			strict=True,
+		)
+	)
+	batch_dims = {
+		sym: ct.RangeFlow.try_from_array(
+			ct.ArrayFlow(
+				jax_bytes=vals,
+				unit=sym.unit,
+				is_sorted=True,
+			)
+		)
+		for sym, vals in _batch_dims.items()
+	}
+
+	# Extract Example Monitor Data | XArray
+	## -> We presume all monitor attributes have the exact same dims + output.
+	## -> Because of this, we only need one "example" xarray.
+	## -> This xarray will be used to extract dimensional coordinates...
+	## -> ...Presuming that these coords will generalize.
+	example_monitor_data = next(iter(monitor_datas.values()))
+	monitor_datas_xarrs = extract_monitor_xarrs(monitor_datas, monitor_attrs)
+
+	# Extract XArray for Each Monitor Attribute
+	example_monitor_data_xarrs = next(iter(monitor_datas_xarrs.values()))
+	example_xarr = next(iter(example_monitor_data_xarrs.values()))
+
+	# Extract InfoFlow of First
+	## -> All of the InfoFlows should be identical...
+	## -> ...Apart from the batched dimensions.
+	return _extract_info(
+		example_xarr,
+		example_monitor_data.type.removesuffix('Data'),
+		monitor_attrs,
+		batch_dims,
+	)
 
 
 ####################
@@ -224,73 +341,139 @@ class ExtractDataNode(base.MaxwellSimNode):
 	bl_label = 'Extract'
 
 	input_socket_sets: typ.ClassVar = {
-		'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
+		'Single': {
+			'Sim Data': sockets.MaxwellFDTDSimDataSocketDef(),
+		},
+		'Batch': {
+			'Sim Datas': sockets.MaxwellFDTDSimDataSocketDef(active_kind=FK.Array),
+		},
 	}
+	# output_sockets: typ.ClassVar = {
+	# 'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
+	# }
 	output_socket_sets: typ.ClassVar = {
-		'Expr': sockets.ExprSocketDef(active_kind=ct.FlowKind.Func),
+		'Single': {
+			'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
+			'Log': sockets.StringSocketDef(),
+		},
+		'Batch': {
+			'Expr': sockets.ExprSocketDef(active_kind=FK.Func),
+			'Logs': sockets.StringSocketDef(active_kind=FK.Array),
+		},
 	}
 
 	####################
-	# - Properties: Monitor Name
+	# - Properties: Sim Datas
 	####################
 	@events.on_value_changed(
-		socket_name='Sim Data',
-		input_sockets={'Sim Data'},
-		input_sockets_optional={'Sim Data': True},
+		socket_name={'Sim Data': FK.Value, 'Sim Datas': FK.Array},
 	)
-	def on_sim_data_changed(self, input_sockets) -> None:  # noqa: D102
-		has_sim_data = not ct.FlowSignal.check(input_sockets['Sim Data'])
-		if has_sim_data:
-			self.sim_data = bl_cache.Signal.InvalidateCache
+	def on_sim_datas_changed(self) -> None:  # noqa: D102
+		self.sim_datas = bl_cache.Signal.InvalidateCache
 
-	@bl_cache.cached_bl_property()
-	def sim_data(self) -> td.SimulationData | None:
+	@bl_cache.cached_bl_property(depends_on={'active_socket_set'})
+	def sim_datas(self) -> list[td.SimulationData] | None:
 		"""Extracts the simulation data from the input socket.
 
 		Return:
 			Either the simulation data, if available, or None.
 		"""
-		sim_data = self._compute_input(
-			'Sim Data', kind=ct.FlowKind.Value, optional=True
-		)
-		has_sim_data = not ct.FlowSignal.check(sim_data)
-		if has_sim_data:
-			return sim_data
+		## TODO: Check that syms are identical for all (aka. that we have a batch)
+		if self.active_socket_set == 'Single':
+			sim_data = self._compute_input('Sim Data', kind=FK.Value)
+			has_sim_data = not FS.check(sim_data)
+			if has_sim_data:
+				# Embedded Symbolic Realizations
+				## -> ['realizations'] contains a 2-tuple
+				## -> First should be the dict-dump of a SimSymbol.
+				## -> Second should be either a value, or a list of values.
+				if 'realizations' in sim_data.attrs:
+					raw_realizations = sim_data.attrs['realizations']
+					syms_vals = {
+						sim_symbols.SimSymbol(**raw_sym): raw_val
+						if not isinstance(raw_val, tuple | list)
+						else jnp.array(raw_val)
+						for raw_sym, raw_val in raw_realizations
+					}
+					return {syms_vals: sim_data}
+
+				# No Embedded Realizations
+				return {(): sim_data}
+
+		if self.active_socket_set == 'Batch':
+			_sim_datas = self._compute_input('Sim Datas', kind=FK.Value)
+			has_sim_datas = not FS.check(_sim_datas)
+			if has_sim_datas:
+				sim_datas = {}
+				for sim_data in sim_datas:
+					# Embedded Symbolic Realizations
+					## -> ['realizations'] contains a 2-tuple
+					## -> First should be the dict-dump of a SimSymbol.
+					## -> Second should be either a value, or a list of values.
+					if 'realizations' in sim_data.attrs:
+						raw_realizations = sim_data.attrs['realizations']
+						syms = {
+							sim_symbols.SimSymbol(**raw_sym): raw_val
+							if not isinstance(raw_val, tuple | list)
+							else jnp.array(raw_val)
+							for raw_sym, raw_val in raw_realizations
+						}
+						sim_datas |= {syms_vals: sim_data}
+
+					# No Embedded Realizations
+					sim_datas |= {(): sim_data}
 
 		return None
 
-	@bl_cache.cached_bl_property(depends_on={'sim_data'})
-	def sim_data_monitor_nametype(self) -> dict[str, str] | None:
-		"""Dictionary from monitor names on `self.sim_data` to their associated type name (with suffix 'Data' removed).
+	@bl_cache.cached_bl_property(depends_on={'sim_datas'})
+	def example_sim_data(self) -> list[td.SimulationData] | None:
+		"""Extracts a single, example simulation data from the input socket.
+
+		All simulation datas share certain properties, ex. names and types of monitors.
+		Therefore, we may often only need an example simulation data object.
+
+		Return:
+			Either the simulation data, if available, or None.
+		"""
+		if self.sim_datas:
+			return next(iter(self.sim_datas.values()))
+		return None
+
+	####################
+	# - Properties: Monitor Name
+	####################
+	@bl_cache.cached_bl_property(depends_on={'example_sim_data'})
+	def monitor_types(self) -> dict[str, str] | None:
+		"""Dictionary from monitor names on `self.sim_datas` to their associated type name (with suffix 'Data' removed).
 
 		Return:
 			The name to type of monitors in the simulation data.
 		"""
-		if self.sim_data is not None:
+		if self.example_sim_data is not None:
 			return {
 				monitor_name: monitor_data.type.removesuffix('Data')
-				for monitor_name, monitor_data in self.sim_data.monitor_data.items()
+				for monitor_name, monitor_data in self.example_sim_data.monitor_data.items()
 			}
 
 		return None
 
 	monitor_name: enum.StrEnum = bl_cache.BLField(
 		enum_cb=lambda self, _: self.search_monitor_names(),
-		cb_depends_on={'sim_data_monitor_nametype'},
+		cb_depends_on={'monitor_types'},
 	)
 
 	def search_monitor_names(self) -> list[ct.BLEnumElement]:
 		"""Compute valid values for `self.monitor_attr`, for a dynamic `EnumProperty`.
 
 		Notes:
-			Should be reset (via `self.monitor_attr`) with (after) `self.sim_data_monitor_nametype`, `self.monitor_data_attrs`, and (implicitly) `self.monitor_type`.
+			Should be reset (via `self.monitor_attr`) with (after) `self.sim_data_monitor_nametypes`, `self.monitor_data_attrs`, and (implicitly) `self.monitor_type`.
 
 			See `bl_cache.BLField` for more on dynamic `EnumProperty`.
 
 		Returns:
 			Valid `self.monitor_attr` in a format compatible with dynamic `EnumProperty`.
 		"""
-		if self.sim_data_monitor_nametype is not None:
+		if self.monitor_types is not None:
 			return [
 				(
 					monitor_name,
@@ -300,11 +483,31 @@ class ExtractDataNode(base.MaxwellSimNode):
 					i,
 				)
 				for i, (monitor_name, monitor_type) in enumerate(
-					self.sim_data_monitor_nametype.items()
+					self.monitor_types.items()
 				)
 			]
 
 		return []
+
+	####################
+	# - Properties: Monitor Information
+	####################
+	@bl_cache.cached_bl_property(depends_on={'sim_datas', 'monitor_name'})
+	def monitor_datas(self) -> SimDataArrayInfo | None:
+		"""Extract the currently selected monitor's data from all simulation datas in the batch."""
+		if self.sim_datas is not None and self.monitor_name is not None:
+			return {
+				syms_vals: sim_data.monitor_data.get(self.monitor_name)
+				for syms_vals, sim_data in self.sim_datas.items()
+			}
+		return None
+
+	@bl_cache.cached_bl_property(depends_on={'example_sim_data', 'monitor_name'})
+	def valid_monitor_attrs(self) -> SimDataArrayInfo | None:
+		"""Valid attributes of the monitor, from the example sim data under the presumption that the entire batch shares the same attribute validity."""
+		if self.example_sim_data is not None and self.monitor_name is not None:
+			return valid_monitor_attrs(self.example_sim_data, self.monitor_name)
+		return None
 
 	####################
 	# - UI
@@ -315,9 +518,7 @@ class ExtractDataNode(base.MaxwellSimNode):
 		Notes:
 			Called by Blender to determine the text to place in the node's header.
 		"""
-		has_sim_data = self.sim_data_monitor_nametype is not None
-
-		if has_sim_data:
+		if self.monitor_name is not None:
 			return f'Extract: {self.monitor_name}'
 
 		return self.bl_label
@@ -335,114 +536,181 @@ class ExtractDataNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		# Loaded
-		props={'monitor_name'},
-		input_sockets={'Sim Data'},
-		input_socket_kinds={'Sim Data': ct.FlowKind.Value},
+		props={'monitor_datas', 'valid_monitor_attrs'},
 	)
-	def compute_expr(
-		self, props: dict, input_sockets: dict
-	) -> ct.FuncFlow | ct.FlowSignal:
-		sim_data = input_sockets['Sim Data']
-		monitor_name = props['monitor_name']
+	def compute_extracted_data_func(self, props) -> ct.FuncFlow | FS:
+		"""Aggregates the selected monitor's data across all batched symbolic realizations, into a single FuncFlow."""
+		monitor_datas = props['monitor_datas']
+		valid_monitor_attrs = props['valid_monitor_attrs']
 
-		has_sim_data = not ct.FlowSignal.check(sim_data)
+		if monitor_datas is not None and valid_monitor_attrs is not None:
+			monitor_datas_xarrs = extract_monitor_xarrs(
+				monitor_datas, valid_monitor_attrs
+			)
 
-		if has_sim_data and monitor_name is not None:
-			monitor_data = sim_data.get(monitor_name)
-			if monitor_data is not None:
-				# Extract Valid Index Labels
-				## -> The first output axis will be integer-indexed.
-				## -> Each integer will have a string label.
-				## -> Those string labels explain the integer as ex. Ex, Ey, Hy.
-				idx_labels = valid_monitor_attrs(sim_data, monitor_name)
+			example_monitor_data = next(iter(monitor_datas.values()))
+			monitor_type = example_monitor_data.type.removesuffix('Data')
+			output_sym = output_symbol_by_type(monitor_type)
 
-				# Extract Info
-				## -> We only need the output symbol.
-				## -> All labelled outputs have the same output SimSymbol.
-				info = extract_info(monitor_data, idx_labels[0])
+			# Stack Inner Dimensions: components | *
+			## -> Each realization maps to exactly one xarray.
+			## -> We extract its data, and wrap it into a FuncFlow.
+			## -> This represents the "inner" dimensions, with components|data.
+			## -> We then attach this singular FuncFlow to that realization.
+			inner_funcs = {}
+			for syms_vals, attr_xarrs in monitor_datas_xarrs.items():
+				# XArray Capture Function
+				## -> We can't generally capture a loop variable inline.
+				## -> By making a new function, we get a new scope.
+				def _xarr_values(xarr):
+					return lambda: xarr.values
 
-				# Generate FuncFlow Per Index Label
-				## -> We extract each XArray as an attribute of monitor_data.
-				## -> We then bind its values into a unique func_flow.
-				## -> This lets us 'stack' then all along the first axis.
-				func_flows = []
-				for idx_label in idx_labels:
-					xarr = getattr(monitor_data, idx_label)
-					func_flows.append(
-						ct.FuncFlow(
-							func=lambda xarr=xarr: xarr.values,
-							supports_jax=True,
-						)
+				# Bind XArray Values into FuncFlows
+				## -> Each monitor component has an xarray.
+				funcs = [
+					ct.FuncFlow(
+						func=_xarr_values(xarr),
+						func_output=output_sym,
+						supports_jax=True,
+					)
+					for xarr in attr_xarrs.values()
+				]
+				log.critical(['FUNCS', funcs])
+				# Single Component: No Stacking of Dimensions - *
+				if len(funcs) == 1:
+					inner_funcs[syms_vals] = funcs[0]
+
+				# Many Components: Stack Dimensions - components | *
+				else:
+					inner_funcs[syms_vals] = functools.reduce(
+						lambda a, b: a | b, funcs
+					).compose_within(
+						lambda els: jnp.stack(els, axis=0),
+						enclosing_func_output=output_sym,
 					)
 
-				# Concatenate and Stack Unified FuncFlow
-				## -> First, 'reduce' lets us __or__ all the FuncFlows together.
-				## -> Then, 'compose_within' lets us stack them along axis=0.
-				## -> The "new" axis=0 is int-indexed axis w/idx_labels labels!
-				return functools.reduce(lambda a, b: a | b, func_flows).compose_within(
-					lambda data: jnp.stack(data, axis=0),
-					func_output=info.output,
-				)
-			return ct.FlowSignal.FlowPending
-		return ct.FlowSignal.FlowPending
+			# Stack Batch Dims: vals0 | vals1 | ... | valsN | components | *
+			## -> We stack the inner-dimensional object together, backwards.
+			## -> Each stack prepends a new dimension.
+			## -> Here, everything is integer-indexed.
+			## -> But in the InfoFlow, a similar process contextualizes idxs.
+			example_syms_vals = next(iter(monitor_datas.keys()))
+			syms = example_syms_vals[0] if example_syms_vals != () else ()
+			outer_funcs = inner_funcs
+			log.critical(['INNER FUNCS', inner_funcs])
+			for _, axis in reversed(list(enumerate(syms))):
+				log.critical([axis, outer_funcs])
+				new_outer_funcs = {}
+				# Collect Funcs Along *vals[axis] | ...
+				## -> Grab ONLY up to 'axis' syms_vals.
+				## -> '|' all functions that share axis-deficient syms_vals.
+				## -> Thus, we '|' functions along the last axis.
+				for unreduced_syms_vals, func in outer_funcs:
+					reduced_syms_vals = unreduced_syms_vals[:axis]
+					if reduced_syms_vals in new_outer_funcs:
+						new_outer_funcs[reduced_syms_vals] = (
+							new_outer_funcs[reduced_syms_vals] | func
+						)
+					else:
+						new_outer_funcs[reduced_syms_vals] = func
 
-	####################
-	# - FlowKind.Params
-	####################
-	@events.computes_output_socket(
-		'Expr',
-		kind=ct.FlowKind.Params,
-		input_sockets={'Sim Data'},
-		input_socket_kinds={'Sim Data': ct.FlowKind.Params},
-	)
-	def compute_data_params(self, input_sockets) -> ct.ParamsFlow:
-		"""Declare an empty `Data:Params`, to indicate the start of a function-composition pipeline.
+				# Aggregate All Collected Funcs
+				## -> Any functions that went through a | are stacked.
+				## -> Otherwise, just add a len=1 dimension.
+				new_reduced_outer_funcs = {
+					reduced_syms_vals: (
+						combined_func.compose_within(
+							lambda els: jnp.stack(els, axis=0),
+							enclosing_func_output=output_sym,
+						)
+						if combined_func.is_concatenated  ## Went through a |
+						else combined_func.compose_within(
+							lambda el: jnp.expand_dims(el, axis=0),
+							enclosing_func_output=output_sym,
+						)
+					)
+					for reduced_syms_vals, combined_func in new_outer_funcs.items()
+				}
 
-		Returns:
-			A completely empty `ParamsFlow`, ready to be composed.
-		"""
-		sim_params = input_sockets['Sim Data']
-		has_sim_params = not ct.FlowSignal.check(sim_params)
-
-		if has_sim_params:
-			return sim_params
-		return ct.ParamsFlow()
+				# Reset Outer Funcs to Axis-Deficient Reduction
+				## -> This effectively removes + aggregates the last axis.
+				## -> When the loop is done, only {(): val} will be left.
+				outer_funcs = new_reduced_outer_funcs
+			return next(iter(outer_funcs.values()))
+		return FS.FlowPending
 
 	####################
 	# - FlowKind.Info
 	####################
 	@events.computes_output_socket(
 		'Expr',
-		kind=ct.FlowKind.Info,
+		kind=FK.Info,
 		# Loaded
-		props={'monitor_name'},
-		input_sockets={'Sim Data'},
-		input_socket_kinds={'Sim Data': ct.FlowKind.Value},
+		props={'monitor_datas', 'valid_monitor_attrs'},
 	)
-	def compute_extracted_data_info(self, props, input_sockets) -> ct.InfoFlow:
+	def compute_extracted_data_info(self, props) -> ct.InfoFlow | FS:
 		"""Declare `Data:Info` by manually selecting appropriate axes, units, etc. for each monitor type.
 
 		Returns:
-			Information describing the `Data:Func`, if available, else `ct.FlowSignal.FlowPending`.
+			Information describing the `Data:Func`, if available, else `FS.FlowPending`.
 		"""
-		sim_data = input_sockets['Sim Data']
-		monitor_name = props['monitor_name']
+		monitor_datas = props['monitor_datas']
+		valid_monitor_attrs = props['valid_monitor_attrs']
 
-		has_sim_data = not ct.FlowSignal.check(sim_data)
+		if monitor_datas is not None and valid_monitor_attrs is not None:
+			return extract_info(monitor_datas, valid_monitor_attrs)
+		return FS.FlowPending
 
-		if not has_sim_data or monitor_name is None:
-			return ct.FlowSignal.FlowPending
+	####################
+	# - FlowKind.Params
+	####################
+	@events.computes_output_socket(
+		'Expr',
+		kind=FK.Params,
+	)
+	def compute_params(self) -> ct.ParamsFlow:
+		"""Declare an empty `Data:Params`, to indicate the start of a function-composition pipeline.
 
-		# Extract Data
-		## -> All monitor_data.<idx_label> have the exact same InfoFlow.
-		## -> So, just construct an InfoFlow w/prepended labelled dimension.
-		monitor_data = sim_data.get(monitor_name)
-		idx_labels = valid_monitor_attrs(sim_data, monitor_name)
-		info = extract_info(monitor_data, idx_labels[0])
+		Returns:
+			A completely empty `ParamsFlow`, ready to be composed.
+		"""
+		return ct.ParamsFlow()
 
-		return info.prepend_dim(sim_symbols.idx, idx_labels)
+	####################
+	# - Log: FlowKind.Value|Array
+	####################
+	@events.computes_output_socket(
+		'Log',
+		kind=FK.Value,
+		# Loaded
+		props={'sim_datas'},
+	)
+	def compute_extracted_log(self, props) -> str | FS:
+		"""Extract the log from a single simulation that ran."""
+		sim_datas = props['sim_datas']
+		if sim_datas is not None and len(sim_datas) == 1:
+			sim_data = next(iter(sim_datas.values()))
+			if sim_data.log is not None:
+				return sim_data.log
+		return FS.FlowPending
+
+	@events.computes_output_socket(
+		'Log',
+		kind=FK.Array,
+		# Loaded
+		props={'sim_datas'},
+	)
+	def compute_extracted_logs(self, props) -> dict[RealizedSymsVals, str] | FS:
+		"""Extract the log from all simulation that ran in the batch."""
+		sim_datas = props['sim_datas']
+		if sim_datas is not None and sim_datas:
+			return {
+				syms_vals: sim_data.log if sim_data.log is not None else ''
+				for syms_vals, sim_data in sim_datas.items()
+			}
+		return FS.FlowPending
 
 
 ####################

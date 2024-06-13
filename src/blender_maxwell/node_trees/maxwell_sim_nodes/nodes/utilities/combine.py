@@ -20,11 +20,16 @@ import typing as typ
 import bpy
 import sympy as sp
 
-from blender_maxwell.utils import bl_cache
+from blender_maxwell.utils import bl_cache, logger
 
 from ... import contracts as ct
 from ... import sockets
 from .. import base, events
+
+log = logger.get(__name__)
+
+FK = ct.FlowKind
+FS = ct.FlowSignal
 
 
 class CombineNode(base.MaxwellSimNode):
@@ -44,17 +49,17 @@ class CombineNode(base.MaxwellSimNode):
 	output_socket_sets: typ.ClassVar = {
 		'Sources': {
 			'Sources': sockets.MaxwellSourceSocketDef(
-				active_kind=ct.FlowKind.Array,
+				active_kind=FK.Array,
 			),
 		},
 		'Structures': {
 			'Structures': sockets.MaxwellStructureSocketDef(
-				active_kind=ct.FlowKind.Array,
+				active_kind=FK.Array,
 			),
 		},
 		'Monitors': {
 			'Monitors': sockets.MaxwellMonitorSocketDef(
-				active_kind=ct.FlowKind.Array,
+				active_kind=FK.Array,
 			),
 		},
 	}
@@ -63,14 +68,14 @@ class CombineNode(base.MaxwellSimNode):
 	# - Properties
 	####################
 	concatenate_first: bool = bl_cache.BLField(False)
-	value_or_func: ct.FlowKind = bl_cache.BLField(
+	value_or_func: FK = bl_cache.BLField(
 		enum_cb=lambda self, _: self._value_or_func(),
 	)
 
 	def _value_or_func(self):
 		return [
 			flow_kind.bl_enum_element(i)
-			for i, flow_kind in enumerate([ct.FlowKind.Value, ct.FlowKind.Func])
+			for i, flow_kind in enumerate([FK.Value, FK.Func])
 		]
 
 	####################
@@ -79,7 +84,7 @@ class CombineNode(base.MaxwellSimNode):
 	def draw_props(self, _, layout: bpy.types.UILayout):
 		layout.prop(self, self.blfields['value_or_func'], text='')
 
-		if self.value_or_func is ct.FlowKind.Value:
+		if self.value_or_func is FK.Value:
 			layout.prop(
 				self,
 				self.blfields['concatenate_first'],
@@ -91,15 +96,17 @@ class CombineNode(base.MaxwellSimNode):
 	# - Events
 	####################
 	@events.on_value_changed(
-		any_loose_input_socket=True,
 		prop_name={'active_socket_set', 'concatenate_first', 'value_or_func'},
+		any_loose_input_socket=True,
 		run_on_init=True,
 		# Loaded
 		props={'active_socket_set', 'concatenate_first', 'value_or_func'},
 	)
 	def on_inputs_changed(self, props) -> None:
-		"""Always create one extra loose input socket."""
+		"""Always create one extra loose input socket off the end of the last linked loose socket."""
 		active_socket_set = props['active_socket_set']
+		concatenate_first = props['concatenate_first']
+		flow_kind = props['value_or_func']
 
 		# Deduce SocketDef
 		## -> Cheat by retrieving the class from the output sockets.
@@ -121,14 +128,11 @@ class CombineNode(base.MaxwellSimNode):
 		new_amount = current_filled + 1
 
 		# Deduce SocketDef | Current Amount
-		concatenate_first = props['concatenate_first']
-		flow_kind = props['value_or_func']
-
 		self.loose_input_sockets = {
 			'#0': SocketDef(
 				active_kind=flow_kind
-				if flow_kind is ct.FlowKind.Func or not concatenate_first
-				else ct.FlowKind.Array
+				if flow_kind is FK.Func or not concatenate_first
+				else FK.Array
 			)
 		} | {f'#{i}': SocketDef(active_kind=flow_kind) for i in range(1, new_amount)}
 
@@ -138,29 +142,25 @@ class CombineNode(base.MaxwellSimNode):
 	def compute_combined(
 		self,
 		loose_input_sockets,
-		input_flow_kind: typ.Literal[ct.FlowKind.Value, ct.FlowKind.Func],
-		output_flow_kind: typ.Literal[ct.FlowKind.Array, ct.FlowKind.Func],
-	) -> list[typ.Any] | ct.FuncFlow | ct.FlowSignal:
+		input_flow_kind: typ.Literal[FK.Value, FK.Func],
+		output_flow_kind: typ.Literal[FK.Array, FK.Func],
+	) -> list[typ.Any] | ct.FuncFlow | FS:
 		"""Correctly compute the combined loose input sockets, given a valid combination of input and output `FlowKind`s.
 
 		If there is no output, or the flows aren't compatible, return `FlowPending`.
 		"""
 		match (input_flow_kind, output_flow_kind):
-			case (ct.FlowKind.Value, ct.FlowKind.Array):
+			case (FK.Value, FK.Array):
 				value_flows = [
-					inp
-					for inp in loose_input_sockets.values()
-					if not ct.FlowSignal.check(inp)
+					inp for inp in loose_input_sockets.values() if not FS.check(inp)
 				]
 				if value_flows:
 					return value_flows
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
-			case (ct.FlowKind.Func, ct.FlowKind.Func):
+			case (FK.Func, FK.Func):
 				func_flows = [
-					inp
-					for inp in loose_input_sockets.values()
-					if not ct.FlowSignal.check(inp)
+					inp for inp in loose_input_sockets.values() if not FS.check(inp)
 				]
 
 				if len(func_flows) > 1:
@@ -171,63 +171,59 @@ class CombineNode(base.MaxwellSimNode):
 				if len(func_flows) == 1:
 					return func_flows[0].compose_within(lambda el: [el])
 
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
-			case (ct.FlowKind.Func, ct.FlowKind.Params):
+			case (FK.Func, FK.Params):
 				params_flows = [
 					params_flow
 					for inp_sckname in self.inputs.keys()  # noqa: SIM118
-					if not ct.FlowSignal.check(
-						params_flow := self._compute_input(
-							inp_sckname, kind=ct.FlowKind.Params
-						)
+					if not FS.check(
+						params_flow := self._compute_input(inp_sckname, kind=FK.Params)
 					)
 				]
 				if params_flows:
 					return functools.reduce(lambda a, b: a | b, params_flows)
-				return ct.FlowSignal.FlowPending
+				return FS.FlowPending
 
-		return ct.FlowSignal.FlowPending
+		return FS.FlowPending
 
 	####################
 	# - Output: Sources
 	####################
 	@events.computes_output_socket(
 		'Sources',
-		kind=ct.FlowKind.Array,
+		kind=FK.Array,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
-	def compute_sources_array(
-		self, props, loose_input_sockets
-	) -> list[typ.Any] | ct.FlowSignal:
+	def compute_sources_array(self, props, loose_input_sockets) -> list[typ.Any] | FS:
 		"""Compute sources."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Array
+			loose_input_sockets, props['value_or_func'], FK.Array
 		)
 
 	@events.computes_output_socket(
 		'Sources',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_sources_func(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) sources."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
+			loose_input_sockets, props['value_or_func'], FK.Func
 		)
 
 	@events.computes_output_socket(
 		'Sources',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_sources_params(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) sources."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
+			loose_input_sockets, props['value_or_func'], FK.Params
 		)
 
 	####################
@@ -235,38 +231,38 @@ class CombineNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Structures',
-		kind=ct.FlowKind.Array,
+		kind=FK.Array,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_structures_array(self, props, loose_input_sockets) -> sp.Expr:
 		"""Compute structures."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Array
+			loose_input_sockets, props['value_or_func'], FK.Array
 		)
 
 	@events.computes_output_socket(
 		'Structures',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_structures_func(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) structures."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
+			loose_input_sockets, props['value_or_func'], FK.Func
 		)
 
 	@events.computes_output_socket(
 		'Structures',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_structures_params(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) structures."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
+			loose_input_sockets, props['value_or_func'], FK.Params
 		)
 
 	####################
@@ -274,38 +270,38 @@ class CombineNode(base.MaxwellSimNode):
 	####################
 	@events.computes_output_socket(
 		'Monitors',
-		kind=ct.FlowKind.Array,
+		kind=FK.Array,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_monitors_array(self, props, loose_input_sockets) -> sp.Expr:
 		"""Compute monitors."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Array
+			loose_input_sockets, props['value_or_func'], FK.Array
 		)
 
 	@events.computes_output_socket(
 		'Monitors',
-		kind=ct.FlowKind.Func,
+		kind=FK.Func,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_monitors_func(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) monitors."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Func
+			loose_input_sockets, props['value_or_func'], FK.Func
 		)
 
 	@events.computes_output_socket(
 		'Monitors',
-		kind=ct.FlowKind.Params,
+		kind=FK.Params,
 		all_loose_input_sockets=True,
 		props={'value_or_func'},
 	)
 	def compute_monitors_params(self, props, loose_input_sockets) -> list[typ.Any]:
 		"""Compute (lazy) structures."""
 		return self.compute_combined(
-			loose_input_sockets, props['value_or_func'], ct.FlowKind.Params
+			loose_input_sockets, props['value_or_func'], FK.Params
 		)
 
 
@@ -315,4 +311,4 @@ class CombineNode(base.MaxwellSimNode):
 BL_REGISTER = [
 	CombineNode,
 ]
-BL_NODES = {ct.NodeType.Combine: (ct.NodeCategory.MAXWELLSIM_SIMS)}
+BL_NODES = {ct.NodeType.Combine: (ct.NodeCategory.MAXWELLSIM_UTILITIES)}

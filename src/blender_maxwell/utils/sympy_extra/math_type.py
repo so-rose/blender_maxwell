@@ -32,6 +32,8 @@ from .sympy_type import SympyType
 
 log = logger.get(__name__)
 
+MatrixSet: typ.TypeAlias = sp.matrices.MatrixSet
+
 
 class MathType(enum.StrEnum):
 	"""A convenient, UI-friendly identifier of a numerical object's identity."""
@@ -131,6 +133,7 @@ class MathType(enum.StrEnum):
 
 	@staticmethod
 	def from_pytype(dtype: type) -> type:
+		"""The `MathType` corresponding to a particular pure-Python type."""
 		return {
 			int: MathType.Integer,
 			Fraction: MathType.Rational,
@@ -213,15 +216,7 @@ class MathType(enum.StrEnum):
 
 	@staticmethod
 	def from_symbolic_set(
-		s: typ.Literal[
-			sp.Naturals
-			| sp.Naturals0
-			| sp.Integers
-			| sp.Rationals
-			| sp.Reals
-			| sp.Complexes
-		]
-		| sp.Set,
+		s: sp.Set,
 		optional: bool = False,
 	) -> typ.Self | None:
 		"""Deduce the `MathType` from a particular symbolic set.
@@ -243,6 +238,24 @@ class MathType(enum.StrEnum):
 			case sp.Complexes:
 				return MT.Complex
 
+		if isinstance(s, sp.ProductSet):
+			return MT.combine(*[MT.from_symbolic_set(arg) for arg in s.sets])
+
+		if isinstance(s, MatrixSet):
+			return MT.from_symbolic_set(s.set)
+
+		valid_mathtype = MT.Complex
+		for test_set, mathtype in [
+			(sp.Complexes, MT.Complex),
+			(sp.Reals, MT.Real),
+			(sp.Rationals, MT.Rational),
+			(sp.Integers, MT.Integer),
+		]:
+			if s.issubset(test_set):
+				valid_mathtype = mathtype
+			else:
+				return valid_mathtype
+
 		if optional:
 			return None
 
@@ -259,6 +272,17 @@ class MathType(enum.StrEnum):
 		return {
 			MT.Integer: int,
 			MT.Rational: Fraction,
+			MT.Real: float,
+			MT.Complex: complex,
+		}[self]
+
+	@property
+	def dtype(self) -> type:
+		"""Deduce the type that corresponds to this `MathType`, which is usable with `numpy`/`jax`."""
+		MT = MathType
+		return {
+			MT.Integer: int,
+			MT.Rational: float,
 			MT.Real: float,
 			MT.Complex: complex,
 		}[self]
